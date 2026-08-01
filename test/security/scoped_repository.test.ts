@@ -8,10 +8,12 @@
  * Two kinds of assertion here, and they answer different questions:
  *
  *   - Structural, over the source: every repository function takes an
- *     AuthzContext first, nothing outside src/repo/ imports the handle, and
+ *     AuthzContext first, no repository writes its own tenant predicate, and
  *     the system-context list has not grown. These catch a mistake at review
  *     time, which is the point of layers 1 and 2 — layer 3 already prevents the
- *     leak, but silently.
+ *     leak, but silently. ("Nothing outside src/repo/ imports the handle" was
+ *     the fourth of these until RL-M1-008 turned it into a lint rule; see the
+ *     note where it used to be, and test/security/lint_rules.test.ts.)
  *
  *   - Behavioural, against a real Postgres: a repository function run with a
  *     foreign tenant returns nothing, AND still returns nothing when its own
@@ -66,19 +68,14 @@ test("every exported repository function takes an AuthzContext first", () => {
   assert.deepEqual(findings, [], findings.join("\n"));
 });
 
-test("nothing outside src/repo imports the database handle", () => {
-  // RL-M1-008 will make this a lint rule. Until then it is a test, because a
-  // rule nobody runs is a comment.
-  const findings: string[] = [];
-  for (const file of globSync("src/**/*.ts", { cwd: ROOT })) {
-    if (file.startsWith("src/repo/") || file.startsWith("src/db/internal/")) continue;
-    const source = readFileSync(join(ROOT, file), "utf8");
-    if (/from\s+["'][^"']*db\/internal/.test(source)) {
-      findings.push(`${file} imports src/db/internal`);
-    }
-  }
-  assert.deepEqual(findings, [], findings.join("\n"));
-});
+// "nothing outside src/repo imports the database handle" used to be a test
+// here, scanning src/** with a regex. RL-M1-008 replaced it with a real
+// `no-restricted-imports` rule in eslint.config.js, proved by a fixture in
+// test/security/lint_rules.test.ts. The rule is strictly stronger: it reads
+// import declarations rather than guessing at them with a regex, it covers
+// scripts/ and re-export forms the scan never looked at, and it fails in the
+// editor rather than at test time. Keeping the scan alongside it would mean two
+// things to update and one of them going quietly stale.
 
 test("no repository function writes its own tenant predicate", () => {
   // A hand-written `org_id = ...` is not wrong, but it is a sign someone

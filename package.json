@@ -2,7 +2,7 @@
   "name": "ratline",
   "version": "0.0.0",
   "private": true,
-  "description": "Self-hosted deployment and server management platform — control plane",
+  "description": "Self-hosted deployment and server management platform \u2014 control plane",
   "type": "module",
   "license": "UNLICENSED",
   "engines": {
@@ -11,8 +11,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "node --test --experimental-strip-types --no-warnings=ExperimentalWarning",
-    "test:coverage": "node --test --experimental-strip-types --no-warnings=ExperimentalWarning --experimental-test-coverage --test-coverage-exclude=test/** --test-coverage-exclude=scripts/**",
+    "test": "node --test --experimental-strip-types --no-warnings=ExperimentalWarning 'test/**/*.test.ts'",
+    "test:coverage": "node --test --experimental-strip-types --no-warnings=ExperimentalWarning --experimental-test-coverage --test-coverage-exclude=test/** --test-coverage-exclude=scripts/** 'test/**/*.test.ts'",
     "tasks": "./scripts/tasks",
     "check": "npm run lint && npm run typecheck && npm test && ./scripts/tasks validate"
   },

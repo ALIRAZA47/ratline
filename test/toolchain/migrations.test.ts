@@ -10,8 +10,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
 import {
   loadMigrations,
@@ -24,7 +23,6 @@ import {
   type SqlClient,
 } from "../../src/db/migrate.ts";
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const NAME = "20260101000001_example.sql";
 
 test("a well-formed migration parses into up and down", () => {
@@ -259,11 +257,10 @@ test("rollback happens newest first", async () => {
   assert.deepEqual(downs, ["select 'down-b';", "select 'down-a';"]);
 });
 
-test("the migration runner does not shell out", () => {
-  // C2. A migration runner that shells out to psql would put user-influenced
-  // strings on a command line, which is exactly the class C2 forbids.
-  const source = readFileSync(join(ROOT, "src", "db", "migrate.ts"), "utf8");
-  for (const token of ["child_process", "execSync", "spawnSync", "exec("]) {
-    assert.ok(!source.includes(token), `migrate.ts references ${token}`);
-  }
-});
+// "the migration runner does not shell out" was a test here, scanning
+// src/db/migrate.ts for child_process and friends. RL-M1-008 replaced it with a
+// `no-restricted-imports` ban across all of src/**, proved by a fixture in
+// test/security/lint_rules.test.ts. The rule is strictly stronger — it reads
+// import declarations rather than grepping for tokens, and it covers every file
+// under src/ rather than the one this test happened to name. Keeping both would
+// mean two things to update and one going quietly stale.
