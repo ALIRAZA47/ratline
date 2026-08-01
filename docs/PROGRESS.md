@@ -14,6 +14,55 @@ and which task IDs.
 
 ---
 
+## 2026-08-01 — Session 4 — M1
+
+**Goal:** C5 — bind to loopback by default, detect public exposure, refuse an
+unintended public bind, and document the VPN, Tailscale and allowlist setups.
+
+**Completed:** RL-M1-023.
+
+**In progress:** none.
+
+**In review:** RL-M1-002, unchanged — still needs a first real CI run.
+
+**Blocked:** none. RL-M1-003 still needs Postgres; the Docker daemon is down.
+
+**Decisions made:** ADR 0011 (proposed) — exposure detection without phoning
+home.
+
+**Surprises / what I learned:**
+
+- C5 says "detect public reachability", and the obvious implementation is an
+  outbound probe. That would phone home from every install, create a fleet-wide
+  correlation point, and fail on exactly the isolated networks C5 protects.
+  Raised as ADR 0011: classify locally, and state the blind spot instead of
+  hiding it. A dashboard behind a public reverse proxy reports `contained` and
+  cannot be told apart from a genuinely private one without a probe — so the
+  caveat rides along with every report. Recorded as residual risk R-11.
+- My first cut printed "Acknowledged via RATLINE_ALLOW_PUBLIC_BIND" whenever a
+  warning existed, including when nothing had been acknowledged. A security
+  warning that misdescribes the operator's own configuration is worse than none,
+  because it teaches them the text is boilerplate.
+- My first cut also let a wildcard bind through unacknowledged, purely because
+  this laptop has no globally routable address today. That is a fact about this
+  afternoon, not the deployment. Wildcards now always require acknowledgement.
+- The interesting design tension was where *not* to warn. Private, Tailscale and
+  unique-local addresses start silently on purpose: they are the recommended
+  setups, and demanding acknowledgement for them would train operators to set
+  `RATLINE_ALLOW_PUBLIC_BIND=1` permanently, which is exactly how the control
+  gets defeated.
+- Mutation testing earned its place again. An RFC1918 off-by-one — treating
+  172.32/16 as private — is invisible on inspection and caught by one test.
+
+**Deviations from brief:** none.
+
+**Next session should start with:** Postgres. Both C4 and C5 are now done and
+they were the two constraints most likely to be skipped under delivery pressure;
+everything else substantial in M1 runs through the database. RL-M1-003 → 004 →
+006 → 007 is the C3 spine and the most important sequence in the milestone.
+RL-M1-027 (design tokens) is the only meaningful task left that needs no
+database, if the Docker daemon cannot be started.
+
 ## 2026-08-01 — Session 3 — M1
 
 **Goal:** C4 — the secret store. Generate on first run, refuse to boot on

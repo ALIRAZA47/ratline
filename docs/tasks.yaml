@@ -999,19 +999,25 @@
 - id: RL-M1-023
   title: Bind to localhost by default and detect public reachability
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M1-022]
   blocks: []
   risk: high
+  started_at: 2026-08-01
+  done_at: 2026-08-01
   acceptance:
     - The default bind address is loopback and changing it is a deliberate documented act
     - A reachability check detects public exposure and raises a non-dismissable warning
     - Documentation covers virtual private network, Tailscale and address allowlist setups
   artifacts:
     - test/security/bind_default.test.ts
-  decisions: []
+    - docs/NETWORK.md
+  decisions: [11]
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-01 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). Full pipeline verified locally; suite mutation-tested with 5 deliberate regressions.
 
 - id: RL-M1-024
   title: Generate the authorization matrix from the route table
