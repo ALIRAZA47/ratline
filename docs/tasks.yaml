@@ -613,7 +613,7 @@
   owner: agent
   estimate: M
   depends_on: [RL-M0-026]
-  blocks: [RL-M1-002, RL-M1-003, RL-M1-022, RL-M1-027]
+  blocks: [RL-M1-002, RL-M1-003, RL-M1-009, RL-M1-022, RL-M1-027]
   risk: low
   started_at: 2026-08-01
   done_at: 2026-08-01
@@ -649,18 +649,27 @@
 - id: RL-M1-003
   title: Establish migration tooling with mandatory down migrations
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M1-001]
   blocks: [RL-M1-004]
   risk: low
+  started_at: 2026-08-01
+  done_at: 2026-08-01
   acceptance:
     - Every migration has a tested down path
     - CI applies every migration up then down then up against a scratch database
     - A migration without a down migration fails the build
-  artifacts: []
+  artifacts:
+    - src/db/migrate.ts
+    - src/db/cli.ts
+    - test/toolchain/migrations.test.ts
+    - test/integration/migrations_cycle.test.ts
   decisions: [1]
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-01 — closed without CI verification: Verified locally against a real Postgres 17 — up/down/up cycle passes, and a deliberately incomplete down path fails it. Only GitHub execution is unverified (RISKS.md R-10).
 
 - id: RL-M1-004
   title: Create the identity schema for organizations, users and memberships
@@ -685,7 +694,7 @@
   owner: agent
   estimate: M
   depends_on: [RL-M1-004]
-  blocks: [RL-M1-006, RL-M1-009]
+  blocks: [RL-M1-006]
   risk: medium
   acceptance:
     - The full Organization to Team to Project to Environment chain is modelled
@@ -750,20 +759,35 @@
 - id: RL-M1-009
   title: Define the permission catalogue as the single source of actions
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: M
-  depends_on: [RL-M1-005]
+  depends_on: [RL-M1-001]
   blocks: [RL-M1-010]
   risk: high
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  notes: |
+    2026-08-01 — Re-sequenced from depends_on RL-M1-005 to RL-M1-001. The
+    catalogue declares actions, resource types and scope levels, all of which
+    come from brief §6.3 rather than from the database schema. The schema
+    references the catalogue, not the reverse, so authoring it first is correct
+    ordering rather than a shortcut — and it removes the database from the
+    critical path for the most important module in the product.
+    2026-08-01 — 103 actions across 25 resource types. Acceptance 4 rests on Owner's action list being written out by hand rather than derived from the catalogue — deriving it would make every catalogue trivially complete and the test unable to fail. Verified independently in both directions: a catalogue action in no role fails 2 tests; a role action absent from the catalogue fails 2 tests and typecheck.
+    2026-08-01 — Known gaps recorded in the catalogue header rather than guessed at — notification destinations, audit export, on-demand chain verification, and revoking another member's sessions. Deny-by-default forces the role decision when each is added.
+    2026-08-01 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). Lint, typecheck and the full suite pass locally; acceptance 4 independently mutation-tested in both directions.
   acceptance:
     - Every action is declared once with its resource type and required scope level
     - Reading a secret name and reading a secret value are separate actions
     - Deploying to production and deploying to non-production are separate actions
     - Adding an action without mapping it to at least one role fails a test
   artifacts:
+    - src/authz/catalogue.ts
+    - src/authz/roles.ts
     - test/authz/catalogue_completeness.test.ts
   decisions: []
+  acceptance_met: [1, 2, 3, 4]
 
 - id: RL-M1-010
   title: Implement the seven default roles as compositions of raw permissions
@@ -1073,20 +1097,31 @@
 - id: RL-M1-027
   title: Implement the design tokens from the design plan
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M0-022, RL-M1-001]
   blocks: [RL-M1-028]
   risk: low
+  started_at: 2026-08-01
+  done_at: 2026-08-01
   acceptance:
     - Palette, type scale, spacing and status colours exist as tokens with no hard-coded values in components
     - Dark and light modes both render correctly
     - Fonts are self-hosted so the interface works with no internet access
   artifacts:
-    - docs/DESIGN.md
+    - src/web/lib/design/palette.ts
+    - src/web/lib/design/tokens.ts
+    - src/web/lib/design/css.ts
+    - src/web/lib/design/audit.ts
+    - test/toolchain/design_tokens.test.ts
   decisions: []
+  notes: |
+    2026-08-01 — Surfaced a contradiction in DESIGN.md written during M0 — §4's colour-coded environment chip against §1's colour-means-status-only rule. Recorded as open question 10.1 with a recommendation to distinguish by form rather than hue. RL-M1-028 needs it settled before the shell is built.
 
+    2026-08-01 — Display face changed from @fontsource/archivo to @fontsource-variable/archivo. The static package ships only the normal width and cannot render the Expanded width DESIGN.md calls the signature. A test fails if anyone switches back to a width-less file.
+    2026-08-01 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). Lint, typecheck and 116 tests pass locally; token suite spot-checked by mutation here.
+  acceptance_met: [1, 2, 3]
 - id: RL-M1-028
   title: Build the application shell with the navigation rail and tension line
   milestone: M1

@@ -14,6 +14,66 @@ and which task IDs.
 
 ---
 
+## 2026-08-01 — Session 5 — M1
+
+**Goal:** Unblock the database, then run three unrelated tasks in parallel — two
+delegated to subagents, one taken here.
+
+**Completed:** RL-M1-003 (migration tooling), RL-M1-009 (permission catalogue,
+delegated), RL-M1-027 (design tokens, delegated).
+
+**In progress:** none.
+
+**In review:** RL-M1-002, unchanged — still needs a first real CI run.
+
+**Blocked:** none. RL-M1-004 and RL-M1-010 and RL-M1-028 are all ready.
+
+**Decisions made:** none new. ADRs 0001–0011 remain `proposed`.
+
+**Surprises / what I learned:**
+
+- Postgres was already installed via Homebrew, so the Docker daemon never
+  mattered. It failed to start with "postmaster became multithreaded during
+  startup", a macOS locale issue the server log diagnoses itself — `LC_ALL=C`
+  fixes it, and `scripts/pg` sets it so nobody rediscovers this.
+- `migrate cycle` assumed an empty starting database, so a database with a
+  migration already applied reported a false failure. Fixed by normalising to
+  zero first. Verified the cycle genuinely catches a bad rollback by adding a
+  migration that drops its table but leaves its enum type behind.
+- **Subagent self-reports need checking against the files, not just reading.**
+  The catalogue agent reported documenting a design tension and a known-gaps
+  list "in the file"; neither was actually written down. They existed only in
+  its message to me — precisely the loss brief §0 forbids, since a future
+  session reads the repo, not this transcript. Both are now in the source.
+- The token agent found a contradiction I wrote into DESIGN.md during M0: §4
+  specifies a colour-coded environment chip, §1 says colour means status and
+  nothing else may be saturated. Both cannot hold. Recorded as open question
+  10.1 with a recommendation; RL-M1-028 needs it settled first. Good argument
+  for building the tokens before the shell rather than together.
+- It also correctly overrode an instruction of mine: I specified
+  `@fontsource/archivo`, which ships only the normal width and cannot render the
+  Expanded width DESIGN.md calls the signature. Using the variable package was
+  the right call, and it added a test that fails if anyone switches back.
+- **Parallelism has one hard contention point: `package.json`.** Source files
+  split cleanly across three streams, but the dependency manifest does not. I
+  nearly corrupted `node_modules` by installing `pg` while an agent was
+  mid-install, and the `pg` and `@fontsource` entries ended up in one commit
+  because a lockfile cannot be split. Next time: have one stream own dependency
+  changes, or stage them serially at the end.
+
+**Deviations from brief:** RL-M1-009 was re-sequenced to depend on RL-M1-001
+rather than RL-M1-005. The catalogue declares actions, resource types and scope
+levels, all of which come from brief §6.3 rather than from the schema — the
+schema references the catalogue, not the reverse. Noted on the task. Two commits
+carry a second task's dependency lines for the lockfile reason above, each
+stating so in its body.
+
+**Next session should start with:** RL-M1-004 (identity schema) then RL-M1-006
+and RL-M1-007 — the C3 spine, now genuinely unblocked with Postgres running.
+RL-M1-010 (the remaining six roles) is also ready and is a clean parallel stream
+since it touches only `src/authz/roles.ts`. RL-M1-028 should wait on the
+DESIGN.md 10.1 ruling.
+
 ## 2026-08-01 — Session 4 — M1
 
 **Goal:** C5 — bind to loopback by default, detect public exposure, refuse an
