@@ -1,0 +1,71 @@
+# Milestone definitions and exit criteria, transcribed from docs/BRIEF.md §8.
+#
+# `exit_met` lists the 1-based indices of exit criteria that are currently met.
+# It is maintained by hand at the gate, deliberately: a criterion is met when a
+# human has seen it demonstrated, not when a task is closed.
+#
+# Parsed by scripts/tasks.ts using the same YAML subset as tasks.yaml.
+
+- id: M0
+  name: Plan
+  goal: Technical plan, stack decision with reasoning, data model, trust-boundary diagram, threat model v1, design plan, and the complete tracking system from brief §2 with the backlog populated through at least M3. No application code.
+  exit_criteria:
+    - The plan is approved
+    - ADR 0001 (stack) is accepted
+    - ADR 0002 (agent transport) is accepted
+    - The backlog is approved
+  exit_met: []
+
+- id: M1
+  name: Control plane skeleton
+  goal: Auth, org/team/project model, the can() function with 100% branch coverage, hash-chained audit log, UI shell with the design system applied, tracking CLI wired into CI.
+  exit_criteria:
+    - Authorization matrix test harness exists and runs, even though most endpoints do not exist yet
+    - "`tasks validate` gates the build"
+  exit_met: []
+
+- id: M2
+  name: Agent and first host
+  goal: Agent binary, SSH bootstrap, host inventory and health reporting, web server and runtime provisioning, config generation with validation and rollback.
+  exit_criteria:
+    - A clean Debian 12 host goes from bare to fully provisioned in one action
+    - The same action runs twice in a row idempotently
+    - Zero root SSH after bootstrap
+  exit_met: []
+
+- id: M3
+  name: Static sites end to end
+  goal: Git connect, build pipeline, atomic release, TLS, custom domains, live log streaming, rollback.
+  exit_criteria:
+    - A real static site deploys from a real repository
+    - The site gets a real certificate
+    - Rollback completes in under one second
+  exit_met: []
+
+- id: M4
+  name: Node and Bun apps
+  goal: systemd unit generation with sandboxing, process management, zero-downtime reload, env vars with redaction, health checks.
+  exit_criteria:
+    - A Next.js app deploys and serves traffic
+    - A Bun/Elysia app deploys and serves traffic
+    - A failed-health-check deploy causes no downtime
+    - Both apps honour their configured resource limits
+  exit_met: []
+
+- id: M5
+  name: RBAC completion
+  goal: Full role set, custom roles, time-bound grants, break-glass, role editor UI, and the exhaustive authorization matrix.
+  exit_criteria:
+    - The authorization matrix passes at 100%
+    - Every endpoint is covered by the matrix
+    - Cross-tenant probing returns indistinguishable responses for unauthorized and nonexistent
+  exit_met: []
+
+- id: M6
+  name: SSH access
+  goal: Certificate authority, short-lived certificates, principals, scoped sudo, web terminal with session recording.
+  exit_criteria:
+    - Revoking a grant kills an active session within the certificate TTL
+    - Revoking a grant immediately blocks new sessions
+    - A developer with access to one site provably cannot reach another
+  exit_met: []

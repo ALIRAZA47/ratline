@@ -1,0 +1,2667 @@
+# Ratline — work items. Source of truth. See docs/BRIEF.md §2.2 for the schema.
+#
+# Written in the YAML subset documented at the top of scripts/tasks.ts.
+# `./scripts/tasks validate` runs in CI; a malformed tracker fails the build.
+#
+# Conventions used here:
+#   - `depends_on` is authored by hand; `blocks` is derived (`tasks sync-blocks`).
+#   - `acceptance_met` holds the 1-based indices of satisfied acceptance lines.
+#   - `risk: high` marks anything touching authorization, secrets, remote
+#     execution or TLS. Such a task cannot be closed without naming a
+#     security-suite artifact.
+#   - IDs are immutable and never reused. Dropped work stays, with a note.
+
+# ===========================================================================
+# M0 — Plan
+# ===========================================================================
+
+- id: RL-M0-001
+  title: Initialise repository and tracking skeleton
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: S
+  depends_on: []
+  blocks: [RL-M0-002, RL-M0-003, RL-M0-008, RL-M0-009, RL-M0-010, RL-M0-022]
+  risk: low
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - Repository initialised with .gitignore covering secrets, build output and machine-written signals
+    - docs/ and scripts/ laid out exactly as the brief §2.1 specifies
+    - Toolchain requirement recorded so the tracker runs with no install step
+  artifacts:
+    - .gitignore
+    - .node-version
+    - scripts/tasks
+  decisions: []
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-002
+  title: Commit the brief verbatim as the governing document
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: S
+  depends_on: [RL-M0-001]
+  blocks: []
+  risk: low
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - docs/BRIEF.md matches the brief as supplied, unedited
+    - A header records that only the human amends it
+  artifacts:
+    - docs/BRIEF.md
+  decisions: []
+  acceptance_met: [1, 2]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-003
+  title: Define the tasks.yaml schema and its parseable YAML subset
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: M
+  depends_on: [RL-M0-001]
+  blocks: [RL-M0-004]
+  risk: low
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - Every field in brief §2.2 is represented
+    - The accepted YAML subset is documented where a reader will find it
+    - Files remain valid input for a conforming YAML parser, so the custom one can be replaced later
+  artifacts:
+    - docs/tasks.yaml
+    - docs/milestones.yaml
+  decisions: []
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-004
+  title: Build the tracking CLI with zero runtime dependencies
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: L
+  depends_on: [RL-M0-003]
+  blocks: [RL-M0-005, RL-M0-006]
+  risk: low
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - list, next, add, start, check, note, block, unblock, done, sync-blocks, validate and render all work
+    - Mutations edit lines in place so comments and formatting survive
+    - The CLI runs on a stock Node 22 with nothing installed
+  artifacts:
+    - scripts/tasks.ts
+  decisions: []
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-005
+  title: Enforce the Definition of Ready and the done gate in the CLI
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: M
+  depends_on: [RL-M0-004]
+  blocks: []
+  risk: low
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - start refuses a task with unmet dependencies, no acceptance lines, or an XL estimate
+    - done refuses until every acceptance line is checked off
+    - done refuses a high-risk task that names no security-suite artifact
+    - done refuses without green CI unless an explicit reason is recorded in the task notes
+  artifacts:
+    - scripts/tasks.ts
+  decisions: []
+  acceptance_met: [1, 2, 3, 4]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-006
+  title: Implement validate with schema, graph and cycle checks
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: M
+  depends_on: [RL-M0-004]
+  blocks: [RL-M0-007, RL-M0-025]
+  risk: low
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - Bad enum values, malformed IDs and duplicate IDs are rejected with a line number
+    - Dangling dependency references and asymmetric depends_on and blocks are rejected
+    - Dependency cycles are detected and printed as a path
+    - Exit status is non-zero on any error so CI fails the build
+  artifacts:
+    - scripts/tasks.ts
+  decisions: []
+  acceptance_met: [1, 2, 3, 4]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-007
+  title: Implement render for the generated STATUS dashboard
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: M
+  depends_on: [RL-M0-006]
+  blocks: []
+  risk: low
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - Milestone progress, current milestone and exit criteria are rendered from the tracker
+    - In-progress and blocked tasks show age in days
+    - Open high-risk tasks without security-test coverage are listed
+    - Test health and security findings read from CI-written files and say so plainly when absent
+  artifacts:
+    - scripts/tasks.ts
+    - docs/STATUS.md
+  decisions: []
+  acceptance_met: [1, 2, 3, 4]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-008
+  title: Establish the session log and session protocol
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: S
+  depends_on: [RL-M0-001]
+  blocks: []
+  risk: low
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - PROGRESS.md exists with the brief §2.5 entry format and the M0 entry at the top
+    - The start-of-session and end-of-session checklists are recorded where the next session will read them
+  artifacts:
+    - docs/PROGRESS.md
+  decisions: []
+  acceptance_met: [1, 2]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-009
+  title: Write the glossary so code, UI copy and docs share one vocabulary
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: S
+  depends_on: [RL-M0-001]
+  blocks: []
+  risk: low
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - Every term from brief §7 is present
+    - Terms added during planning are included with the reason they were needed
+    - Banned or ambiguous words are called out with the preferred alternative
+  artifacts:
+    - docs/GLOSSARY.md
+  decisions: []
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-010
+  title: ADR 0001 — stack choice
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: M
+  depends_on: [RL-M0-001]
+  blocks: [RL-M0-011, RL-M0-012, RL-M0-016]
+  risk: medium
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - Control plane language, framework, runtime, database and front end are each chosen with reasoning
+    - Every point where the recommendation departs from the brief is argued explicitly
+    - Consequences and new attack surface are stated
+  artifacts:
+    - docs/decisions/0001-stack-choice.md
+  decisions: [1]
+  notes: |
+    Design records are risk: medium rather than high. The high-risk rating is
+    reserved for tasks that put authorization, secret-handling, remote execution
+    or TLS code into the repository, because that rating gates on the existence
+    of a security test. Their implementation counterparts in M1 and M2 carry it.
+
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+  acceptance_met: [1, 2, 3]
+- id: RL-M0-011
+  title: ADR 0002 — agent transport and authentication
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: L
+  depends_on: [RL-M0-010]
+  blocks: [RL-M0-013, RL-M0-020]
+  risk: medium
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - Dial direction, channel authentication and instruction authentication are each decided
+    - The options rejected are recorded with their security assessment
+    - The consequences section answers what a stolen agent credential buys an attacker
+  artifacts:
+    - docs/decisions/0002-agent-transport-and-authentication.md
+  decisions: [2]
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-012
+  title: ADR 0003 — tenant scoping and the data-access layer
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: M
+  depends_on: [RL-M0-010]
+  blocks: [RL-M0-015, RL-M0-020]
+  risk: medium
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - The design makes an unscoped read impossible to write rather than merely discouraged
+    - A database-level backstop independent of application code is specified
+    - Indistinguishability of unauthorized and nonexistent is designed in, not bolted on
+  artifacts:
+    - docs/decisions/0003-tenant-scoping-and-data-access.md
+  decisions: [3]
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-013
+  title: ADR 0004 — host privilege separation
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: L
+  depends_on: [RL-M0-011]
+  blocks: [RL-M0-014, RL-M0-017, RL-M0-019, RL-M0-020]
+  risk: medium
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - The design satisfies constraint C1 against a compromised agent, not only a compromised control plane
+    - The enumerated privileged operation set and its argument validation are specified
+    - Rejected alternatives include running the agent as root and wildcard sudoers
+  artifacts:
+    - docs/decisions/0004-host-privilege-separation.md
+  decisions: [4]
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-014
+  title: ADR 0005 — command execution and user-authored build scripts
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: M
+  depends_on: [RL-M0-013]
+  blocks: [RL-M0-018]
+  risk: medium
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - The tension between constraint C2 and user-supplied build commands is stated plainly
+    - A resolution is proposed that keeps C2 intact for Ratline-constructed commands
+    - The containment story for user-authored build code is specified and testable
+  artifacts:
+    - docs/decisions/0005-command-execution-and-build-scripts.md
+  decisions: [5]
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-015
+  title: ADR 0006 — secrets, envelope encryption and redaction
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: M
+  depends_on: [RL-M0-012]
+  blocks: []
+  risk: medium
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - Key hierarchy, key storage and rotation are specified
+    - Where redaction happens is decided and justified against the leakage paths
+    - A seam for an external key manager is described without being implemented
+  artifacts:
+    - docs/decisions/0006-secrets-and-envelope-encryption.md
+  decisions: [6]
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-016
+  title: ADR 0007 — job queue on Postgres rather than Redis
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: S
+  depends_on: [RL-M0-010]
+  blocks: []
+  risk: low
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - The throughput the control plane actually needs is estimated rather than assumed
+    - Operational cost of a second stateful dependency is weighed for a self-hosted product
+    - The point at which this decision should be revisited is named
+  artifacts:
+    - docs/decisions/0007-job-queue-on-postgres.md
+  decisions: [7]
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-017
+  title: ADR 0008 — SSH certificate authority design
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: M
+  depends_on: [RL-M0-013]
+  blocks: []
+  risk: medium
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - Certificate lifetime, principal derivation and revocation are specified
+    - CA key storage, rotation and compromise recovery are documented
+    - The design keeps the host-side policy and the UI from disagreeing
+  artifacts:
+    - docs/decisions/0008-ssh-certificate-authority.md
+  decisions: [8]
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-018
+  title: ADR 0009 — where builds run
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: M
+  depends_on: [RL-M0-014]
+  blocks: [RL-M0-020]
+  risk: medium
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - Building on the target host is compared against a separate build host on cost, risk and complexity
+    - The resource-contention risk to production traffic is quantified or bounded
+    - A seam for moving builds elsewhere later is described
+  artifacts:
+    - docs/decisions/0009-where-builds-run.md
+  decisions: [9]
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-019
+  title: ADR 0010 — web server config generation, validation and rollback
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: M
+  depends_on: [RL-M0-013]
+  blocks: []
+  risk: medium
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - Template engine and escaping strategy are chosen with the injection surface analysed
+    - The validate-then-swap-then-rollback sequence is specified as a state machine
+    - The design guarantees a host is never left with config that fails validation
+  artifacts:
+    - docs/decisions/0010-webserver-config-generation.md
+  decisions: [10]
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-020
+  title: Write the technical plan with data model and trust boundaries
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: L
+  depends_on: [RL-M0-011, RL-M0-012, RL-M0-013, RL-M0-018]
+  blocks: [RL-M0-021, RL-M0-024]
+  risk: low
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - Component architecture is described with each component's privilege level
+    - A data model diagram covers every entity needed through M6
+    - A trust-boundary diagram names every boundary and what crosses it
+    - Repository layout is specified so M1 can start without further design
+  artifacts:
+    - docs/PLAN.md
+  decisions: [1, 2, 3, 4, 9]
+  acceptance_met: [1, 2, 3, 4]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-021
+  title: Write threat model v1
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: L
+  depends_on: [RL-M0-020]
+  blocks: [RL-M0-023]
+  risk: medium
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - Assets, actors and boundaries are enumerated
+    - The three required compromise scenarios are each answered concretely
+    - Every hard constraint from brief §4 is traced to the threat it defends against
+    - Residual risks are listed rather than hidden
+  artifacts:
+    - docs/THREAT-MODEL.md
+  decisions: [2, 3, 4, 5, 6, 8]
+  acceptance_met: [1, 2, 3, 4]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-022
+  title: Write the design plan for the interface
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: L
+  depends_on: [RL-M0-001]
+  blocks: [RL-M0-024, RL-M1-027]
+  risk: low
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - Palette is four to six named values with a stated rule for when colour is allowed
+    - Display, body and mono faces are chosen, self-hostable, and justified for dense operational use
+    - A layout concept and one signature element are specified concretely enough to build
+    - The plan is reviewed against the brief and anything reading as a default is revised
+    - The live deployment screen is specified in detail, since it is the signature screen
+  artifacts:
+    - docs/DESIGN.md
+  decisions: []
+  acceptance_met: [1, 2, 3, 4, 5]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-023
+  title: Record open risks and the questions blocking later milestones
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: S
+  depends_on: [RL-M0-021]
+  blocks: [RL-M0-026]
+  risk: low
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - Every risk has an owner, a likelihood and a mitigation
+    - Risks that need a human decision are marked as such
+    - The integration-test host problem is recorded as a hard blocker on M2
+  artifacts:
+    - docs/RISKS.md
+  decisions: []
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-024
+  title: Seed the backlog through M3 with M4 to M6 outlined
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: L
+  depends_on: [RL-M0-020, RL-M0-022]
+  blocks: [RL-M0-026]
+  risk: low
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - M0 through M3 tasks each carry acceptance criteria and dependencies
+    - Every hard constraint from brief §4 has at least one task that enforces it
+    - Every feature in brief §6.5 is either scheduled or explicitly deferred with a note
+    - validate passes and render produces a coherent dashboard
+  artifacts:
+    - docs/tasks.yaml
+  decisions: []
+  acceptance_met: [1, 2, 3, 4]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-025
+  title: Write the CI workflow that gates the build on a valid tracker
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: S
+  depends_on: [RL-M0-006]
+  blocks: [RL-M0-026]
+  risk: low
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - The workflow runs validate on every push and pull request
+    - It fails the build on a malformed tracker
+    - It writes the CI status file that the done gate reads
+  artifacts:
+    - .github/workflows/tracking.yml
+  decisions: []
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
+
+- id: RL-M0-026
+  title: Produce the M0 gate report
+  milestone: M0
+  status: done
+  owner: agent
+  estimate: M
+  depends_on: [RL-M0-023, RL-M0-024, RL-M0-025]
+  blocks: [RL-M1-001]
+  risk: low
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - The report follows the brief §2.7 template exactly
+    - Deviations from the brief are stated with reasoning
+    - Everything needed from the human is listed as a specific decision, not a vague ask
+  artifacts:
+    - docs/gates/M0.md
+  decisions: []
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it.
+
+# ===========================================================================
+# M1 — Control plane skeleton
+# ===========================================================================
+
+- id: RL-M1-001
+  title: Scaffold the monorepo with strict TypeScript and lint configuration
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M0-026]
+  blocks: [RL-M1-002, RL-M1-003, RL-M1-022, RL-M1-027]
+  risk: low
+  acceptance:
+    - TypeScript strict is on with noUncheckedIndexedAccess and exactOptionalPropertyTypes
+    - The lint configuration fails on any use of the any type in application code
+    - Workspace layout matches the plan
+  artifacts: []
+  decisions: [1]
+
+- id: RL-M1-002
+  title: Build the CI pipeline and wire the tracker into it
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M1-001]
+  blocks: [RL-M2-001]
+  risk: low
+  acceptance:
+    - Lint, typecheck, unit tests and tasks validate all run on every pull request
+    - A red tracker fails the build
+    - CI writes the metrics and CI status files that render and the done gate consume
+  artifacts:
+    - .github/workflows/ci.yml
+  decisions: []
+
+- id: RL-M1-003
+  title: Establish migration tooling with mandatory down migrations
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M1-001]
+  blocks: [RL-M1-004]
+  risk: low
+  acceptance:
+    - Every migration has a tested down path
+    - CI applies every migration up then down then up against a scratch database
+    - A migration without a down migration fails the build
+  artifacts: []
+  decisions: [1]
+
+- id: RL-M1-004
+  title: Create the identity schema for organizations, users and memberships
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M1-003]
+  blocks: [RL-M1-005, RL-M1-017]
+  risk: high
+  acceptance:
+    - Organizations, users, memberships and service identities exist with org scoping
+    - Every tenant-scoped table carries an org identifier that is not nullable
+    - The last-owner invariant is enforced by a database constraint, not only in code
+  artifacts: []
+  decisions: [3]
+
+- id: RL-M1-005
+  title: Create the hierarchy schema for teams, projects and environments
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M1-004]
+  blocks: [RL-M1-006, RL-M1-009]
+  risk: medium
+  acceptance:
+    - The full Organization to Team to Project to Environment chain is modelled
+    - Environment kind distinguishes production, staging and preview
+    - Scope paths are materialised so inheritance can be resolved in one query
+  artifacts: []
+  decisions: [3]
+
+- id: RL-M1-006
+  title: Implement row-level security policies and per-transaction scoping
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M1-005]
+  blocks: [RL-M1-007]
+  risk: high
+  acceptance:
+    - Every tenant-scoped table has row-level security enabled and forced
+    - The application connects as a role that cannot bypass those policies
+    - A test proves a query with the wrong tenant set returns zero rows even when the application predicate is removed
+  artifacts:
+    - test/security/rls_cross_tenant.test.ts
+  decisions: [3]
+
+- id: RL-M1-007
+  title: Build the scoped data-access primitive and the authorization context
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M1-006]
+  blocks: [RL-M1-008]
+  risk: high
+  acceptance:
+    - Every repository function takes an authorization context as its first argument
+    - The context type cannot be constructed outside the authenticated request path
+    - There is no exported unscoped read anywhere in the codebase
+    - A test asserts that a repository called with a foreign tenant returns nothing
+  artifacts:
+    - test/security/scoped_repository.test.ts
+  decisions: [3]
+
+- id: RL-M1-008
+  title: Add lint rules that make the forbidden patterns unwritable
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M1-007]
+  blocks: []
+  risk: high
+  acceptance:
+    - Importing the raw database handle outside the repository layer fails lint
+    - Importing a process-spawning module in the control plane fails lint
+    - Shell construction by template literal fails lint
+    - Each rule has a fixture proving it fires
+  artifacts:
+    - test/security/lint_rules.test.ts
+  decisions: [3, 5]
+
+- id: RL-M1-009
+  title: Define the permission catalogue as the single source of actions
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M1-005]
+  blocks: [RL-M1-010]
+  risk: high
+  acceptance:
+    - Every action is declared once with its resource type and required scope level
+    - Reading a secret name and reading a secret value are separate actions
+    - Deploying to production and deploying to non-production are separate actions
+    - Adding an action without mapping it to at least one role fails a test
+  artifacts:
+    - test/authz/catalogue_completeness.test.ts
+  decisions: []
+
+- id: RL-M1-010
+  title: Implement the seven default roles as compositions of raw permissions
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M1-009]
+  blocks: [RL-M1-011]
+  risk: high
+  acceptance:
+    - All seven roles from the brief exist and are editable
+    - Infrastructure and Release Manager provably cannot read secret values
+    - Billing has no infrastructure visibility of any kind
+    - A snapshot test pins each role's effective permission set so drift is visible in review
+  artifacts:
+    - test/authz/default_roles.test.ts
+  decisions: []
+
+- id: RL-M1-011
+  title: Model grants, denies and time-bound scoping
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M1-010]
+  blocks: [RL-M1-012, RL-M1-032]
+  risk: high
+  acceptance:
+    - A grant attaches a role to any node in the hierarchy for a user, service identity or token
+    - Denies exist and always win over grants
+    - Expiry is evaluated at decision time so an expired grant is dead the moment it expires
+    - A test advances the clock past expiry and confirms denial with no cleanup job having run
+  artifacts:
+    - test/authz/grant_expiry.test.ts
+  decisions: []
+
+- id: RL-M1-012
+  title: Implement the central can decision function
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M1-011]
+  blocks: [RL-M1-013, RL-M1-014, RL-M1-018, RL-M1-024, RL-M1-032]
+  risk: high
+  acceptance:
+    - One function decides every authorization question and no permission logic exists elsewhere
+    - An unmapped action denies
+    - Inheritance downward and deny precedence are both covered by tests
+    - The decision returns a reason so the audit log and the role editor can explain it
+  artifacts:
+    - test/authz/can.test.ts
+  decisions: []
+
+- id: RL-M1-013
+  title: Gate the build on full branch coverage of the authorization module
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M1-012]
+  blocks: []
+  risk: high
+  acceptance:
+    - Branch coverage of the decision function is 100% and enforced in CI
+    - Line coverage of the authorization module is 100% and enforced in CI
+    - The coverage numbers are written to the metrics file that STATUS reads
+  artifacts:
+    - test/authz/coverage_gate.test.ts
+  decisions: []
+
+- id: RL-M1-014
+  title: Build the hash-chained append-only audit log
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M1-012]
+  blocks: [RL-M1-015, RL-M1-016, RL-M1-031]
+  risk: high
+  acceptance:
+    - Each entry records actor, action, resource, decision, address, timestamp and request identifier
+    - Each entry chains to its predecessor by hash
+    - Update and delete are refused at the database level, not only by convention
+    - A tampering test mutates a row and the verifier detects it
+  artifacts:
+    - test/security/audit_chain_tamper.test.ts
+  decisions: []
+
+- id: RL-M1-015
+  title: Schedule audit chain verification and surface its result
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M1-014]
+  blocks: []
+  risk: medium
+  acceptance:
+    - Verification runs on a schedule and records its own result as an audit entry
+    - A broken chain raises an alert rather than failing silently
+    - The last verification time is visible in the interface
+  artifacts: []
+  decisions: []
+
+- id: RL-M1-016
+  title: Ensure every privileged action carries an attributable actor
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M1-014]
+  blocks: []
+  risk: high
+  acceptance:
+    - Automation acts as a named service identity with its own permissions
+    - There is no code path that writes an audit entry without an actor
+    - A test asserts that a background job with no actor fails rather than defaulting to a system principal
+  artifacts:
+    - test/security/actor_attribution.test.ts
+  decisions: []
+
+- id: RL-M1-017
+  title: Implement password authentication and session management
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M1-004]
+  blocks: [RL-M1-018, RL-M1-019, RL-M1-020, RL-M1-021]
+  risk: high
+  acceptance:
+    - Passwords are hashed with a memory-hard function using vetted parameters
+    - Session identifiers rotate on privilege change and on login
+    - A session fixation test confirms a pre-login identifier is never honoured after login
+    - Sessions are revocable server-side and revocation is immediate
+  artifacts:
+    - test/security/session_fixation.test.ts
+  decisions: []
+
+- id: RL-M1-018
+  title: Make role changes take effect immediately on active sessions
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M1-017, RL-M1-012]
+  blocks: []
+  risk: high
+  acceptance:
+    - Decisions consult current grants rather than anything cached in the session
+    - A test changes a role mid-session and the very next request reflects it
+    - Any cache that exists is invalidated by grant change, with the test proving it
+  artifacts:
+    - test/authz/live_role_change.test.ts
+  decisions: []
+
+- id: RL-M1-019
+  title: Add two-factor authentication with an organization-level policy
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M1-017]
+  blocks: [RL-M1-030]
+  risk: high
+  acceptance:
+    - Time-based one-time passwords enrol, verify and produce recovery codes
+    - An organization can require it, and non-compliant members are forced into enrolment at next login
+    - Recovery codes are single use and stored hashed
+  artifacts:
+    - test/security/twofactor.test.ts
+  decisions: []
+
+- id: RL-M1-020
+  title: Rate limit every authentication path
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M1-017]
+  blocks: []
+  risk: high
+  acceptance:
+    - Login, two-factor verification, password reset and token exchange are all limited
+    - Limits apply per account and per source address independently
+    - A test drives each endpoint past its limit and confirms rejection
+  artifacts:
+    - test/security/rate_limit_auth.test.ts
+  decisions: []
+
+- id: RL-M1-021
+  title: Implement cross-site request forgery protection
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M1-017]
+  blocks: []
+  risk: high
+  acceptance:
+    - Every state-changing request requires a token bound to the session
+    - Cookies use SameSite and the secure attribute appropriately for the deployment model
+    - A test issues a forged cross-origin request and confirms rejection
+  artifacts:
+    - test/security/csrf.test.ts
+  decisions: []
+
+- id: RL-M1-022
+  title: Generate all secrets on first run and refuse to boot without them
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M1-001]
+  blocks: [RL-M1-023]
+  risk: high
+  acceptance:
+    - There is no default signing key, cookie secret, encryption key or administrator password anywhere in the tree
+    - First run generates each from a cryptographic source and persists it with restrictive permissions
+    - The application exits with a clear message rather than starting with a missing or weak secret
+    - A test greps the built artifact for known-default patterns and fails if any are present
+  artifacts:
+    - test/security/no_default_secrets.test.ts
+  decisions: [6]
+
+- id: RL-M1-023
+  title: Bind to localhost by default and detect public reachability
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M1-022]
+  blocks: []
+  risk: high
+  acceptance:
+    - The default bind address is loopback and changing it is a deliberate documented act
+    - A reachability check detects public exposure and raises a non-dismissable warning
+    - Documentation covers virtual private network, Tailscale and address allowlist setups
+  artifacts:
+    - test/security/bind_default.test.ts
+  decisions: []
+
+- id: RL-M1-024
+  title: Generate the authorization matrix from the route table
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M1-012]
+  blocks: [RL-M1-025]
+  risk: high
+  acceptance:
+    - The route table is introspectable and every route declares the action it requires
+    - The matrix is generated rather than hand-maintained
+    - A route with no matrix coverage fails the build
+  artifacts:
+    - test/authz/matrix_generator.test.ts
+  decisions: []
+
+- id: RL-M1-025
+  title: Build the authorization matrix harness
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M1-024]
+  blocks: [RL-M1-026]
+  risk: high
+  acceptance:
+    - Every role is exercised against every endpoint for own, other-team and nonexistent resources
+    - Results are written to the metrics file so STATUS reports the pass rate
+    - The harness runs in CI and is meaningful even while most endpoints do not yet exist
+  artifacts:
+    - test/authz/matrix.test.ts
+  decisions: []
+
+- id: RL-M1-026
+  title: Make unauthorized and nonexistent indistinguishable
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M1-025]
+  blocks: []
+  risk: high
+  acceptance:
+    - Both cases return an identical status code and body
+    - Error text and headers reveal nothing about existence
+    - A test compares responses byte for byte across every resource type
+  artifacts:
+    - test/security/indistinguishable_404.test.ts
+  decisions: [3]
+
+- id: RL-M1-027
+  title: Implement the design tokens from the design plan
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M0-022, RL-M1-001]
+  blocks: [RL-M1-028]
+  risk: low
+  acceptance:
+    - Palette, type scale, spacing and status colours exist as tokens with no hard-coded values in components
+    - Dark and light modes both render correctly
+    - Fonts are self-hosted so the interface works with no internet access
+  artifacts:
+    - docs/DESIGN.md
+  decisions: []
+
+- id: RL-M1-028
+  title: Build the application shell with the navigation rail and tension line
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M1-027]
+  blocks: [RL-M1-029, RL-M1-030, RL-M1-031, RL-M2-014, RL-M3-020]
+  risk: low
+  acceptance:
+    - Rail, top bar, breadcrumb and environment chip are implemented per the design plan
+    - The tension line reflects live operation state and reduces to a static form under reduced motion
+    - Focus states are visible and the whole shell is reachable by keyboard
+  artifacts: []
+  decisions: []
+
+- id: RL-M1-029
+  title: Build the command palette covering every available action
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M1-028]
+  blocks: []
+  risk: medium
+  acceptance:
+    - The palette is generated from the same action catalogue the permission system uses
+    - It shows only actions the current actor is permitted to take
+    - A test confirms a restricted role cannot see a privileged action in the palette
+  artifacts:
+    - test/authz/palette_filtering.test.ts
+  decisions: []
+
+- id: RL-M1-030
+  title: Build onboarding, login and organization bootstrap screens
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M1-028, RL-M1-019]
+  blocks: []
+  risk: medium
+  acceptance:
+    - First run walks an operator from empty database to an organization with one owner
+    - The owner cannot be left in a state where no owner exists
+    - Copy follows the voice rules in the brief
+  artifacts: []
+  decisions: []
+
+- id: RL-M1-031
+  title: Build the audit log viewer
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M1-014, RL-M1-028]
+  blocks: []
+  risk: medium
+  acceptance:
+    - Entries are filterable by actor, action, resource and outcome
+    - Chain verification status is shown alongside the entries
+    - Denied decisions are as visible as allowed ones
+  artifacts: []
+  decisions: []
+
+- id: RL-M1-032
+  title: Implement scoped API tokens
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M1-011, RL-M1-012]
+  blocks: [RL-M5-001]
+  risk: high
+  acceptance:
+    - A token can never carry a permission its issuing user lacks, checked at use time as well as issue time
+    - Tokens expire, are revocable individually and in bulk, and track last use
+    - A test downgrades the issuing user and confirms the token loses the permission immediately
+  artifacts:
+    - test/authz/token_subset.test.ts
+  decisions: []
+
+# ===========================================================================
+# M2 — Agent and first host
+# ===========================================================================
+
+- id: RL-M2-001
+  title: Scaffold the agent as a dependency-free static binary
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M1-002]
+  blocks: [RL-M2-002, RL-M2-024, RL-M2-028]
+  risk: low
+  acceptance:
+    - The binary builds statically for amd64 and arm64 with no runtime dependency on the host
+    - Vet and static analysis run clean in CI
+    - The binary reports its version and build commit
+  artifacts: []
+  decisions: [1, 2]
+
+- id: RL-M2-002
+  title: Define the enumerated operation catalogue shared by both sides
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M2-001]
+  blocks: [RL-M2-003, RL-M2-008]
+  risk: high
+  acceptance:
+    - Every operation the agent will ever perform is declared with typed arguments in one schema
+    - Control plane and agent types are generated from that schema so they cannot drift
+    - There is no operation that accepts a free-form command
+    - A test asserts the agent rejects an operation name outside the catalogue
+  artifacts:
+    - test/security/agent_operation_catalogue_test.go
+  decisions: [2, 4]
+
+- id: RL-M2-003
+  title: Implement the signed instruction envelope
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M2-002]
+  blocks: [RL-M2-004, RL-M2-007]
+  risk: high
+  acceptance:
+    - Envelopes carry operation, typed arguments, nonce, issue time, expiry and target host identity
+    - Signature verification happens before any argument is interpreted
+    - An envelope addressed to another host is refused
+    - An expired or replayed envelope is refused
+  artifacts:
+    - test/security/envelope_verification_test.go
+  decisions: [2]
+
+- id: RL-M2-004
+  title: Manage the control plane instruction signing key
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M2-003]
+  blocks: [RL-M2-005]
+  risk: high
+  acceptance:
+    - The signing key is generated on first run and never has a default
+    - It is stored separately from the database with restrictive permissions
+    - Rotation is supported with an overlap window so agents accept both keys during rollover
+    - A test confirms an envelope signed by an unknown key is refused
+  artifacts:
+    - test/security/signing_key_rotation_test.go
+  decisions: [2, 6]
+
+- id: RL-M2-005
+  title: Implement agent enrolment and mutual transport authentication
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M2-004]
+  blocks: [RL-M2-006, RL-M2-010]
+  risk: high
+  acceptance:
+    - Each host receives its own client certificate at enrolment
+    - Certificates are individually revocable and revocation takes effect on next connection
+    - A connection presenting no certificate or a revoked one is refused
+    - The enrolment token is single use and short lived
+  artifacts:
+    - test/security/agent_enrolment_test.go
+  decisions: [2]
+
+- id: RL-M2-006
+  title: Implement the agent-initiated connection with reconnect and backoff
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M2-005]
+  blocks: [RL-M2-012, RL-M2-023]
+  risk: high
+  acceptance:
+    - The agent dials outbound so no managed host needs an inbound listening port
+    - Reconnection uses exponential backoff with jitter and survives control plane restarts
+    - The agent works from behind network address translation with no port forwarding
+    - A test confirms the host has no Ratline port listening after provisioning
+  artifacts:
+    - test/security/no_inbound_listener_test.go
+  decisions: [2]
+
+- id: RL-M2-007
+  title: Implement replay protection with a durable nonce store
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M2-003]
+  blocks: []
+  risk: high
+  acceptance:
+    - Seen nonces persist across agent restarts for at least the envelope validity window
+    - The store is bounded so it cannot grow without limit
+    - A test replays a captured envelope after restart and confirms refusal
+  artifacts:
+    - test/security/replay_protection_test.go
+  decisions: [2]
+
+- id: RL-M2-008
+  title: Build the privileged helper as a separate socket-activated process
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: XL
+  depends_on: [RL-M2-002]
+  blocks: [RL-M2-009, RL-M2-015, RL-M2-020]
+  risk: high
+  acceptance:
+    - The agent runs unprivileged and the helper is the only component running as root
+    - The helper authenticates its caller by peer credentials rather than trusting the socket
+    - The helper accepts only enumerated operations and validates every argument independently of the agent
+    - A test confirms a compromised agent cannot obtain arbitrary root through the helper
+  artifacts:
+    - test/security/privileged_helper_test.go
+  decisions: [4]
+  notes: |
+    2026-08-01 — Estimated XL and therefore not startable as written. Split at
+    the start of M2 into transport and peer authentication, the operation
+    dispatch table, and per-operation argument validators. Left whole here
+    deliberately so the split is a visible act rather than a silent one.
+
+- id: RL-M2-009
+  title: Give the privileged helper its own append-only local audit log
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M2-008]
+  blocks: []
+  risk: high
+  acceptance:
+    - Every privileged operation is recorded locally before it is performed
+    - The log is appended to the control plane audit trail and survives agent compromise
+    - The agent user cannot rewrite the log
+  artifacts:
+    - test/security/helper_audit_log_test.go
+  decisions: [4]
+
+- id: RL-M2-010
+  title: Implement agent installation over SSH as the only raw SSH path
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M2-005]
+  blocks: [RL-M2-011, RL-M2-029]
+  risk: high
+  acceptance:
+    - Bootstrap uses an operator-supplied key for that single action and does not retain it
+    - The binary is verified by checksum and signature before it is executed
+    - After bootstrap no root SSH credential for the host exists in the control plane
+    - Every command in the bootstrap path uses an argument vector with no shell involved
+  artifacts:
+    - test/security/bootstrap_no_shell_test.go
+  decisions: [2, 4, 5]
+
+- id: RL-M2-011
+  title: Make bootstrap idempotent and resumable
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M2-010]
+  blocks: []
+  risk: medium
+  acceptance:
+    - Running bootstrap twice on the same host converges rather than duplicating anything
+    - An interrupted bootstrap resumes cleanly rather than requiring manual cleanup
+    - Partial state is detected and reported rather than assumed
+  artifacts: []
+  decisions: []
+
+- id: RL-M2-012
+  title: Collect host inventory
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M2-006]
+  blocks: [RL-M2-013]
+  risk: low
+  acceptance:
+    - Distribution, kernel, architecture, processor count, memory, disk and installed runtimes are reported
+    - Inventory survives a reboot and is refreshed on reconnection
+    - Collection never shells out
+  artifacts: []
+  decisions: []
+
+- id: RL-M2-013
+  title: Implement health reporting and heartbeat
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M2-012]
+  blocks: [RL-M2-014]
+  risk: low
+  acceptance:
+    - Load, memory, disk and service health are reported on an interval
+    - A missed heartbeat marks the host degraded within a bounded time
+    - Thresholds are configurable and drive alerting
+  artifacts: []
+  decisions: []
+
+- id: RL-M2-014
+  title: Build the host list and host detail screens
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M2-013, RL-M1-028]
+  blocks: []
+  risk: medium
+  acceptance:
+    - Host status uses the committed status colour language and is readable at a glance
+    - Inventory, health, provisioning state and recent operations are all visible
+    - Every action on the screen is permission gated at the data layer
+  artifacts: []
+  decisions: []
+
+- id: RL-M2-015
+  title: Provision base packages and unattended security upgrades
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M2-008]
+  blocks: [RL-M2-016, RL-M2-019, RL-M2-021]
+  risk: high
+  acceptance:
+    - Base package installation runs through the enumerated operation set with typed arguments
+    - Unattended security upgrades are configurable per host and default to on
+    - A metacharacter fuzz over package names cannot reach a shell
+  artifacts:
+    - test/security/package_argument_fuzz_test.go
+  decisions: [4, 5]
+
+- id: RL-M2-016
+  title: Install and baseline the web server
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M2-015]
+  blocks: [RL-M2-017]
+  risk: medium
+  acceptance:
+    - Caddy is installed with a minimal baseline configuration and runs under its own user
+    - The Nginx path is left as a documented seam and is not implemented
+    - Installation is idempotent
+  artifacts: []
+  decisions: [10]
+
+- id: RL-M2-017
+  title: Generate web server virtual host configuration from templates
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M2-016]
+  blocks: [RL-M2-018, RL-M2-027]
+  risk: high
+  acceptance:
+    - Every interpolated value passes through a context-aware escaper
+    - A fuzz test pushes metacharacters and unicode through site names, domains and paths
+    - No configuration is ever produced by string concatenation
+  artifacts:
+    - test/security/vhost_template_fuzz_test.go
+  decisions: [10]
+
+- id: RL-M2-018
+  title: Validate configuration before reload and roll back on failure
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M2-017]
+  blocks: [RL-M2-025, RL-M3-011]
+  risk: high
+  acceptance:
+    - The web server's own validator runs before any reload and a failure aborts without touching live configuration
+    - Rollback to the previous known-good configuration is verified in an integration test
+    - A host is never left with configuration that fails validation, including after a crash mid-write
+  artifacts:
+    - test/integration/vhost_rollback_test.go
+    - test/security/vhost_atomicity_test.go
+  decisions: [10]
+
+- id: RL-M2-019
+  title: Install the runtime version manager and pin runtimes per site
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M2-015]
+  blocks: [RL-M2-025, RL-M3-006]
+  risk: medium
+  acceptance:
+    - Multiple Node and Bun versions coexist on one host with no global install
+    - A site's runtime is pinned and changing it is a deliberate rollback-able action
+    - Runtime downloads are checksum verified
+  artifacts: []
+  decisions: []
+
+- id: RL-M2-020
+  title: Create per-site Linux users and the site directory layout
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M2-008]
+  blocks: [RL-M2-025, RL-M2-027, RL-M3-003]
+  risk: high
+  acceptance:
+    - Each site gets its own unprivileged user following the naming convention
+    - Directory modes prevent one site user from reading another site's files
+    - Site slugs are validated against a strict pattern before they reach any filesystem path
+    - A path traversal test over slugs and release names cannot escape the site root
+  artifacts:
+    - test/security/site_path_traversal_test.go
+  decisions: [4]
+
+- id: RL-M2-021
+  title: Manage the host firewall
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M2-015]
+  blocks: [RL-M2-022]
+  risk: high
+  acceptance:
+    - Default policy denies inbound except the ports the host actually needs
+    - Rule changes are validated and rolled back if connectivity to the control plane is lost
+    - A test confirms a rule change that would lock out the agent is reverted automatically
+  artifacts:
+    - test/integration/firewall_lockout_test.go
+  decisions: []
+
+- id: RL-M2-022
+  title: Apply an intrusion response policy for repeated authentication failures
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M2-021]
+  blocks: []
+  risk: medium
+  acceptance:
+    - Repeated failed authentication attempts result in a temporary source block
+    - The policy is configurable per host and visible in the interface
+    - Blocks are recorded in the audit trail
+  artifacts: []
+  decisions: []
+
+- id: RL-M2-023
+  title: Implement agent self-update with rollback
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M2-006]
+  blocks: []
+  risk: high
+  acceptance:
+    - Updates are signature verified before installation
+    - A failed update rolls back to the previous binary automatically
+    - An agent that cannot reach the control plane after update reverts on its own
+    - A downgrade below a configured minimum version is refused
+  artifacts:
+    - test/security/agent_update_signature_test.go
+  decisions: [2]
+
+- id: RL-M2-024
+  title: Build the integration test harness against real hosts
+  milestone: M2
+  status: todo
+  owner: human
+  estimate: L
+  depends_on: [RL-M2-001]
+  blocks: [RL-M2-025, RL-M2-029]
+  risk: high
+  acceptance:
+    - Provisioning tests run against a real Debian 12 machine with a working init system
+    - The harness creates and destroys hosts without manual steps
+    - Nothing in the provisioning path is mocked
+  artifacts:
+    - test/integration/harness.go
+  decisions: []
+  notes: |
+    2026-08-01 — Owner is human because this needs a resource the agent cannot
+    create. Containers on the development machine cannot faithfully exercise the
+    systemd sandboxing this milestone depends on. Blocks the M2 gate. See
+    RISKS.md and the M0 gate report question on test infrastructure.
+
+- id: RL-M2-025
+  title: Prove provisioning is idempotent end to end
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M2-024, RL-M2-018, RL-M2-019, RL-M2-020]
+  blocks: [RL-M2-026, RL-M3-001]
+  risk: medium
+  acceptance:
+    - A bare host reaches fully provisioned in one action
+    - The same action run twice produces no change on the second run
+    - The second run is verified by comparing host state, not by trusting a return code
+  artifacts:
+    - test/integration/provision_idempotent_test.go
+  decisions: []
+
+- id: RL-M2-026
+  title: Chaos test the provisioning path against connection loss
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M2-025]
+  blocks: []
+  risk: high
+  acceptance:
+    - The connection is killed at randomised points across many runs
+    - Every run leaves the host in a state that either completes or cleanly resumes
+    - No run leaves a host half configured or with invalid web server configuration
+  artifacts:
+    - test/integration/provision_chaos_test.go
+  decisions: []
+
+- id: RL-M2-027
+  title: Fuzz every user-controllable field that reaches a host
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M2-020, RL-M2-017]
+  blocks: []
+  risk: high
+  acceptance:
+    - The fuzz corpus covers shell metacharacters, newlines, null bytes, unicode normalisation and long inputs
+    - Every field reaching an operation argument is enumerated from the schema so none is missed
+    - The test fails if a new field is added without coverage
+  artifacts:
+    - test/security/agent_field_fuzz_test.go
+  decisions: [5]
+
+- id: RL-M2-028
+  title: Add a build check that fails on shell construction in the agent
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M2-001]
+  blocks: []
+  risk: high
+  acceptance:
+    - Any invocation of a shell interpreter with a constructed string fails the build
+    - Formatting a string into a process argument fails the build unless explicitly annotated and reviewed
+    - The check has fixtures proving it fires
+  artifacts:
+    - test/security/no_shell_construction_test.go
+  decisions: [5]
+
+- id: RL-M2-029
+  title: Verify zero root SSH remains after bootstrap
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M2-010, RL-M2-024]
+  blocks: []
+  risk: high
+  acceptance:
+    - An automated check confirms the control plane holds no credential granting root SSH to a managed host
+    - The check runs in CI and is part of the gate evidence
+    - Removing the operator key after bootstrap is verified against the host
+  artifacts:
+    - test/security/no_root_ssh_test.go
+  decisions: [4]
+
+# ===========================================================================
+# M3 — Static sites end to end
+# ===========================================================================
+
+- id: RL-M3-001
+  title: Connect Git providers and manage deploy credentials
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M2-025]
+  blocks: [RL-M3-002, RL-M3-003]
+  risk: high
+  acceptance:
+    - GitHub, GitLab, Gitea, Bitbucket and plain SSH remotes are all supported
+    - Deploy credentials are stored encrypted and are never rendered back to the interface
+    - Repository access is verified at connect time with a clear failure message
+  artifacts:
+    - test/security/git_credential_storage.test.ts
+  decisions: [6]
+
+- id: RL-M3-002
+  title: Receive and verify signed webhooks
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M3-001]
+  blocks: []
+  risk: high
+  acceptance:
+    - Signatures are verified with a constant-time comparison before any parsing of the payload
+    - Replayed deliveries are rejected by identifier and timestamp window
+    - An unsigned or wrongly signed delivery is rejected and audited
+  artifacts:
+    - test/security/webhook_replay.test.ts
+  decisions: []
+
+- id: RL-M3-003
+  title: Model sites and build the new-site wizard
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M3-001, RL-M2-020]
+  blocks: [RL-M3-004]
+  risk: high
+  acceptance:
+    - A site belongs to a project and an environment and is pinned to a host
+    - Slug generation is deterministic, validated and collision free
+    - Every wizard step is permission gated at the data layer
+  artifacts:
+    - test/authz/site_creation.test.ts
+  decisions: [3]
+
+- id: RL-M3-004
+  title: Detect framework build settings with sensible defaults
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M3-003]
+  blocks: [RL-M3-005]
+  risk: low
+  acceptance:
+    - Vite, Astro, Next static export, SvelteKit static, Nuxt generate, Eleventy and Hugo are detected
+    - Detection proposes install command, build command and output directory, and every value stays editable
+    - Detection failure produces a clear prompt rather than a wrong guess
+  artifacts: []
+  decisions: []
+
+- id: RL-M3-005
+  title: Support monorepo root directories
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M3-004]
+  blocks: [RL-M3-006]
+  risk: high
+  acceptance:
+    - A site can build from a subdirectory of the repository
+    - The root directory is validated so it cannot escape the checkout
+    - A traversal attempt in the root directory field is rejected and audited
+  artifacts:
+    - test/security/monorepo_root_traversal.test.ts
+  decisions: [5]
+
+- id: RL-M3-006
+  title: Execute builds as the site user under resource limits
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: XL
+  depends_on: [RL-M3-005, RL-M2-019]
+  blocks: [RL-M3-007, RL-M3-008, RL-M3-017, RL-M3-023, RL-M3-024]
+  risk: high
+  acceptance:
+    - The build runs as the site's own unprivileged user, never as the agent user or root
+    - Memory, processor and task limits are enforced by the init system and are configurable
+    - The build cannot read another site's files or the agent's credentials
+    - A build that tries to escape its sandbox fails and is audited
+  artifacts:
+    - test/security/build_sandbox_escape_test.go
+  decisions: [5, 9]
+  notes: |
+    2026-08-01 — XL and therefore not startable as written. Split at the start
+    of M3 into sandbox unit generation, build script materialisation, and
+    resource limit enforcement plus its escape tests.
+
+- id: RL-M3-007
+  title: Materialise user build commands as files rather than interpolated commands
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M3-006]
+  blocks: []
+  risk: high
+  acceptance:
+    - The user's build command is written atomically to a file owned by the site user
+    - Execution passes the script path as an argument vector with no Ratline-constructed shell string
+    - Setting a build command is its own permission, separate from deploying
+    - A test confirms metacharacters in the build command affect only that site's own sandbox
+  artifacts:
+    - test/security/build_command_containment_test.go
+  decisions: [5, 9]
+
+- id: RL-M3-008
+  title: Implement atomic releases with symlink swap
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M3-006]
+  blocks: [RL-M3-009, RL-M3-011]
+  risk: high
+  acceptance:
+    - Builds land in a timestamped release directory and the current pointer swaps atomically
+    - A failed build never replaces the running release
+    - Release directory names are generated by the system and never taken from user input
+  artifacts:
+    - test/security/release_path_test.go
+  decisions: []
+
+- id: RL-M3-009
+  title: Retain and prune previous releases
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M3-008]
+  blocks: [RL-M3-010]
+  risk: medium
+  acceptance:
+    - The number of retained releases is configurable per site
+    - Pruning never removes the current release or the one before it
+    - Disk pressure is reported before pruning fails
+  artifacts: []
+  decisions: []
+
+- id: RL-M3-010
+  title: Implement one-click rollback
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M3-009]
+  blocks: [RL-M3-026]
+  risk: high
+  acceptance:
+    - Rollback completes in under one second measured end to end
+    - Rollback is a distinct permission from deploy
+    - Rolling back to a pruned release is impossible rather than failing halfway
+  artifacts:
+    - test/integration/rollback_timing_test.go
+  decisions: []
+
+- id: RL-M3-011
+  title: Serve static sites through the web server
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M3-008, RL-M2-018]
+  blocks: [RL-M3-012, RL-M3-016]
+  risk: medium
+  acceptance:
+    - A built site is served from the current release with correct caching headers
+    - Single page application fallback routing is configurable
+    - Dot files and source maps are not served unless explicitly enabled
+  artifacts: []
+  decisions: [10]
+
+- id: RL-M3-012
+  title: Manage custom domains with verification
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M3-011]
+  blocks: [RL-M3-013]
+  risk: high
+  acceptance:
+    - Domain ownership is verified before the domain is attached
+    - A domain already claimed in another tenant cannot be attached
+    - Domain strings are validated and normalised before reaching any configuration template
+  artifacts:
+    - test/security/domain_claim_isolation.test.ts
+  decisions: [10]
+
+- id: RL-M3-013
+  title: Issue certificates over HTTP validation
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M3-012]
+  blocks: [RL-M3-014, RL-M3-015, RL-M3-026]
+  risk: high
+  acceptance:
+    - A real certificate is issued for a real domain end to end
+    - Rate limits from the certificate authority are respected and surfaced rather than retried blindly
+    - Issuance failure leaves the site serving on its previous certificate
+  artifacts:
+    - test/integration/tls_issuance_test.go
+  decisions: []
+
+- id: RL-M3-014
+  title: Support wildcard certificates over DNS validation
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M3-013]
+  blocks: []
+  risk: high
+  acceptance:
+    - DNS provider credentials are stored encrypted and scoped to the tenant that owns them
+    - A wildcard certificate is issued end to end
+    - Provider credentials never appear in any log or error trace
+  artifacts:
+    - test/security/dns_credential_redaction.test.ts
+  decisions: [6]
+
+- id: RL-M3-015
+  title: Support custom certificate upload and expiry alerting
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M3-013]
+  blocks: []
+  risk: high
+  acceptance:
+    - An uploaded certificate and key are validated as a matching pair before installation
+    - Private keys are encrypted at rest and are never readable back through the interface
+    - Expiry warnings fire with enough lead time to act
+  artifacts:
+    - test/security/cert_upload_validation.test.ts
+  decisions: [6]
+
+- id: RL-M3-016
+  title: Configure redirects, headers and staging protection
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M3-011]
+  blocks: []
+  risk: high
+  acceptance:
+    - Redirect and header rules are validated and escaped before generation
+    - Basic authentication can protect a non-production site and stores its credentials hashed
+    - A header injection attempt through a rule value is rejected
+  artifacts:
+    - test/security/header_injection_test.go
+  decisions: [10]
+
+- id: RL-M3-017
+  title: Stream build logs from agent to browser
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M3-006]
+  blocks: [RL-M3-018, RL-M3-020]
+  risk: high
+  acceptance:
+    - Logs stream live with low latency and survive a browser reconnect without losing lines
+    - Access to a deployment's logs is authorised at the data layer for every chunk
+    - Backpressure is handled so a noisy build cannot exhaust control plane memory
+  artifacts:
+    - test/authz/log_stream_scoping.test.ts
+  decisions: []
+
+- id: RL-M3-018
+  title: Redact secret values in build output at the agent
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M3-017]
+  blocks: [RL-M3-019]
+  risk: high
+  acceptance:
+    - Redaction happens on the host before a line is transmitted, not in the browser
+    - Redaction survives partial writes and values split across chunk boundaries
+    - Common encodings of a secret value are also caught
+    - A test plants secrets in build output and asserts none reach storage or the browser
+  artifacts:
+    - test/security/log_secret_redaction_test.go
+  decisions: [6]
+
+- id: RL-M3-019
+  title: Persist and search deployment logs
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M3-018]
+  blocks: []
+  risk: medium
+  acceptance:
+    - Logs are retained per deployment with a configurable retention window
+    - Search works across a deployment's output without loading it all into memory
+    - Retention deletion is verifiable
+  artifacts: []
+  decisions: []
+
+- id: RL-M3-020
+  title: Build the live deployment screen
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: XL
+  depends_on: [RL-M3-017, RL-M1-028]
+  blocks: [RL-M3-021, RL-M3-026]
+  risk: medium
+  acceptance:
+    - Log rendering stays smooth at high line rates through virtualisation
+    - Terminal colour sequences render correctly and map into the palette
+    - A failed step pins a summary above the log with the command, exit status and surrounding output
+    - Jump to error works by click and by keyboard
+    - Tail follow disengages on manual scroll and offers an obvious way to resume
+  artifacts:
+    - docs/DESIGN.md
+  decisions: []
+  notes: |
+    2026-08-01 — XL and therefore not startable as written. This is the
+    signature screen and deserves the split rather than a rushed single pass.
+    Split at the start of M3 into the virtualised log surface, the terminal
+    sequence renderer, and the step and failure summary layer.
+
+- id: RL-M3-021
+  title: Build the deployment history screen
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M3-020]
+  blocks: [RL-M3-022, RL-M3-025]
+  risk: medium
+  acceptance:
+    - History shows commit, actor, trigger, duration and outcome using the status colour language
+    - Rollback and redeploy are reachable from history and are permission gated
+    - Filtering by environment and outcome works without a page reload
+  artifacts: []
+  decisions: []
+
+- id: RL-M3-022
+  title: Support manual deploys and deploying a specific commit
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M3-021]
+  blocks: []
+  risk: high
+  acceptance:
+    - A specific commit can be deployed and the reference is validated before use
+    - Deploying to production and to non-production are separately permissioned
+    - A reference that does not exist in the connected repository is rejected before any host work begins
+  artifacts:
+    - test/authz/deploy_environment_split.test.ts
+  decisions: []
+
+- id: RL-M3-023
+  title: Enforce per-host deployment concurrency limits
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M3-006]
+  blocks: []
+  risk: medium
+  acceptance:
+    - Concurrent builds on one host are capped and the cap is configurable
+    - Queued deployments are visible with their position
+    - The cap holds under a burst of simultaneous webhook deliveries
+  artifacts: []
+  decisions: [9]
+
+- id: RL-M3-024
+  title: Cache build artifacts between deployments
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M3-006]
+  blocks: []
+  risk: high
+  acceptance:
+    - Dependency caches are keyed by lockfile content and runtime version
+    - Caches are owned by the site user and are never shared between sites
+    - A cache poisoning attempt across sites is impossible by construction and covered by a test
+  artifacts:
+    - test/security/build_cache_isolation_test.go
+  decisions: [9]
+
+- id: RL-M3-025
+  title: Send deployment notifications
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M3-021]
+  blocks: []
+  risk: high
+  acceptance:
+    - Slack, generic webhook and email destinations are supported per project
+    - Notification payloads pass through the same redaction as logs
+    - Destination credentials are encrypted and scoped to their tenant
+  artifacts:
+    - test/security/notification_redaction.test.ts
+  decisions: [6]
+
+- id: RL-M3-026
+  title: Run the end to end static site acceptance scenario
+  milestone: M3
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M3-013, RL-M3-010, RL-M3-020]
+  blocks: [RL-M3-027, RL-M4-001]
+  risk: medium
+  acceptance:
+    - A real repository deploys to a real host and serves over a real certificate
+    - Rollback completes in under one second and is measured, not asserted by eye
+    - The whole scenario runs unattended in the integration suite
+  artifacts:
+    - test/integration/static_site_e2e_test.go
+  decisions: []
+
+- id: RL-M3-027
+  title: Decide whether per-pull-request preview environments make v1
+  milestone: M3
+  status: todo
+  owner: human
+  estimate: M
+  depends_on: [RL-M3-026]
+  blocks: []
+  risk: medium
+  acceptance:
+    - The cost of preview environments is estimated against the remaining milestone budget
+    - Either the work is scheduled with its own tasks or it is deferred with a written note
+    - The decision is recorded so it is not silently dropped
+  artifacts: []
+  decisions: []
+  notes: |
+    2026-08-01 — The brief allows preview environments in v1 only if they do not
+    blow the milestone. Scheduling this as an explicit decision point rather
+    than letting it disappear.
+
+# ===========================================================================
+# M4 — Node and Bun apps (outline; refined at the start of M4)
+# ===========================================================================
+
+- id: RL-M4-001
+  title: Generate sandboxed systemd units per site
+  milestone: M4
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M3-026]
+  blocks: [RL-M4-002, RL-M4-003, RL-M4-005, RL-M4-006, RL-M4-011]
+  risk: high
+  acceptance:
+    - Units set the sandboxing directives required by the brief and are validated before install
+    - Every generated value is escaped for unit file syntax
+    - A fuzz test over site names and commands cannot break out of the unit file grammar
+  artifacts:
+    - test/security/systemd_unit_fuzz_test.go
+  decisions: []
+
+- id: RL-M4-002
+  title: Surface and edit resource limits in the interface
+  milestone: M4
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M4-001]
+  blocks: []
+  risk: medium
+  acceptance:
+    - Memory, processor and task limits are editable and take effect without a full redeploy
+    - Limits are enforced and the enforcement is demonstrated in a test
+    - Changing a limit is audited
+  artifacts: []
+  decisions: []
+
+- id: RL-M4-003
+  title: Implement zero-downtime reload
+  milestone: M4
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M4-001]
+  blocks: [RL-M4-004]
+  risk: high
+  acceptance:
+    - Socket handoff or reload-then-drain is used according to what the runtime supports
+    - A deploy that fails its health check never takes the running version down
+    - Continuous request load during deploy records zero failed responses
+  artifacts:
+    - test/integration/zero_downtime_test.go
+  decisions: []
+
+- id: RL-M4-004
+  title: Implement health checks and automatic abort
+  milestone: M4
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M4-003]
+  blocks: [RL-M4-007, RL-M4-008]
+  risk: high
+  acceptance:
+    - Health check path, timeout and threshold are configurable per site
+    - A failing check aborts the deploy and leaves the previous release serving
+    - The abort reason is visible on the deployment screen
+  artifacts:
+    - test/integration/failed_healthcheck_test.go
+  decisions: []
+
+- id: RL-M4-005
+  title: Manage per-environment variables with write-only handling
+  milestone: M4
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M4-001]
+  blocks: [RL-M4-007, RL-M4-013]
+  risk: high
+  acceptance:
+    - Values are envelope encrypted at rest and are write-only in the interface once set
+    - Change history records who and when but never the value
+    - Import from an environment file works without the value passing through a log
+  artifacts:
+    - test/security/env_var_write_only.test.ts
+  decisions: [6]
+
+- id: RL-M4-006
+  title: Investigate init system sandboxing interactions with Bun
+  milestone: M4
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M4-001]
+  blocks: [RL-M4-008]
+  risk: medium
+  acceptance:
+    - The interaction between strict filesystem protection and Bun's temporary directory handling is characterised
+    - A working unit configuration is documented for Bun sites
+    - The finding is captured so it does not have to be rediscovered
+  artifacts: []
+  decisions: []
+  notes: |
+    2026-08-01 — Recorded from the brief §2.5, which cites this as a known
+    surprise. Carried into the backlog now so it is not rediscovered under time
+    pressure during M4.
+
+- id: RL-M4-007
+  title: Deploy a Next.js application end to end
+  milestone: M4
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M4-004, RL-M4-005]
+  blocks: [RL-M4-009]
+  risk: medium
+  acceptance:
+    - The application builds, starts under its unit and serves traffic
+    - It survives a failed-health-check deploy with no downtime
+    - It honours its configured resource limits
+  artifacts:
+    - test/integration/nextjs_e2e_test.go
+  decisions: []
+
+- id: RL-M4-008
+  title: Deploy a Bun and Elysia application end to end
+  milestone: M4
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M4-006, RL-M4-004]
+  blocks: []
+  risk: medium
+  acceptance:
+    - The application builds, starts under its unit and serves traffic
+    - It survives a failed-health-check deploy with no downtime
+    - It honours its configured resource limits
+  artifacts:
+    - test/integration/bun_elysia_e2e_test.go
+  decisions: []
+
+- id: RL-M4-009
+  title: Build per-site and per-host observability
+  milestone: M4
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M4-007]
+  blocks: [RL-M4-010, RL-M4-014, RL-M4-015]
+  risk: high
+  acceptance:
+    - Processor, memory and request metrics per site and disk, load and memory per host are collected
+    - Alert thresholds are configurable and fire
+    - No secret value can appear in a metric label
+  artifacts:
+    - test/security/metric_label_leakage.test.ts
+  decisions: [6]
+
+- id: RL-M4-010
+  title: Build the structured log viewer with live tail
+  milestone: M4
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M4-009]
+  blocks: [RL-M5-001]
+  risk: high
+  acceptance:
+    - Application logs are searchable and tailable per site
+    - Raw log access is a distinct permission that Viewer does not hold
+    - Redaction applies to application logs as it does to build logs
+  artifacts:
+    - test/authz/raw_log_permission.test.ts
+  decisions: []
+
+- id: RL-M4-011
+  title: Implement per-site scheduled jobs with output capture
+  milestone: M4
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M4-001]
+  blocks: [RL-M4-012]
+  risk: high
+  acceptance:
+    - Scheduled jobs run as the site user under the same sandboxing as the application
+    - Schedule and command are validated and the command is materialised as a file, never interpolated
+    - Output is captured, redacted and retained per policy
+    - Overlapping runs are prevented rather than allowed to pile up
+  artifacts:
+    - test/security/cron_command_containment_test.go
+  decisions: [5]
+
+- id: RL-M4-012
+  title: Build the permission-gated one-off command runner
+  milestone: M4
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M4-011]
+  blocks: []
+  risk: high
+  acceptance:
+    - Running a one-off command is its own permission that no default role holds outside Infrastructure
+    - Commands run as the site user in the site sandbox and never as the agent user or root
+    - Every invocation is audited with the full command and its actor
+    - Output passes through redaction before it reaches the interface
+  artifacts:
+    - test/authz/one_off_command_permission.test.ts
+  decisions: [5]
+
+- id: RL-M4-013
+  title: Back up site files and configuration to object storage with tested restore
+  milestone: M4
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M4-005]
+  blocks: []
+  risk: high
+  acceptance:
+    - Backups target any S3-compatible endpoint with credentials stored encrypted and tenant scoped
+    - Backup contents are encrypted before leaving the host
+    - Restore is exercised in CI against a real backup rather than asserted
+    - A tenant cannot read or restore another tenant's backup
+  artifacts:
+    - test/integration/backup_restore_test.go
+    - test/security/backup_tenant_isolation.test.ts
+  decisions: [6]
+
+- id: RL-M4-014
+  title: Implement uptime checks with alerting
+  milestone: M4
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M4-009]
+  blocks: []
+  risk: medium
+  acceptance:
+    - Checks run on an interval from the control plane and record history
+    - Alerts fire through the configured notification destinations
+    - Flapping is damped so an alert storm is not the default behaviour
+  artifacts: []
+  decisions: []
+
+- id: RL-M4-015
+  title: Implement control plane self-update with rollback
+  milestone: M4
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M4-009]
+  blocks: []
+  risk: high
+  acceptance:
+    - Updates are signature verified before they are applied
+    - Migrations run with a tested rollback path and a failure reverts cleanly
+    - A failed update leaves the previous version running rather than a broken one
+    - Update and rollback are both audited
+  artifacts:
+    - test/integration/control_plane_update_test.go
+  decisions: []
+
+# ===========================================================================
+# M5 — RBAC completion (outline; refined at the start of M5)
+# ===========================================================================
+
+- id: RL-M5-001
+  title: Implement custom roles composed from raw permissions
+  milestone: M5
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M1-032, RL-M4-010]
+  blocks: [RL-M5-002, RL-M5-005]
+  risk: high
+  acceptance:
+    - A custom role can be built from any subset of the permission catalogue
+    - A custom role can never exceed the permissions of the actor creating it
+    - Deleting a role in use is handled explicitly rather than orphaning grants
+  artifacts:
+    - test/authz/custom_role_escalation.test.ts
+  decisions: []
+
+- id: RL-M5-002
+  title: Complete environment-scoped permissions across every action
+  milestone: M5
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M5-001]
+  blocks: [RL-M5-003, RL-M5-004]
+  risk: high
+  acceptance:
+    - Every environment-sensitive action distinguishes production from non-production
+    - Granting one without the other is possible and tested for every such action
+    - The matrix covers both variants for every endpoint
+  artifacts:
+    - test/authz/environment_scoping.test.ts
+  decisions: []
+
+- id: RL-M5-003
+  title: Implement break-glass elevation
+  milestone: M5
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M5-002]
+  blocks: [RL-M5-007]
+  risk: high
+  acceptance:
+    - Elevation requires a written reason and expires automatically
+    - Every owner is notified immediately when it is invoked
+    - The elevation is loudly visible in the interface for its whole duration
+    - Expiry is enforced at decision time and proven by a clock-advance test
+  artifacts:
+    - test/authz/break_glass.test.ts
+  decisions: []
+
+- id: RL-M5-004
+  title: Build the role editor with a live permission preview
+  milestone: M5
+  status: todo
+  owner: agent
+  estimate: XL
+  depends_on: [RL-M5-002]
+  blocks: [RL-M5-007]
+  risk: high
+  acceptance:
+    - Toggling a permission updates a live view of what the role can and cannot do
+    - A what-would-this-person-see preview renders the actual navigation for the role
+    - The preview is computed by the same decision function the runtime uses, not a reimplementation
+  artifacts:
+    - test/authz/role_editor_preview_parity.test.ts
+  decisions: []
+  notes: |
+    2026-08-01 — XL and therefore not startable as written. Split at the start
+    of M5 into the permission toggle surface, the effective-permission
+    computation, and the navigation preview.
+
+- id: RL-M5-005
+  title: Implement single sign-on over OpenID Connect
+  milestone: M5
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M5-001]
+  blocks: [RL-M5-006, RL-M5-007]
+  risk: high
+  acceptance:
+    - An organization can require single sign-on and disable password login
+    - Group or claim mapping to roles is configurable and audited
+    - Account linking cannot be used to take over an existing account
+  artifacts:
+    - test/security/oidc_account_takeover.test.ts
+  decisions: []
+
+- id: RL-M5-006
+  title: Decide the fate of SAML for v1
+  milestone: M5
+  status: todo
+  owner: human
+  estimate: S
+  depends_on: [RL-M5-005]
+  blocks: []
+  risk: medium
+  acceptance:
+    - The cost of SAML relative to remaining budget is estimated
+    - It is either scheduled or deferred in writing with the seam described
+  artifacts: []
+  decisions: []
+  notes: |
+    2026-08-01 — The brief lists single sign-on over OIDC and SAML as an
+    organization policy, but the M5 exit criteria do not mention it. SAML is
+    large. Flagging the ambiguity rather than silently choosing.
+
+- id: RL-M5-007
+  title: Complete the exhaustive authorization matrix
+  milestone: M5
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M5-003, RL-M5-004, RL-M5-005]
+  blocks: [RL-M6-001]
+  risk: high
+  acceptance:
+    - Every role crossed with every endpoint crossed with own, other-team and nonexistent passes
+    - Cross-tenant access is tested explicitly for every resource type rather than assumed
+    - A new endpoint without coverage fails the build
+  artifacts:
+    - test/authz/matrix.test.ts
+  decisions: []
+
+# ===========================================================================
+# M6 — SSH access (outline; refined at the start of M6)
+# ===========================================================================
+
+- id: RL-M6-001
+  title: Build the internal SSH certificate authority
+  milestone: M6
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M5-007]
+  blocks: [RL-M6-002]
+  risk: high
+  acceptance:
+    - The authority key is generated with no default and stored per the threat model
+    - Rotation is supported with an overlap window and documented recovery from compromise
+    - The private key never leaves its storage boundary and is never logged
+  artifacts:
+    - test/security/ssh_ca_key_handling_test.go
+  decisions: [8]
+
+- id: RL-M6-002
+  title: Issue short-lived user certificates with derived principals
+  milestone: M6
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M6-001]
+  blocks: [RL-M6-003, RL-M6-007]
+  risk: high
+  acceptance:
+    - Certificate lifetime defaults to eight hours and is configurable
+    - Principals are derived from current grants so the host and the interface cannot disagree
+    - A user with no grant receives no certificate rather than an empty one
+  artifacts:
+    - test/security/ssh_principal_derivation_test.go
+  decisions: [8]
+
+- id: RL-M6-003
+  title: Enforce principals host-side and make revocation immediate
+  milestone: M6
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M6-002]
+  blocks: [RL-M6-004]
+  risk: high
+  acceptance:
+    - The host authorises by principal file rather than by authorized key entries
+    - Revoking a grant blocks new sessions immediately
+    - Revoking a grant terminates active sessions within the certificate lifetime
+  artifacts:
+    - test/integration/ssh_revocation_test.go
+  decisions: [8]
+
+- id: RL-M6-004
+  title: Generate scoped sudoers fragments
+  milestone: M6
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M6-003]
+  blocks: [RL-M6-005]
+  risk: high
+  acceptance:
+    - Fragments allow only the specific commands a role needs with no wildcards
+    - Every fragment is validated before installation and a failure aborts without touching live policy
+    - A fuzz test over service and site names cannot produce a permissive fragment
+  artifacts:
+    - test/security/sudoers_fragment_fuzz_test.go
+  decisions: [4, 8]
+
+- id: RL-M6-005
+  title: Prove site isolation for shell users
+  milestone: M6
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M6-004]
+  blocks: [RL-M6-006]
+  risk: high
+  acceptance:
+    - A user granted one site lands as that site's user and cannot read another site's files
+    - Attempts to traverse to another site are denied and audited
+    - The proof is an automated test against a real host, not a manual check
+  artifacts:
+    - test/security/site_shell_isolation_test.go
+  decisions: []
+
+- id: RL-M6-006
+  title: Build the web terminal with session recording
+  milestone: M6
+  status: todo
+  owner: agent
+  estimate: XL
+  depends_on: [RL-M6-005]
+  blocks: []
+  risk: high
+  acceptance:
+    - Terminal access is its own permission and is off by default for every role except Infrastructure
+    - Sessions are recorded in a replayable format and retained per policy
+    - Recordings are viewable from the audit log and are themselves permission gated
+    - A role change during an open session takes effect on that session
+  artifacts:
+    - test/authz/terminal_permission.test.ts
+  decisions: []
+  notes: |
+    2026-08-01 — XL and therefore not startable as written. Split at the start
+    of M6 into the terminal transport, the recording pipeline, and the replay
+    viewer with its own authorization.
+
+- id: RL-M6-007
+  title: Manage user public keys and organization key policy
+  milestone: M6
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M6-002]
+  blocks: []
+  risk: high
+  acceptance:
+    - Users upload their own public keys and the panel never handles a private key
+    - Fingerprint, age and last use are shown per key
+    - A minimum algorithm strength policy is enforceable organization wide
+    - Forced rotation works and is audited
+  artifacts:
+    - test/security/ssh_key_policy.test.ts
+  decisions: [8]
+
+# ===========================================================================
+# Deferred by the brief §5.2 — recorded so the seam stays visible, not built.
+# Managed databases, email hosting, container workloads, other language
+# runtimes, multi-region, template marketplace, billing and a public API are
+# all out of scope for v1. No tasks exist for them by design. If one appears
+# here, something has gone wrong.
+# ===========================================================================
+
