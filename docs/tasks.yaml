@@ -579,6 +579,7 @@
   notes: |
     2026-08-01 — closed without CI verification: M0 predates the CI pipeline; RL-M1-002 establishes it and the tracking workflow writes the status file from then on.
 
+    2026-08-01 — Superseded by .github/workflows/ci.yml in RL-M1-002 — the tracker checks moved there so one workflow decides green. Acceptance still holds.
 - id: RL-M0-026
   title: Produce the M0 gate report
   milestone: M0
@@ -608,28 +609,34 @@
 - id: RL-M1-001
   title: Scaffold the monorepo with strict TypeScript and lint configuration
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M0-026]
   blocks: [RL-M1-002, RL-M1-003, RL-M1-022, RL-M1-027]
   risk: low
+  started_at: 2026-08-01
+  done_at: 2026-08-01
   acceptance:
     - TypeScript strict is on with noUncheckedIndexedAccess and exactOptionalPropertyTypes
     - The lint configuration fails on any use of the any type in application code
     - Workspace layout matches the plan
   artifacts: []
   decisions: [1]
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-01 — closed without CI verification: CI pipeline is RL-M1-002; it writes the status file from then on.
 
 - id: RL-M1-002
   title: Build the CI pipeline and wire the tracker into it
   milestone: M1
-  status: todo
+  status: review
   owner: agent
   estimate: M
   depends_on: [RL-M1-001]
   blocks: [RL-M2-001]
   risk: low
+  started_at: 2026-08-01
   acceptance:
     - Lint, typecheck, unit tests and tasks validate all run on every pull request
     - A red tracker fails the build
@@ -637,6 +644,7 @@
   artifacts:
     - .github/workflows/ci.yml
   decisions: []
+  acceptance_met: [2]
 
 - id: RL-M1-003
   title: Establish migration tooling with mandatory down migrations

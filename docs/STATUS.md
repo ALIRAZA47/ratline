@@ -8,7 +8,7 @@ Generated 2026-08-01.
 | Milestone | Progress | Done | Total | Open high-risk |
 | --- | --- | ---: | ---: | ---: |
 | **M0** Plan | `########################` 100% | 26 | 26 | 0 |
-| **M1** Control plane skeleton | `------------------------` 0% | 0 | 32 | 22 |
+| **M1** Control plane skeleton | `#-----------------------` 3% | 1 | 32 | 22 |
 | **M2** Agent and first host | `------------------------` 0% | 0 | 29 | 20 |
 | **M3** Static sites end to end | `------------------------` 0% | 0 | 27 | 18 |
 | **M4** Node and Bun apps | `------------------------` 0% | 0 | 15 | 10 |
@@ -36,7 +36,9 @@ _None._
 
 ## In review
 
-_None._
+| Task | Age | Owner | Risk | Acceptance | Title |
+| --- | ---: | --- | --- | ---: | --- |
+| `RL-M1-002` | 0d | agent | low | 1/3 | Build the CI pipeline and wire the tracker into it |
 
 ## Open high-risk tasks without security-test coverage
 
@@ -55,13 +57,25 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 
 ## Test health
 
-_Not yet measured._ `scripts/tasks render` reads `.ratline/metrics.json`, which CI writes.
-Until the control plane has a test suite (M1), this section stays empty by design rather than
-reporting invented numbers.
+| Suite | Passing | Rate |
+| --- | ---: | ---: |
+| Unit | 4 / 4 | 100% |
+| Integration | not measured | — |
+| Authorization matrix | not measured | — |
+| `src/authz/**` line coverage | —% | must be 100% |
+| `can()` branch coverage | —% | must be 100% |
+
+Measured 2026-08-01T14:19:52.914Z.
 
 ## Security findings
 
-_Not yet measured._ CI writes `.ratline/security-findings.json`. **Critical and high must be 0 at every gate.**
+| Severity | Open |
+| --- | ---: |
+| Critical | 0 |
+| High | 0 |
+| Medium | 0 |
+
+Gate check (critical + high must be zero): PASS
 
 ## Build
 
@@ -71,6 +85,7 @@ CI: _no status recorded yet._
 
 | Status | Count |
 | --- | ---: |
-| todo | 117 |
-| done | 26 |
+| todo | 115 |
+| review | 1 |
+| done | 27 |
 | **all** | **143** |

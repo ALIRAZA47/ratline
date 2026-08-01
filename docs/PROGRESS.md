@@ -14,6 +14,63 @@ and which task IDs.
 
 ---
 
+## 2026-08-01 — Session 2 — M1
+
+**Goal:** Scaffold the control plane with strict TypeScript and the lint rules
+that make the forbidden patterns unwritable, then wire CI so `tasks validate`
+gates the build before any application code lands.
+
+**Completed:** RL-M1-001.
+
+**In progress:** none.
+
+**In review:** RL-M1-002 — CI pipeline written and every step verified locally,
+but nothing has run it on GitHub and nothing has written `ci-status.json`, so
+two of three acceptance lines are unproven. Deliberately not closed.
+
+**Blocked:** none. RL-M1-003 (migrations) needs Postgres; Docker is installed
+here but its daemon is not running, which will need resolving next session.
+
+**Decisions made:** none new. ADRs 0001–0010 remain `proposed` — "continue" was
+read as approval to start M1, not as ADR acceptance, which §2.6 reserves.
+
+**Surprises / what I learned:**
+
+- `node --test <dir>/` does **not** recurse. It treats the argument as a module
+  path, the run fails, and the coverage report comes out empty — which renders
+  as **100% and a green threshold check**. A coverage gate that always passes is
+  worse than none. Coverage is now collected from an explicit file list, and the
+  numbers were confirmed against a known-partial case (66.67% branch, correct).
+- `node:test` coverage thresholds are enforced by the runtime, so the 100%
+  `can()` gate in RL-M1-013 needs no test framework at all. Verified failing and
+  passing in both directions.
+- Turning strict mode on found **34 violations in `scripts/tasks.ts`**, written
+  in M0 before a typechecker existed. Fixed rather than excluded: argv options
+  became accessors instead of an index-signature record, and the parser's array
+  reads carry explicit defaults. Every CLI command was re-verified afterwards.
+- A "STATUS.md is current" CI check comparing whole files can never pass:
+  STATUS.md contains test health and timestamps that change every run, and it is
+  rendered from gitignored files. `render --check` now compares only the
+  tracker-derived sections.
+- Wrote a real bug and caught it: `security-findings.json` was only written when
+  failures existed, so a finding once recorded never cleared — suite green,
+  STATUS.md still reporting the gate blocked.
+- **Process mistake worth not repeating:** I ran `git checkout -- docs/tasks.yaml`
+  to revert a CLI probe and destroyed uncommitted tracker state, silently
+  reopening a task I had closed. Tracker changes belong to the end-of-session
+  `chore(tracking)` commit (§2.9), so they sit uncommitted for a long time. Undo
+  probes with the CLI, not with git.
+
+**Deviations from brief:** `.github/workflows/tracking.yml` from RL-M0-025 was
+folded into `ci.yml` so exactly one workflow decides whether a commit is green.
+RL-M0-025's acceptance still holds; a note on that task records the move.
+
+**Next session should start with:** getting Postgres available for RL-M1-003 —
+either starting the Docker daemon or another route. Then RL-M1-003 → RL-M1-004 →
+RL-M1-006 → RL-M1-007, which is the C3 spine and the most important sequence in
+M1. RL-M1-022 (C4, no default secrets) is also ready and independent if the
+database route stalls.
+
 ## 2026-08-01 — Session 1 — M0
 
 **Goal:** Produce M0 in full — the tracking system from brief §2 with a backlog
