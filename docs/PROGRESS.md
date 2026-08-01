@@ -14,6 +14,67 @@ and which task IDs.
 
 ---
 
+## 2026-08-01 — Session 6 — M1
+
+**Goal:** The C3 spine — identity and hierarchy schema — with the six remaining
+default roles delegated in parallel.
+
+**Completed:** RL-M1-004 (identity), RL-M1-005 (hierarchy), RL-M1-010 (roles,
+delegated).
+
+**In progress:** none.
+
+**In review:** RL-M1-002, unchanged — still needs a first real CI run.
+
+**Blocked:** none in the tracker. RL-M1-028 should not start until the DESIGN.md
+10.1 ruling lands.
+
+**Decisions made:** none new. ADRs 0001–0011 remain `proposed`.
+
+**Surprises / what I learned:**
+
+- **Test isolation had to move from scratch schemas to scratch databases.** An
+  extension installs once per *database*, so `create extension if not exists
+  citext` silently no-ops for a second schema and the type is then invisible to
+  it. Anything database-scoped a migration can create has the same problem. Cost
+  about an hour; now written down in `test/support/db.ts`.
+- Deleting a project left its scope node orphaned. The foreign keys point
+  entity → node, so the cascade runs the wrong way, and an orphaned node keeps
+  conveying every grant made against it — a privilege leak with no visible
+  cause. Fixed with reverse-direction triggers.
+- The theme running through both schema migrations: **the dangerous direction is
+  quiet.** A wrong scope path fails OPEN because a shorter path matches more
+  descendants. So the path is computed by a trigger that overwrites whatever the
+  caller supplies, and `is_production` is generated rather than stored. Both have
+  tests that write the wrong value deliberately and assert it does not survive.
+- The `org_id` audit test caught `organizations` itself, which *is* the tenant.
+  A legitimate exception I had not thought of — worth having the test discover
+  tables rather than list them.
+- My own destructive-migration rule flagged `on delete cascade` on a foreign
+  key. That is a declared ownership relationship, not the `drop ... cascade` the
+  rule was for. Tightened, and the tightening is pinned by its own test: a rule
+  that cries wolf on correct code gets an exclusion added rather than a reading.
+- **I over-constrained an agent.** RL-M1-010 legitimately invalidates a
+  placeholder assertion living in RL-M1-009's test file, and I had scoped the
+  agent out of it. It made the minimal edit and flagged it, which was the right
+  call. A task that extends another's data usually has to touch that task's
+  tests; scope agents by intent, not only by file list.
+- The roles agent's self-report held up under checking, unlike the previous
+  session's. Its four catalogue gaps are real and are now routed to RL-M5-002,
+  RL-M6-005 and RL-M1-031 rather than sitting in a transcript. The sharpest:
+  §6.3 says Infrastructure "cannot read *production* secret values", and without
+  an environment split on `secret.read_value` that sentence cannot be expressed
+  as a role at all.
+
+**Deviations from brief:** none beyond those already recorded.
+
+**Next session should start with:** RL-M1-006 — row-level security, the heart of
+C3 and the layer that has to hold when the other two fail. The acceptance that
+matters is the third: delete a repository function's own predicate, run it with
+a foreign tenant, and still get zero rows. RL-M1-011 (grants, extending the
+table created in RL-M1-004) and RL-M1-017 (sessions) are both ready and
+independent of it.
+
 ## 2026-08-01 — Session 5 — M1
 
 **Goal:** Unblock the database, then run three unrelated tasks in parallel — two

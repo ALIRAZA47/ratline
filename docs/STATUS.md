@@ -8,7 +8,7 @@ Generated 2026-08-01.
 | Milestone | Progress | Done | Total | Open high-risk |
 | --- | --- | ---: | ---: | ---: |
 | **M0** Plan | `########################` 100% | 26 | 26 | 0 |
-| **M1** Control plane skeleton | `#####-------------------` 19% | 6 | 32 | 19 |
+| **M1** Control plane skeleton | `#######-----------------` 28% | 9 | 32 | 17 |
 | **M2** Agent and first host | `------------------------` 0% | 0 | 29 | 20 |
 | **M3** Static sites end to end | `------------------------` 0% | 0 | 27 | 18 |
 | **M4** Node and Bun apps | `------------------------` 0% | 0 | 15 | 10 |
@@ -44,7 +44,6 @@ _None._
 
 These cannot be marked `done` until they name a security-suite artifact (brief §2.2).
 
-- `RL-M1-004` (M1, todo) — Create the identity schema for organizations, users and memberships
 - `RL-M2-021` (M2, todo) — Manage the host firewall
 - `RL-M2-024` (M2, todo) — Build the integration test harness against real hosts
 - `RL-M2-026` (M2, todo) — Chaos test the provisioning path against connection loss
@@ -59,13 +58,13 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 
 | Suite | Passing | Rate |
 | --- | ---: | ---: |
-| Unit | 87 / 87 | 100% |
+| Unit | 114 / 114 | 100% |
 | Integration | not measured | — |
-| Authorization matrix | 25 / 25 | 100% |
+| Authorization matrix | 50 / 50 | 100% |
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | —% | must be 100% |
 
-Measured 2026-08-01T19:56:28.651Z.
+Measured 2026-08-01T21:00:35.512Z.
 
 ## Security findings
 
@@ -85,7 +84,7 @@ CI: _no status recorded yet._
 
 | Status | Count |
 | --- | ---: |
-| todo | 110 |
+| todo | 107 |
 | review | 1 |
-| done | 32 |
+| done | 35 |
 | **all** | **143** |

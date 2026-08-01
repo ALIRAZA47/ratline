@@ -674,35 +674,54 @@
 - id: RL-M1-004
   title: Create the identity schema for organizations, users and memberships
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M1-003]
   blocks: [RL-M1-005, RL-M1-017]
   risk: high
+  started_at: 2026-08-01
+  done_at: 2026-08-01
   acceptance:
     - Organizations, users, memberships and service identities exist with org scoping
     - Every tenant-scoped table carries an org identifier that is not nullable
     - The last-owner invariant is enforced by a database constraint, not only in code
-  artifacts: []
+  artifacts:
+    - src/db/migrations/20260801000002_identity.sql
+    - test/security/identity_invariants.test.ts
+    - test/support/db.ts
   decisions: [3]
+  notes: |
+    2026-08-01 — The grants table is created here rather than waiting for RL-M1-011. The last-owner invariant is meaningless until ownership is representable, and the alternative — an is_owner flag on memberships — would create a second source of truth for who is an Owner. RL-M1-011 extends this table with expiry, deny effects and further subject kinds.
 
+    2026-08-01 — Test isolation is a scratch database per test, not a scratch schema. An extension is installed once per database, so create extension if not exists no-ops for a second schema and the type is then invisible to it. Cost is about 100ms per test and it is actually isolated.
+    2026-08-01 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). Verified against a real Postgres 17 locally; the last-owner trigger was mutation-tested three ways.
+  acceptance_met: [1, 2, 3]
 - id: RL-M1-005
   title: Create the hierarchy schema for teams, projects and environments
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M1-004]
   blocks: [RL-M1-006]
   risk: medium
+  started_at: 2026-08-01
+  done_at: 2026-08-01
   acceptance:
     - The full Organization to Team to Project to Environment chain is modelled
     - Environment kind distinguishes production, staging and preview
     - Scope paths are materialised so inheritance can be resolved in one query
-  artifacts: []
+  artifacts:
+    - src/db/migrations/20260801000003_hierarchy.sql
+    - test/security/hierarchy_scoping.test.ts
   decisions: [3]
+  notes: |
+    2026-08-01 — Scope paths are materialised in one scope_nodes table using ltree, not a path column per entity. grants.scope_id must point at any level, so per-entity paths would need a union across four tables and a CASE on scope_type — the parent walk again with extra steps.
 
+    2026-08-01 — The path is maintained by a trigger, never by the caller. A wrong path breaks inheritance OPEN, because a shorter path matches more descendants. Same reason is_production is a generated column rather than a stored flag.
+    2026-08-01 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 13 hierarchy tests pass against real Postgres; scope-node cleanup mutation-tested.
+  acceptance_met: [1, 2, 3]
 - id: RL-M1-006
   title: Implement row-level security policies and per-transaction scoping
   milestone: M1
@@ -792,20 +811,26 @@
 - id: RL-M1-010
   title: Implement the seven default roles as compositions of raw permissions
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M1-009]
   blocks: [RL-M1-011]
   risk: high
+  started_at: 2026-08-01
+  done_at: 2026-08-01
   acceptance:
     - All seven roles from the brief exist and are editable
     - Infrastructure and Release Manager provably cannot read secret values
     - Billing has no infrastructure visibility of any kind
     - A snapshot test pins each role's effective permission set so drift is visible in review
   artifacts:
+    - src/authz/roles.ts
     - test/authz/default_roles.test.ts
   decisions: []
+  acceptance_met: [1, 2, 3, 4]
+  notes: |
+    2026-08-01 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 169 tests pass locally; the secret-value, Billing-isolation and Admin-delta properties were re-verified here independently of the agent's report.
 
 - id: RL-M1-011
   title: Model grants, denies and time-bound scoping
@@ -1186,6 +1211,8 @@
     - Denied decisions are as visible as allowed ones
   artifacts: []
   decisions: []
+  notes: |
+    2026-08-01 — RL-M1-010 found there is no read-own-audit-trail action, so every role below Admin is opaque to itself and cannot see why it was denied. Worth deciding here rather than leaving audit visibility all-or-nothing.
 
 - id: RL-M1-032
   title: Implement scoped API tokens
@@ -2489,7 +2516,10 @@
   artifacts:
     - test/authz/environment_scoping.test.ts
   decisions: []
+  notes: |
+    2026-08-01 — RL-M1-010 identified exactly which actions need the environment split, so this task starts with the analysis done: site.restart, site.run_command, secret.create/update/delete, scheduled_job.create/update/delete/run_now, and backup.restore. The catalogue argues for splitting deployment because a project-scoped grant inherits into production; that argument applies unchanged to all of these.
 
+    2026-08-01 — Sharpest case is secret.read_value. Brief §6.3 says Infrastructure cannot read PRODUCTION secret values — a sentence that cannot be expressed as a role at all without the split, only as an environment-scoped grant. RL-M1-010 resolved it by withholding the action entirely, which is stricter than the brief and should be revisited here.
 - id: RL-M5-003
   title: Implement break-glass elevation
   milestone: M5
@@ -2670,6 +2700,8 @@
   artifacts:
     - test/security/site_shell_isolation_test.go
   decisions: []
+  notes: |
+    2026-08-01 — RL-M1-010 flagged that terminal.open is declared at resource scope on a HOST, not a site. That collides with this task's own acceptance — a developer with access to one site provably cannot reach another. Infrastructure holds the action today, so the question is live before M6 starts.
 
 - id: RL-M6-006
   title: Build the web terminal with session recording
