@@ -1,0 +1,27 @@
+# Build output and dependencies
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+
+# Go
+/bin/
+*.test
+
+# Machine-written signals consumed by `scripts/tasks render`.
+# These are produced by CI, never committed — STATUS.md is the committed view.
+.ratline/
+
+# Local environment
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Secrets — belt and braces. Nothing matching these should ever exist in-tree.
+*.pem
+*.key
+!**/testdata/**/*.pem
+!**/testdata/**/*.key
+id_rsa*
+id_ed25519*

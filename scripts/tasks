@@ -1,0 +1,48 @@
+#!/bin/sh
+# Wrapper for scripts/tasks.ts.
+#
+# tasks.ts is TypeScript with zero dependencies. Node >= 22.6 can run it
+# directly via type stripping, so the tracker needs no install step and no
+# build. This script finds a suitable Node and gets out of the way.
+#
+#   ./scripts/tasks validate
+#   ./scripts/tasks list --milestone M1
+set -eu
+
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+entry="$here/tasks.ts"
+
+# 22.6-22.17 need the flag; 22.18+ and 24+ strip types unflagged but still
+# accept it. Passing it unconditionally keeps one code path.
+flag="--experimental-strip-types --no-warnings=ExperimentalWarning"
+
+node_ok() {
+  [ -x "$1" ] || return 1
+  v=$("$1" --version 2>/dev/null | sed 's/^v//') || return 1
+  maj=${v%%.*}
+  rest=${v#*.}
+  min=${rest%%.*}
+  [ "$maj" -gt 22 ] 2>/dev/null && return 0
+  [ "$maj" -eq 22 ] 2>/dev/null && [ "$min" -ge 6 ] 2>/dev/null && return 0
+  return 1
+}
+
+if [ -n "${RATLINE_NODE:-}" ] && node_ok "$RATLINE_NODE"; then
+  exec "$RATLINE_NODE" $flag "$entry" "$@"
+fi
+
+if node_ok "$(command -v node 2>/dev/null || echo /nonexistent)"; then
+  exec node $flag "$entry" "$@"
+fi
+
+# Fall back to the newest Node that nvm has on disk, without sourcing nvm.
+if [ -d "$HOME/.nvm/versions/node" ]; then
+  for candidate in $(ls -1 "$HOME/.nvm/versions/node" 2>/dev/null | sort -t. -k1.2,1n -k2,2n -k3,3n -r); do
+    bin="$HOME/.nvm/versions/node/$candidate/bin/node"
+    if node_ok "$bin"; then exec "$bin" $flag "$entry" "$@"; fi
+  done
+fi
+
+echo "error: need Node >= 22.6 to run the tracker (found: $(node --version 2>/dev/null || echo none))." >&2
+echo "       Install Node 22 LTS, or point RATLINE_NODE at a suitable binary." >&2
+exit 1
