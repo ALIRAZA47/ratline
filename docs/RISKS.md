@@ -121,6 +121,27 @@ create. Those are repeated in the gate report under "What I need from you".
   concurrency caps, and build load shown separately from application load on the
   host detail screen (ADR 0009).
 
+## R-11 — Exposure behind a reverse proxy is undetectable
+
+- **Owner:** agent
+- **Likelihood:** medium — fronting the dashboard with nginx or Caddy is a
+  common instinct
+- **Impact:** high. The dashboard would be internet-reachable while Ratline
+  reports `contained`.
+- **Detail:** the C5 check classifies the bind address and this host's
+  interfaces locally. A process bound to `127.0.0.1` behind a public reverse
+  proxy — including one on the same host — is fully exposed and cannot be
+  distinguished from a genuinely contained one without an outbound probe.
+- **Why not solved:** ADR 0011. An outbound probe would phone home from every
+  install, create a fleet-wide correlation point, and fail on exactly the
+  isolated networks C5 is written to protect.
+- **Mitigation:** every exposure report carries the caveat in its text, so
+  `contained` is never presented as `verified private`, and `docs/NETWORK.md`
+  addresses the proxy case directly. Revisit if a cheap local signal turns up —
+  reading the host's listening sockets for a proxy on 80/443 is a candidate, but
+  it guesses at intent and would produce false positives on any host that also
+  serves sites, which is most of them.
+
 ## R-10 — No remote repository yet
 
 - **Owner:** human

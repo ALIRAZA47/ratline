@@ -205,6 +205,7 @@ Carried into `RISKS.md` with owners. Listed here rather than hidden.
 | R-07 | A compromised agent reporting false inventory would not currently be detected | No cross-checking of agent claims in v1 |
 | R-08 | All three crown-jewel keys live on one machine | External key manager is a seam, not v1 scope |
 | R-09 | Build resource contention is bounded by limits but not eliminated | I/O and page cache are not partitioned by `CPUQuota` |
+| R-11 | A reverse proxy, NAT port-forward or load balancer in front of the dashboard makes it public, and the C5 exposure check reports `contained` | Detection is local by decision (ADR 0011); an outbound probe would phone home from every install and fail on the isolated networks C5 protects. Mitigated by stating the blind spot in every report and in `docs/NETWORK.md`, not by detection |
 
 ---
 
