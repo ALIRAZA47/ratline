@@ -20,6 +20,12 @@
  *   - an operator at 2am needs to know whether they lack a grant or are being
  *     actively denied, because the remedies are different.
  *
+ * What this module owns that the database cannot: the API token ceiling
+ * (RL-M1-032). "A token carries a subset of the issuing user's permissions and
+ * never more" (§6.3) is the intersection of two subjects' answers, and
+ * `grant_decision` answers about one subject at a time — so it is composed here,
+ * out of two calls to the same resolution path, and nowhere else.
+ *
  * What this module deliberately does NOT do:
  *   - cache. Brief §6.3 requires role changes to take effect immediately,
  *     including on active sessions (RL-M1-018). A cache here is the obvious
@@ -56,6 +62,13 @@ export const DECISION_REASONS = [
   "actor-disabled",
   "actor-not-in-tenant",
   "no-role-carries-action",
+  // The three below can only be reached by an api_token actor. They say that
+  // the token's own grants were sufficient and its ISSUER's were not, which is
+  // a different remedy from every other denial here: the token is fine, the
+  // person behind it is not.
+  "exceeds-issuer",
+  "issuer-disabled",
+  "issuer-not-in-tenant",
 ] as const;
 
 export type DecisionReason = (typeof DECISION_REASONS)[number];
@@ -96,6 +109,50 @@ function subjectOf(actor: Actor): { type: SubjectType; id: string } {
     case "api_token":
       return { type: "api_token", id: actor.id };
   }
+}
+
+/**
+ * The API token ceiling: does the ISSUING USER still hold this, right now?
+ *
+ * Brief §6.3: "API tokens carry a subset of the issuing user's permissions and
+ * never more." Threat model R-12 is the gap this closes, and the word that
+ * matters in it is *currently*. Intersecting only when the token is issued
+ * leaves a token minted by an Admin carrying an Admin's reach after that person
+ * is demoted, with nothing in the system able to notice: the token's own grants
+ * are untouched and perfectly valid. So the intersection is evaluated here, on
+ * every decision, and a role change takes effect on a token exactly as fast as
+ * it takes effect on a session (§6.3).
+ *
+ * The intersection is one line of logic — *both* subjects must be allowed — and
+ * it deliberately reuses the SAME two repository calls the primary decision
+ * above is built from, asked about the issuer instead of the token. There is no
+ * second resolution path, no second expiry predicate and no second notion of
+ * precedence; a deny anywhere over the issuer denies the token, because it is
+ * the same `grant_decision` call. §6.3 forbids permission logic outside this
+ * module, and a bespoke "what does the issuer hold" query would have been
+ * exactly that, one refactor away from disagreeing with the real one.
+ *
+ * Returns null when the issuer clears the ceiling, or the reason they do not.
+ * It can only ever subtract: the caller has already established that the token's
+ * own grants allow, so nothing here can turn a denial into permission.
+ */
+async function ceilingBreach(
+  ctx: AuthzContext,
+  issuedBy: string,
+  roleKeys: readonly string[],
+  scope: ScopeRef,
+): Promise<DecisionReason | null> {
+  // "May the issuer act at all", asked of the issuer exactly as step 3 asks it
+  // of the actor. A token must not outlive the authority behind it: an issuer
+  // who has been disabled, or removed from the tenant, is the case where the
+  // token is the last door left open — and disabling an account is what an
+  // operator does to a compromised one at 2am (threat model R-13).
+  const issuer = await findActorStatus(ctx, "user", issuedBy);
+  if (!issuer.exists) return "issuer-not-in-tenant";
+  if (issuer.disabled) return "issuer-disabled";
+
+  const decision = await resolveGrantDecision(ctx, "user", issuedBy, roleKeys, scope);
+  return isAllowed(decision) ? null : "exceeds-issuer";
 }
 
 /**
@@ -159,7 +216,19 @@ export async function can(
 
   // 5. Precedence, inheritance and expiry, decided in the database (ADR 0012).
   const decision = await resolveGrantDecision(ctx, subject.type, subject.id, roleKeys, scope);
-  if (isAllowed(decision)) return decide("granted", action, scope);
+  if (isAllowed(decision)) {
+    // 6. An API token holds the INTERSECTION of its own grants and its issuing
+    //    user's current ones (§6.3, threat model R-12). Asked only once the
+    //    token's own grants have already allowed, so the shape on the page is
+    //    the shape of the rule: an intersection can only narrow, never widen.
+    //    Every other actor kind reaches `granted` without a second question,
+    //    because there is nobody behind them to be a subset of.
+    if (ctx.actor.kind === "api_token") {
+      const breach = await ceilingBreach(ctx, ctx.actor.issuedBy, roleKeys, scope);
+      if (breach !== null) return decide(breach, action, scope);
+    }
+    return decide("granted", action, scope);
+  }
 
   // `grant_decision` returns "deny" both for an explicit deny and for no grant
   // at all. Distinguishing them costs one more query and matters to whoever

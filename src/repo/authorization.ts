@@ -129,9 +129,26 @@ export async function findActorStatus(
       return { exists: row !== undefined, disabled: row?.disabled_at != null };
     }
 
-    // API tokens have no table yet (RL-M1-032). Reporting "does not exist"
-    // makes can() deny, which is the correct answer until they do.
-    return { exists: false, disabled: false };
+    // An API token (RL-M1-032). A revoked or expired token is a disabled actor,
+    // which is exactly what `disabled` means here — "may this actor act at all",
+    // asked once per request rather than once per node. That is why it is
+    // answered here rather than as another branch of the decision: a revoked
+    // token and a disabled user are the same question with the same answer, and
+    // both are the shape a compromised credential is put into.
+    //
+    // The two questions are asked as two EXISTS against different relations on
+    // purpose. Liveness lives in `live_api_tokens` and nowhere else (migration
+    // 7), so writing `revoked_at is null and expires_at > ...` here would be a
+    // second copy of the predicate, free to drift from the first — and the way
+    // it would drift is open, because a forgotten clause honours a dead token.
+    const rows = await query<{ present: boolean; live: boolean }>(
+      `select
+         exists (select 1 from api_tokens where id = $1) as present,
+         exists (select 1 from live_api_tokens where id = $1) as live`,
+      [subjectId],
+    );
+    const row = rows[0];
+    return { exists: row?.present === true, disabled: row?.live !== true };
   });
 }
 
