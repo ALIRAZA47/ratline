@@ -94,12 +94,69 @@ export async function withScratchDatabase(
 
 /** A scratch database with every migration applied. */
 export async function withMigratedDatabase(
-  fn: (client: Client & SqlClient) => Promise<void>,
+  fn: (client: Client & SqlClient, database: string) => Promise<void>,
 ): Promise<void> {
-  await withScratchDatabase(async (client) => {
+  await withScratchDatabase(async (client, name) => {
     await migrateUp(client, loadMigrations());
-    await fn(client);
+    await fn(client, name);
   });
+}
+
+let loginEnabled: Promise<void> | null = null;
+
+/**
+ * The migration creates `ratline_app` as NOLOGIN on purpose: a login role
+ * created automatically with no password would be precisely the default
+ * credential C4 forbids, so enabling login is a deployment act.
+ *
+ * Tests are a deployment of a sort, and this is their equivalent of that step —
+ * cluster-scoped, idempotent, and done once per process rather than per test.
+ */
+async function ensureApplicationRoleCanLogIn(): Promise<void> {
+  loginEnabled ??= (async () => {
+    const admin = new Client({ connectionString: urlFor("postgres") });
+    await admin.connect();
+    try {
+      await admin.query("alter role ratline_app login");
+    } finally {
+      await admin.end();
+    }
+  })();
+  await loginEnabled;
+}
+
+/**
+ * Open a second connection to the same scratch database as `ratline_app` — the
+ * unprivileged, NOBYPASSRLS role the application connects as in production.
+ *
+ * This exists because a superuser bypasses row-level security unconditionally,
+ * whatever the policies say. The development role created by `initdb` IS a
+ * superuser, so an RLS test that reused the migration connection would pass
+ * without exercising a single policy: a test that cannot fail. Every assertion
+ * about tenant isolation has to come through here.
+ */
+export async function asApplicationRole<T>(
+  database: string,
+  fn: (client: Client & SqlClient) => Promise<T>,
+): Promise<T> {
+  await ensureApplicationRoleCanLogIn();
+  const url = new URL(urlFor(database));
+  url.username = "ratline_app";
+  url.password = "";
+  const client = new Client({ connectionString: url.toString() });
+  await client.connect();
+  try {
+    return await fn(client);
+  } finally {
+    await client.end();
+  }
+}
+
+/** Set the tenant for the current transaction, the way the repository layer will. */
+export async function setTenant(client: Client, orgId: string | null): Promise<void> {
+  // set_config's third argument scopes it to the transaction, so a pooled
+  // connection cannot carry a tenant into the next request.
+  await client.query("select set_config('ratline.org_id', $1, true)", [orgId ?? ""]);
 }
 
 /** An organization with one owner — the minimum valid tenant. */
