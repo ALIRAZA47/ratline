@@ -351,3 +351,8 @@ Carried into the M0 gate report rather than resolved here:
    as `RL-M5-006`.
 5. **Preview environments.** Allowed by §6.5 "if it doesn't blow the milestone".
    Tracked as an explicit decision point, `RL-M3-027`.
+6. **Managed databases** were requested after M0 and are planned as M7
+   (ADR 0013), which amends brief §5.2. Whether they are v1 scope or follow v1
+   is open. They are the first workload Ratline would manage that cannot be
+   reconstructed from git, which changes the failure story for the whole
+   product — recorded as R-14.

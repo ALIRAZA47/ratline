@@ -69,3 +69,15 @@
     - Revoking a grant immediately blocks new sessions
     - A developer with access to one site provably cannot reach another
   exit_met: []
+
+- id: M7
+  name: Managed databases
+  goal: Install PostgreSQL, MySQL and MongoDB on managed hosts; create databases and users; wire credentials into sites. Requested as a scope change to brief §5.2, which lists managed databases as out of scope for v1. See ADR 0013 — the ordering constraint is that backup and tested restore land BEFORE create and delete are exposed, because a database is the one workload Ratline cannot reconstruct.
+  exit_criteria:
+    - A database is backed up and restored byte-for-byte into a scratch instance, in CI, before create and delete are exposed
+    - PostgreSQL and MySQL install, create a database and a least-privilege user, and serve a real site
+    - No engine listens beyond loopback without an explicit acknowledgement
+    - A fuzz test over every label reaching a DDL statement cannot escape the identifier
+    - Restore is its own permission and is audited before it begins, not after it succeeds
+    - MongoDB is deliberately deferred within the milestone and its licence is surfaced to the operator
+  exit_met: []

@@ -946,21 +946,31 @@
 - id: RL-M1-014
   title: Build the hash-chained append-only audit log
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: L
   depends_on: [RL-M1-012]
   blocks: [RL-M1-015, RL-M1-016, RL-M1-031]
   risk: high
+  started_at: 2026-08-01
+  done_at: 2026-08-01
   acceptance:
     - Each entry records actor, action, resource, decision, address, timestamp and request identifier
     - Each entry chains to its predecessor by hash
     - Update and delete are refused at the database level, not only by convention
     - A tampering test mutates a row and the verifier detects it
   artifacts:
+    - src/db/migrations/20260801000006_audit_log.sql
+    - src/repo/audit.ts
     - test/security/audit_chain_tamper.test.ts
   decisions: []
+  notes: |
+    2026-08-01 — The database computes the hash, not the application. A chain computed by the thing being audited proves nothing — an attacker owning the application writes whatever entries it likes and recomputes the chain over them, and it verifies perfectly. In a trigger, forging history needs the database role too, and the application role holds no UPDATE or DELETE.
 
+    2026-08-01 — The chain is per organization. Row-level security means a tenant sees only its own rows, so a single global chain would be unverifiable by anyone but a superuser — every tenant would hold a chain full of holes with no way to tell a redaction from a policy.
+    2026-08-01 — Known limit, recorded rather than hidden: truncating the TAIL leaves an internally consistent chain. A hash chain cannot detect the removal of its own head. RL-M1-015 has to record the expected head somewhere the tenant cannot silently rewrite, or scheduled verification will report clean on a truncated log. There is a test asserting this limit exists.
+    2026-08-01 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 15 tests pass against real Postgres; the chain was mutation-tested five ways including a verifier that trusts the stored hash.
+  acceptance_met: [1, 2, 3, 4]
 - id: RL-M1-015
   title: Schedule audit chain verification and surface its result
   milestone: M1
@@ -976,6 +986,8 @@
     - The last verification time is visible in the interface
   artifacts: []
   decisions: []
+  notes: |
+    2026-08-01 — RL-M1-014 leaves one gap this task must close: truncating the tail of a chain leaves it internally consistent, so verification alone reports clean. Scheduled verification has to record the expected head — sequence and hash — after each run and compare on the next, so a shortened log is detected as a head that moved backwards.
 
 - id: RL-M1-016
   title: Ensure every privileged action carries an attributable actor
@@ -1275,19 +1287,27 @@
 - id: RL-M1-032
   title: Implement scoped API tokens
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: L
   depends_on: [RL-M1-011, RL-M1-012]
-  blocks: [RL-M5-001]
+  blocks: [RL-M1-033, RL-M5-001]
   risk: high
+  started_at: 2026-08-01
+  done_at: 2026-08-01
   acceptance:
     - A token can never carry a permission its issuing user lacks, checked at use time as well as issue time
     - Tokens expire, are revocable individually and in bulk, and track last use
     - A test downgrades the issuing user and confirms the token loses the permission immediately
   artifacts:
+    - src/db/migrations/20260801000007_api_tokens.sql
+    - src/repo/api_tokens.ts
+    - src/authz/can.ts
     - test/authz/token_subset.test.ts
-  decisions: []
+  decisions: [12]
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-01 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 285 tests pass; both coverage gates hold at 100%; the intersection was mutation-tested three ways.
 
 # ===========================================================================
 # M2 — Agent and first host
@@ -2803,10 +2823,375 @@
   decisions: [8]
 
 # ===========================================================================
+# M7 — Managed databases
+#
+# Requested as a scope change to brief §5.2, which lists managed databases as
+# out of scope for v1. See ADR 0013.
+#
+# The ordering here is the design. Backup and tested restore (001-006) land
+# BEFORE create and delete are exposed (010 onward), because a database is the
+# one workload Ratline cannot reconstruct: a site comes back from git, a
+# database does not come back at all. A half-managed database — installed but
+# not recoverable — is more dangerous than an unmanaged one, because the
+# operator believes it is covered.
+# ===========================================================================
+
+- id: RL-M7-001
+  title: Re-examine the failure story for workloads that cannot be rebuilt
+  milestone: M7
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: []
+  blocks: [RL-M7-002]
+  risk: high
+  acceptance:
+    - Every acceptance criterion in M2 to M4 that assumed a reconstructible workload is listed with its verdict
+    - ADR 0009 build-on-host and ADR 0005 build containment are each re-argued against a stateful neighbour or amended
+    - Anything that turns out to be unsafe for data hosts is recorded as a task rather than a caveat
+  artifacts:
+    - docs/decisions/0013-managed-database-engines.md
+  decisions: [13]
+  notes: |
+    2026-08-02 — First task in the milestone on purpose. Chaos tests, rollback
+    and provision-twice-idempotently were all written knowing a site can be
+    rebuilt. None of that reasoning transfers unexamined to a database, and
+    discovering which parts fail after the engines are installed is the wrong
+    order.
+
+- id: RL-M7-002
+  title: Introduce host roles so data hosts refuse application workloads
+  milestone: M7
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M7-001]
+  blocks: [RL-M7-003]
+  risk: high
+  acceptance:
+    - A host declares whether it carries applications or data
+    - Placing a site on a data host requires the same deliberate acknowledgement as a public bind
+    - The interface states plainly why the two are separated
+  artifacts:
+    - test/security/host_role_separation.test.ts
+  decisions: [13]
+  notes: |
+    2026-08-02 — ADR 0005 leaves user-authored build code running as the site
+    user. On an application host the blast radius is other sites; on a data host
+    it is the data itself. Separating them is the cheapest mitigation available
+    and it has to exist before an engine is installed anywhere.
+
+- id: RL-M7-003
+  title: Add the enumerated agent operations for database engines
+  milestone: M7
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M7-002]
+  blocks: [RL-M7-004]
+  risk: high
+  acceptance:
+    - Engine install, start, stop and configure are catalogue operations with typed arguments
+    - The engine version is validated against a known set rather than passed through as a package name
+    - No operation accepts a free-form command or a raw SQL string
+    - A test asserts an operation outside the catalogue is refused
+  artifacts:
+    - test/security/database_operation_catalogue_test.go
+  decisions: [13, 2, 4]
+
+- id: RL-M7-004
+  title: Install and pin a PostgreSQL engine on a data host
+  milestone: M7
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M7-003]
+  blocks: [RL-M7-005]
+  risk: high
+  acceptance:
+    - A pinned major version installs and starts under its own system user
+    - The engine binds to loopback only, and a test asserts nothing else can reach it
+    - Installation is idempotent and a second run changes nothing
+  artifacts:
+    - test/integration/postgres_install_test.go
+    - test/security/database_bind_default.test.ts
+  decisions: [13]
+
+- id: RL-M7-005
+  title: Take a consistent logical backup and encrypt it before it leaves the host
+  milestone: M7
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M7-004]
+  blocks: [RL-M7-006]
+  risk: high
+  acceptance:
+    - The backup is a logical dump taken through the engine, never a file copy of a running data directory
+    - The archive is encrypted on the host before upload
+    - A tenant cannot read or list another tenant's database backups
+  artifacts:
+    - test/security/database_backup_isolation.test.ts
+  decisions: [13, 6]
+  notes: |
+    2026-08-02 — A file-level copy of a running data directory is not a backup,
+    it is a corrupt snapshot that looks like one. Stating it here because it is
+    the shortcut a later session will be tempted by when the dump is slow.
+
+- id: RL-M7-006
+  title: Restore a backup into a scratch instance and verify it byte-for-byte in CI
+  milestone: M7
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M7-005]
+  blocks: [RL-M7-007]
+  risk: high
+  acceptance:
+    - CI restores a real backup into a scratch engine and compares the result to the source
+    - A truncated or corrupted archive fails the restore loudly rather than producing a partial database
+    - The comparison is of data, not of exit codes
+  artifacts:
+    - test/integration/database_restore_cycle_test.go
+  decisions: [13]
+  notes: |
+    2026-08-02 — This is the gate for the rest of the milestone. Nothing that
+    creates or deletes a database may be exposed in the interface until this
+    passes, because until it does the platform cannot honestly claim to manage
+    anything.
+
+- id: RL-M7-007
+  title: Derive database and user identifiers rather than accepting them
+  milestone: M7
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M7-006]
+  blocks: [RL-M7-008]
+  risk: high
+  acceptance:
+    - The operator supplies a label and Ratline derives the identifier; a label never becomes an identifier verbatim
+    - Every derived identifier is validated against a strict pattern before use and quoted with the engine's own quoting function
+    - A fuzz test pushes SQL metacharacters, unicode normalisation forms and reserved words through every label field reaching a DDL statement
+    - An escape is treated as a critical finding rather than a bug
+  artifacts:
+    - test/security/database_identifier_fuzz.test.ts
+  decisions: [13]
+  notes: |
+    2026-08-02 — The one place C2's answer does not transfer. SQL DDL cannot
+    parameterise identifiers — CREATE DATABASE $1 is not valid — so the name is
+    interpolated into statement text by necessity. Deriving it ourselves is what
+    replaces the argv array.
+
+- id: RL-M7-008
+  title: Create databases and least-privilege users for PostgreSQL
+  milestone: M7
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M7-007]
+  blocks: [RL-M7-009]
+  risk: high
+  acceptance:
+    - A site's user can reach its own database and provably no other on the same engine
+    - No created user holds superuser, createdb or createrole
+    - Deleting a database requires its own permission and names the target in the confirmation
+  artifacts:
+    - test/security/database_user_isolation.test.ts
+  decisions: [13]
+
+- id: RL-M7-009
+  title: Generate, encrypt and inject database credentials
+  milestone: M7
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M7-008]
+  blocks: [RL-M7-010]
+  risk: high
+  acceptance:
+    - Credentials are generated from a cryptographic source and never have a default
+    - They are envelope encrypted at rest and write-only in the interface once set
+    - Reading a credential is a distinct action from seeing that the database exists
+    - A credential cannot appear in a build log, an error trace or a metric label
+  artifacts:
+    - test/security/database_credential_redaction.test.ts
+  decisions: [13, 6]
+
+- id: RL-M7-010
+  title: Add the database permissions to the catalogue and the default roles
+  milestone: M7
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M7-009]
+  blocks: [RL-M7-011]
+  risk: high
+  acceptance:
+    - Database actions exist for create, read, delete, backup, restore and credential reading
+    - Restore is its own action that no default role holds except Owner and Admin
+    - Reading a credential is separate from reading the database, as secret value is from secret name
+    - The completeness test still passes with every new action carried by at least one role
+  artifacts:
+    - test/authz/database_actions.test.ts
+  decisions: [13]
+
+- id: RL-M7-011
+  title: Audit a restore before it begins rather than after it succeeds
+  milestone: M7
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M7-010]
+  blocks: [RL-M7-012]
+  risk: high
+  acceptance:
+    - The audit entry naming actor, target and source archive is written before any data is touched
+    - A restore that fails part way is still fully attributable
+    - The confirmation names the database being overwritten, not the one being restored from
+  artifacts:
+    - test/security/database_restore_audit.test.ts
+  decisions: [13]
+  notes: |
+    2026-08-02 — The most dangerous action in the product. An audit entry
+    written on success records only the restores that worked, which is the
+    opposite of what an incident review needs.
+
+- id: RL-M7-012
+  title: Install MySQL and reach parity with the PostgreSQL path
+  milestone: M7
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M7-011]
+  blocks: [RL-M7-013]
+  risk: high
+  acceptance:
+    - Install, create, user creation, backup and verified restore all work for MySQL
+    - Identifier quoting uses MySQL's own rules rather than PostgreSQL's
+    - The identifier fuzz test covers MySQL separately rather than by analogy
+  artifacts:
+    - test/security/mysql_identifier_fuzz.test.ts
+    - test/integration/mysql_restore_cycle_test.go
+  decisions: [13]
+
+- id: RL-M7-013
+  title: Connect a database to a site and prove the credential path end to end
+  milestone: M7
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M7-012]
+  blocks: [RL-M7-014, RL-M7-016]
+  risk: high
+  acceptance:
+    - A real application deploys, reads its connection string from the environment and serves traffic backed by its database
+    - Rotating the credential does not require a redeploy of unrelated sites
+    - The connection string never appears in a build log
+  artifacts:
+    - test/integration/site_with_database_e2e_test.go
+  decisions: [13]
+
+- id: RL-M7-014
+  title: Decide MongoDB, including its licence, before implementing it
+  milestone: M7
+  status: todo
+  owner: human
+  estimate: S
+  depends_on: [RL-M7-013]
+  blocks: [RL-M7-015]
+  risk: medium
+  acceptance:
+    - The SSPL licensing position is stated plainly for a self-hosted operator
+    - The differences from the SQL engines are listed with their cost
+    - The decision to build or defer is recorded either way
+  artifacts: []
+  decisions: [13]
+  notes: |
+    2026-08-02 — Not a variation on the SQL engines: a different auth model,
+    different backup tooling, no meaningful DDL quoting story, and a licence an
+    operator should be told about rather than have chosen for them. Owner is
+    human because the licence question is not the agent's to answer.
+
+- id: RL-M7-015
+  title: Implement MongoDB support
+  milestone: M7
+  status: todo
+  owner: agent
+  estimate: XL
+  depends_on: [RL-M7-014]
+  blocks: []
+  risk: high
+  acceptance:
+    - Install, database and user creation, backup and verified restore all work
+    - Authentication uses per-database users with least-privilege roles
+    - The engine binds to loopback only and requires acknowledgement to do otherwise
+  artifacts:
+    - test/integration/mongodb_restore_cycle_test.go
+  decisions: [13]
+  notes: |
+    2026-08-02 — XL and therefore not startable as written. Split once RL-M7-014
+    decides it is being built at all; splitting it before that decision would be
+    planning work nobody has agreed to.
+
+- id: RL-M7-016
+  title: Decide how major-version upgrades are handled, or that they are not
+  milestone: M7
+  status: todo
+  owner: human
+  estimate: S
+  depends_on: [RL-M7-013]
+  blocks: []
+  risk: high
+  acceptance:
+    - The position on in-place major upgrades is recorded either way
+    - If they are deferred, the manual procedure is documented rather than left implicit
+  artifacts: []
+  decisions: [13]
+  notes: |
+    2026-08-02 — ADR 0013 keeps major upgrades out of M7 deliberately: in-place
+    upgrade is where irreversible data loss actually happens. Pinning a version
+    at install and never moving it is not a strategy either, so this needs a
+    decision rather than silence.
+
+# ===========================================================================
 # Deferred by the brief §5.2 — recorded so the seam stays visible, not built.
 # Managed databases, email hosting, container workloads, other language
 # runtimes, multi-region, template marketplace, billing and a public API are
 # all out of scope for v1. No tasks exist for them by design. If one appears
 # here, something has gone wrong.
 # ===========================================================================
+- id: RL-M1-033
+  title: Require a person to satisfy the last-owner floor
+  milestone: M1
+  status: done
+  owner: agent
+  estimate: S
+  depends_on: [RL-M1-032]
+  blocks: []
+  risk: high
+  started_at: 2026-08-01
+  done_at: 2026-08-01
+  acceptance:
+    - A service identity or API token cannot hold the owner role at organization scope at all
+    - The floor counts only a user's unexpired allow grant
+    - The down path restores the previous behaviour exactly rather than approximating it
+  artifacts:
+    - src/db/migrations/20260801000008_owner_floor_requires_a_person.sql
+    - test/security/identity_invariants.test.ts
+  decisions: []
+  notes: |
+    2026-08-01 — Found by the RL-M1-032 subagent, which was not permitted to fix
+    it. Migration 2's floor counts organization-scope owner grants without
+    filtering subject_type, so a credential could satisfy the floor brief §6.3
+    intends a person to satisfy — leaving an organization administered only by
+    something that cannot answer a break-glass notification and, if lost, offers
+    no route back in.
 
+    Third time a later feature has widened an earlier invariant: a view bypassed
+    row-level security (RL-M1-006), expiry defeated this same floor (RL-M1-011),
+    and now a new subject kind defeats it again. An invariant expressed as
+    "count some rows" ages badly as the rows gain columns.
+
+    2026-08-01 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). Verified against real Postgres; migration cycle clean.
+  acceptance_met: [1, 2, 3]

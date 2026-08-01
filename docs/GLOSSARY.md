@@ -41,6 +41,9 @@ otherwise have acquired several names.
 | **Crown jewel** | One of the three keys whose compromise is unrecoverable without rotation: SSH authority, instruction signing, secret wrapping. | Used consistently in the threat model. |
 | **Tension line** | The 2px stateful rule beneath the top bar; the deploy spine on the live deployment screen. | The signature element (`DESIGN.md`). |
 | **Lashing** | The notch marking the active rail item, and a step tick on the deploy spine. | The one place the rigging metaphor is literal. |
+| **Engine** | An installed database server — PostgreSQL, MySQL or MongoDB — on a data host. Not "database", which is one logical database inside it. | M7. The two are constantly confused, and the difference is who can reach what. |
+| **Data host** | A host whose role is running database engines. Sites are refused on one by default. | M7, ADR 0013. Distinguishing it from an application host is the cheapest mitigation available for build code sitting next to data. |
+| **Label** | The human-facing name an operator gives a database. Never becomes an identifier. | M7, ADR 0013. The distinction is load-bearing: SQL DDL cannot parameterise identifiers, so Ratline derives the identifier rather than accepting one. |
 
 ---
 

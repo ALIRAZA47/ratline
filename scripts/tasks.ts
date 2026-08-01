@@ -353,7 +353,7 @@ function validateDoc(doc: Doc): Problem[] {
     const where = t.id ? `${t.id} (${at})` : at;
 
     // -- shape
-    if (!/^RL-M[0-6]-\d{3}$/.test(t.id)) { err(where, `bad id "${t.id}"; expected RL-M<n>-NNN`); continue; }
+    if (!/^RL-M[0-7]-\d{3}$/.test(t.id)) { err(where, `bad id "${t.id}"; expected RL-M<n>-NNN`); continue; }
     if (byId.has(t.id)) err(where, `duplicate id ${t.id}`);
     byId.set(t.id, t);
 
@@ -522,7 +522,7 @@ function cmdNext(args: Args): void {
 function cmdAdd(args: Args): void {
   const doc = loadTasks();
   const milestone = required(args.opt("milestone"), "--milestone");
-  if (!/^M[0-6]$/.test(milestone)) die(`bad --milestone "${milestone}"`);
+  if (!/^M[0-7]$/.test(milestone)) die(`bad --milestone "${milestone}"`);
   const title = required(args.opt("title"), "--title");
   const seq = doc.tasks.filter((t) => t.milestone === milestone).reduce((mx, t) => Math.max(mx, Number(t.id.slice(6))), 0);
   const id = `RL-${milestone}-${String(seq + 1).padStart(3, "0")}`;
@@ -784,7 +784,7 @@ function cmdRender(args: Args): void {
     `| --- | --- | ---: | ---: | ---: |`,
   );
 
-  const order = ["M0", "M1", "M2", "M3", "M4", "M5", "M6"];
+  const order = ["M0", "M1", "M2", "M3", "M4", "M5", "M6", "M7"];
   for (const m of order) {
     const inM = doc.tasks.filter((t) => t.milestone === m && t.status !== "dropped");
     if (inM.length === 0) continue;

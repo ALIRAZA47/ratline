@@ -142,6 +142,26 @@ create. Those are repeated in the gate report under "What I need from you".
   it guesses at intent and would produce false positives on any host that also
   serves sites, which is most of them.
 
+## R-14 — Managed databases change the product's failure story
+
+- **Owner:** human
+- **Likelihood:** certain, if M7 proceeds
+- **Impact:** high — the highest in the register
+- **Detail:** every workload Ratline manages today is reconstructible. A site
+  comes back from git; that is what makes atomic releases safe, what makes a
+  failed deploy a non-event, and what lets "provision twice" be an acceptance
+  criterion. A database does not come back. Adding managed databases moves the
+  product from "if it breaks, redeploy" to "if it breaks, the company may have
+  lost its data", and several accepted decisions were taken under the old
+  assumption — ADR 0009 (build on the target host) and ADR 0005 (build commands
+  contained, not eliminated) both put user-authored code next to the data.
+- **Mitigation:** M7 is ordered so backup and verified restore land BEFORE
+  create and delete are exposed (RL-M7-005, RL-M7-006), and RL-M7-001 re-examines
+  the earlier decisions rather than assuming they carry over. Host roles
+  (RL-M7-002) keep sites off data hosts by default.
+- **Needs a decision:** whether M7 is v1 scope, which would amend brief §5.2, or
+  follows v1. Planned as the latter. See ADR 0013.
+
 ## R-10 — No remote repository yet
 
 - **Owner:** human
