@@ -14,3 +14,4 @@
  */
 
 export * from "./organizations.ts";
+export * from "./audit.ts";
