@@ -206,6 +206,8 @@ Carried into `RISKS.md` with owners. Listed here rather than hidden.
 | R-08 | All three crown-jewel keys live on one machine | External key manager is a seam, not v1 scope |
 | R-09 | Build resource contention is bounded by limits but not eliminated | I/O and page cache are not partitioned by `CPUQuota` |
 | R-11 | A reverse proxy, NAT port-forward or load balancer in front of the dashboard makes it public, and the C5 exposure check reports `contained` | Detection is local by decision (ADR 0011); an outbound probe would phone home from every install and fail on the isolated networks C5 protects. Mitigated by stating the blind spot in every report and in `docs/NETWORK.md`, not by detection |
+| R-12 | An `api_token` grant can be written directly, with no intersection against the permissions of the user who issued it | The subject kind exists from RL-M1-011, but the ceiling §6.3 requires ("never more than the issuing user") is enforced in RL-M1-032, which has not landed. Until it does, a token's permissions are whatever its grants say |
+| R-13 | A disabled user's grants still resolve to allow | "May this actor act at all" is one question per request, not one per hierarchy node, so `users.disabled_at` belongs in `can()` (RL-M1-012) rather than in the grant resolution functions. Recorded so the omission does not read as an oversight |
 
 ---
 
