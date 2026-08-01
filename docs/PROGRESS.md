@@ -14,6 +14,54 @@ and which task IDs.
 
 ---
 
+## 2026-08-01 — Session 3 — M1
+
+**Goal:** C4 — the secret store. Generate on first run, refuse to boot on
+anything missing, weak or badly permissioned, with the security test that gates
+the task.
+
+**Completed:** RL-M1-022.
+
+**In progress:** none.
+
+**In review:** RL-M1-002, unchanged — still needs a first real CI run.
+
+**Blocked:** none. RL-M1-003 still needs Postgres and the Docker daemon is down.
+
+**Decisions made:** none new. ADRs 0001–0010 remain `proposed`.
+
+**Surprises / what I learned:**
+
+- The first design of the default-secret scanner was wrong in a way that would
+  have blocked M5. It searched source text for placeholder tokens, and `admin`
+  and `root` are both on that list — so the moment `src/authz/` defines the
+  Admin role, the C4 test would fail on a legitimate role name. Rewritten to
+  flag a string literal only when it is assigned to a secret-shaped identifier,
+  which is the actual threat rather than a word count.
+- Placeholder tokens have to live somewhere, and that module trips its own
+  scanner. Handled with a one-file exclusion plus a test asserting the exclusion
+  list stays length 1, so it cannot quietly become a general amnesty.
+- Mutation-testing the suite was worth more than writing more of it. Four
+  deliberate regressions — planting a default literal, planting base64 key
+  material, disabling the weak-secret check, loosening file mode — fail 2, 1, 7
+  and 14 tests respectively. Before that run I had no evidence the tests could
+  fail at all.
+- Generating secrets on first run is the obvious reading of C4 and is quietly
+  dangerous: a container whose secrets volume fails to mount regenerates
+  everything on each restart, invalidating sessions and agent enrolments while
+  looking healthy. `generateIfMissing: false` exists for exactly that context.
+- Coverage dropped to 95.4% once real source landed, which is correct and
+  useful. The 100% requirement applies to `src/authz/**` (RL-M1-013), not to the
+  tree as a whole.
+
+**Deviations from brief:** none.
+
+**Next session should start with:** RL-M1-023 (C5 — bind to localhost, detect
+public reachability). It is now unblocked, it is the other constraint most
+likely to be skipped under pressure, and it extends the same `preflight()`
+function this session created, so the two land as one coherent boot check.
+Postgres is still the gate for the RL-M1-003 → 004 → 006 → 007 spine.
+
 ## 2026-08-01 — Session 2 — M1
 
 **Goal:** Scaffold the control plane with strict TypeScript and the lint rules

@@ -976,12 +976,14 @@
 - id: RL-M1-022
   title: Generate all secrets on first run and refuse to boot without them
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M1-001]
   blocks: [RL-M1-023]
   risk: high
+  started_at: 2026-08-01
+  done_at: 2026-08-01
   acceptance:
     - There is no default signing key, cookie secret, encryption key or administrator password anywhere in the tree
     - First run generates each from a cryptographic source and persists it with restrictive permissions
@@ -990,6 +992,9 @@
   artifacts:
     - test/security/no_default_secrets.test.ts
   decisions: [6]
+  acceptance_met: [1, 2, 3, 4]
+  notes: |
+    2026-08-01 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). Full pipeline verified locally and the suite was mutation-tested.
 
 - id: RL-M1-023
   title: Bind to localhost by default and detect public reachability
