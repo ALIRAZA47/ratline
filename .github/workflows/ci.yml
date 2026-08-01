@@ -1,0 +1,106 @@
+# Ratline CI (RL-M1-002).
+#
+# Supersedes the M0 tracking-only workflow, which ran `tasks validate` on its
+# own. Both checks live here now so there is exactly one place that decides
+# whether a commit is green, and exactly one place that writes the status file
+# the `tasks done` gate reads.
+#
+# The tracker job runs independently of the code job: a malformed tracker fails
+# the build on its own merits (brief §2.3), and a red test suite does not hide a
+# stale tracker or vice versa.
+
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tracker:
+    name: Tracker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      # Schema, enums, ID format, dangling references, depends_on/blocks
+      # symmetry, dependency cycles, and the brief §2.2 rules.
+      - name: tasks validate
+        run: ./scripts/tasks validate
+
+      # STATUS.md is generated and must never be hand-edited. --check compares
+      # only the tracker-derived sections; test health, security findings and
+      # build status legitimately change every run and are excluded, or this
+      # would fail for the wrong reason on every commit.
+      - name: STATUS.md is current
+        run: ./scripts/tasks render --check
+
+  code:
+    name: Lint, typecheck, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # Writes .ratline/metrics.json and .ratline/security-findings.json, which
+      # `tasks render` reports in STATUS.md. Exits non-zero if any test failed.
+      #
+      # Integration tests are NOT run here: brief §6.7 forbids mocking anything
+      # that touches a host, and no host is available. See RISKS.md R-01. They
+      # run via `./scripts/ci-metrics --integration` once RL-M2-024 lands, and
+      # metrics.json says plainly that they were not run rather than omitting it.
+      - name: Test and collect metrics
+        run: ./scripts/ci-metrics
+
+      - name: Upload metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: metrics
+          path: .ratline/
+          retention-days: 30
+
+  status:
+    name: Record CI status
+    runs-on: ubuntu-latest
+    needs: [tracker, code]
+    if: success()
+    steps:
+      - uses: actions/checkout@v4
+
+      # `tasks done` refuses to close a task unless this file reports green.
+      # It is written only when BOTH jobs above succeeded, so "green" means the
+      # whole pipeline, not one step of it. Nothing outside CI writes this file
+      # — a local run that minted its own green light would defeat the gate.
+      - name: Write ci-status.json
+        run: |
+          mkdir -p .ratline
+          printf '{"status":"green","commit":"%s","at":"%s"}\n' \
+            "$GITHUB_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > .ratline/ci-status.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ci-status
+          path: .ratline/ci-status.json
+          retention-days: 30

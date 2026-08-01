@@ -621,6 +621,26 @@ function cmdCheck(args: Args): void {
   t.acceptance.forEach((a, i) => console.log(`  [${met.has(i + 1) ? "x" : " "}] ${i + 1}. ${a}`));
 }
 
+/**
+ * Move a task to `review`: the work is built and everything checkable has been
+ * checked, but something outside this machine has to confirm it before it can
+ * honestly be called done. Closing such a task with `--no-ci` would assert more
+ * than is known.
+ */
+function cmdReview(args: Args): void {
+  const id = required(args.positional[0], "<task-id>");
+  const reason = required(args.opt("reason"), '--reason "what still needs confirming"');
+  const doc = loadTasks();
+  const t = requireTask(doc, id);
+  if (t.acceptance.length === 0) die(`${id} has no acceptance lines`);
+
+  setScalar(doc, id, "status", "review");
+  save(doc);
+  appendNote(reload(), id, `${today()} — in review: ${reason}`);
+  save(reload());
+  console.log(`${id} -> review (${t.acceptance_met.length}/${t.acceptance.length} acceptance verified)`);
+}
+
 function cmdNote(args: Args): void {
   const id = required(args.positional[0], "<task-id>");
   const text = required(args.positional.slice(1).join(" ") || args.opt("text"), "<text>");
@@ -734,7 +754,7 @@ function cmdValidate(): void {
   console.log(`tasks.yaml OK — ${doc.tasks.length} tasks, ${warns.length} warning(s)`);
 }
 
-function cmdRender(): void {
+function cmdRender(args: Args): void {
   const doc = loadTasks();
   if (validateDoc(doc).some((p) => p.level === "error")) {
     die("refusing to render from an invalid tasks.yaml — run `tasks validate`");
@@ -867,8 +887,64 @@ function cmdRender(): void {
   }
   out.push(`| **all** | **${doc.tasks.length}** |`, ``);
 
-  writeFileSync(STATUS_PATH, out.join("\n"), "utf8");
+  const rendered = out.join("\n");
+
+  if (args.flag("check")) {
+    if (!existsSync(STATUS_PATH)) die(`${rel(STATUS_PATH)} does not exist — run \`tasks render\``);
+    const drift = trackerDrift(readFileSync(STATUS_PATH, "utf8"), rendered);
+    if (drift.length) {
+      console.error(`${rel(STATUS_PATH)} is stale or was hand-edited. Sections that differ:`);
+      for (const section of drift) console.error(`  - ${section}`);
+      console.error(`\nRun \`./scripts/tasks render\` and commit the result.`);
+      process.exit(1);
+    }
+    console.log(`${rel(STATUS_PATH)} is current`);
+    return;
+  }
+
+  writeFileSync(STATUS_PATH, rendered, "utf8");
   console.log(`wrote ${rel(STATUS_PATH)} — ${doc.tasks.length} tasks, current milestone ${current}`);
+}
+
+/**
+ * Sections of STATUS.md derived from CI artefacts rather than from tasks.yaml.
+ * They legitimately change on every run — timestamps, machine-specific counts —
+ * so comparing them would make the currency check fail for the wrong reason.
+ * "STATUS.md is current" means "the tracker-derived content is current".
+ */
+const VOLATILE_SECTIONS = new Set(["Test health", "Security findings", "Build"]);
+
+/** Names of the tracker-derived sections whose content differs between two renders. */
+function trackerDrift(committed: string, fresh: string): string[] {
+  const sections = (doc: string): Map<string, string> => {
+    const map = new Map<string, string>();
+    let name = "(preamble)";
+    let body: string[] = [];
+    for (const line of doc.split("\n")) {
+      const heading = /^## (.+)$/.exec(line);
+      if (heading) {
+        map.set(name, body.join("\n").trim());
+        name = heading[1] ?? "";
+        body = [];
+        continue;
+      }
+      // The generation stamp moves with the clock, not with the tracker.
+      if (/^Generated \d{4}-\d{2}-\d{2}\.$/.test(line)) continue;
+      body.push(line);
+    }
+    map.set(name, body.join("\n").trim());
+    return map;
+  };
+
+  const a = sections(committed);
+  const b = sections(fresh);
+  const names = new Set([...a.keys(), ...b.keys()]);
+  const drift: string[] = [];
+  for (const name of names) {
+    if (VOLATILE_SECTIONS.has(name)) continue;
+    if (a.get(name) !== b.get(name)) drift.push(name);
+  }
+  return drift;
 }
 
 function ensureRiskEntry(id: string, reason: string, since: string): void {
@@ -948,12 +1024,13 @@ const HELP = `Ratline task tracker — source of truth is docs/tasks.yaml (brief
   tasks start <id>                         enforces the Definition of Ready
   tasks check <id> <n> [--uncheck]         mark acceptance line n met
   tasks note <id> <text>                   append a dated note
+  tasks review <id> --reason "..."         built and locally verified, needs outside confirmation
   tasks block <id> --reason "..."          also writes docs/RISKS.md
   tasks unblock <id> [--reason "..."] [--status ready]
   tasks done <id> [--no-ci "<reason>"]     requires all acceptance met + green CI
   tasks sync-blocks                        derive "blocks" from "depends_on"
   tasks validate                           schema, graph, cycles, brief rules (runs in CI)
-  tasks render                             regenerates docs/STATUS.md
+  tasks render [--check]                   regenerates docs/STATUS.md (--check: fail if stale)
 `;
 
 function main(): void {
@@ -965,12 +1042,13 @@ function main(): void {
     case "start": return cmdStart(args);
     case "check": return cmdCheck(args);
     case "note": return cmdNote(args);
+    case "review": return cmdReview(args);
     case "block": return cmdBlock(args);
     case "unblock": return cmdUnblock(args);
     case "done": return cmdDone(args);
     case "sync-blocks": return cmdSyncBlocks(args);
     case "validate": return cmdValidate();
-    case "render": return cmdRender();
+    case "render": return cmdRender(args);
     case "help": case "--help": case "-h": console.log(HELP); return;
     default:
       console.error(`unknown command "${args.cmd}"\n`);
