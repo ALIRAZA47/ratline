@@ -14,6 +14,62 @@ and which task IDs.
 
 ---
 
+## 2026-08-01 — Session 8 — M1
+
+**Goal:** RL-M1-007, the scoped data-access primitive and authorization context
+— layer 2 of C3 — with the grants model delegated in parallel.
+
+**Completed:** RL-M1-007, RL-M1-011 (delegated).
+
+**In progress:** none.
+
+**In review:** RL-M1-002, unchanged — still needs a first real CI run.
+
+**Blocked:** none in the tracker. RL-M1-028 still wants the DESIGN.md 10.1
+ruling.
+
+**Decisions made:** ADR 0012 (proposed) — grant resolution, the expiry clock,
+and unconditional owner grants.
+
+**Surprises / what I learned:**
+
+- **Two mutations that pass are not the same as two mutations that are safe.**
+  Binding the tenant session-wide instead of transaction-local passed every test
+  I had written, because `scoped()` always sets the tenant first, so the two are
+  indistinguishable from inside the primitive. The difference only appears
+  outside it: transaction-local means a stray query sees nothing, session-wide
+  means it sees whatever tenant ran last. Fail-closed versus fail-stale. Closed
+  with a test that queries the pooled connection outside `scoped()`.
+- **TypeScript reads any comment line beginning with the suppression directive
+  as a real directive** — including one inside explanatory prose. My comment
+  *about* `@ts-expect-error` had wrapped onto its own line and become one, which
+  made the brand test appear to prove the brand was broken. Four isolated probes
+  before I saw it. Now written into the test file.
+- **The last-owner floor I built in RL-M1-004 was quietly defeated by adding
+  expiry.** The trigger counts organization-scope owner rows without filtering
+  effect or expiry, so a lapsing grant leaves an organization ownerless while
+  the count still reads one — and no trigger can fire, because time passing is
+  not an event. The fix is to refuse to represent the state rather than to
+  detect it. This is the second time an invariant of mine has been broken by a
+  later feature; worth assuming it will happen again.
+- The expiry clock matters more than it looks. `now()` is frozen for a whole
+  transaction, so a decision late in a long one would honour a grant that lapsed
+  minutes earlier — a break-glass elevation outliving its own expiry. The test
+  that proves the right clock asserts `now()` did NOT change while the answer
+  flipped, which rules out the wrong one rather than merely suggesting it.
+- The delegated agent reported four items as belonging in `docs/` rather than
+  writing them there, which was the right call and saved me from finding them
+  later. Both agents this session and last had accurate self-reports; the one
+  that overclaimed was in session 5. Checking is still cheap enough to keep doing.
+
+**Deviations from brief:** none.
+
+**Next session should start with:** RL-M1-008 — converting the structural tests
+written in RL-M1-007 into lint rules, so the forbidden patterns are unwritable
+rather than merely caught. Then RL-M1-012, `can()`, which now has a resolution
+interface to build on and two gaps waiting for it (R-12, R-13). RL-M1-017
+(sessions) remains the clean parallel candidate.
+
 ## 2026-08-01 — Session 7 — M1
 
 **Goal:** RL-M1-006 — row-level security, the layer C3 rests on.

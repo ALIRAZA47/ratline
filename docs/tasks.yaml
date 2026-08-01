@@ -752,21 +752,31 @@
 - id: RL-M1-007
   title: Build the scoped data-access primitive and the authorization context
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: L
   depends_on: [RL-M1-006]
   blocks: [RL-M1-008]
   risk: high
+  started_at: 2026-08-01
+  done_at: 2026-08-01
   acceptance:
     - Every repository function takes an authorization context as its first argument
     - The context type cannot be constructed outside the authenticated request path
     - There is no exported unscoped read anywhere in the codebase
     - A test asserts that a repository called with a foreign tenant returns nothing
   artifacts:
+    - src/db/internal/handle.ts
+    - src/authz/context.ts
+    - src/repo/organizations.ts
     - test/security/scoped_repository.test.ts
   decisions: [3]
+  notes: |
+    2026-08-01 — The tenant is bound with set_config(..., true), transaction-local. Session-wide looks identical in every test where queries go through scoped(), because scoped() always sets it first. The difference is fail-closed versus fail-stale: a query outside the primitive sees nothing rather than the previous tenant. Found by mutation testing and now covered by its own test.
 
+    2026-08-01 — assertNotPrivileged() runs at boot because a superuser connection silently disables row-level security for the whole application and nothing else would notice — every query keeps returning correct-looking results, for every tenant.
+    2026-08-01 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 16 tests pass against real Postgres as an unprivileged role; mutation-tested five ways with the one gap found and closed.
+  acceptance_met: [1, 2, 3, 4]
 - id: RL-M1-008
   title: Add lint rules that make the forbidden patterns unwritable
   milestone: M1
@@ -845,21 +855,29 @@
 - id: RL-M1-011
   title: Model grants, denies and time-bound scoping
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: L
   depends_on: [RL-M1-010]
   blocks: [RL-M1-012, RL-M1-032]
   risk: high
+  started_at: 2026-08-01
+  done_at: 2026-08-01
   acceptance:
     - A grant attaches a role to any node in the hierarchy for a user, service identity or token
     - Denies exist and always win over grants
     - Expiry is evaluated at decision time so an expired grant is dead the moment it expires
     - A test advances the clock past expiry and confirms denial with no cleanup job having run
   artifacts:
+    - src/db/migrations/20260801000005_grants_denies_expiry.sql
+    - src/authz/grants.ts
     - test/authz/grant_expiry.test.ts
-  decisions: []
+  decisions: [12]
+  notes: |
+    2026-08-01 — Found a hole in RL-M1-004's last-owner floor. The trigger counts organization-scope owner rows without filtering effect or expiry, so a lapsing owner grant leaves an organization ownerless with no trigger able to fire — time passing is not an event — and an organization-scope deny of owner neutralises the last owner while the counted row remains. Closed by making those states unwriteable rather than by a smarter trigger.
 
+    2026-08-01 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 224 tests pass; deny precedence, expiry filtering and the statement_timestamp clock choice each re-verified here by mutation.
+  acceptance_met: [1, 2, 3, 4]
 - id: RL-M1-012
   title: Implement the central can decision function
   milestone: M1
@@ -877,6 +895,8 @@
   artifacts:
     - test/authz/can.test.ts
   decisions: []
+  notes: |
+    2026-08-01 — Two gaps RL-M1-011 left for can() deliberately, both now in the threat model as R-12 and R-13: an api_token grant is not intersected against its issuing user's permissions (RL-M1-032 owns that), and a disabled user's grants still resolve. Whether an actor may act at all is one question per request, not one per hierarchy node, so it belongs here.
 
 - id: RL-M1-013
   title: Gate the build on full branch coverage of the authorization module
@@ -2530,6 +2550,7 @@
     2026-08-01 — RL-M1-010 identified exactly which actions need the environment split, so this task starts with the analysis done: site.restart, site.run_command, secret.create/update/delete, scheduled_job.create/update/delete/run_now, and backup.restore. The catalogue argues for splitting deployment because a project-scoped grant inherits into production; that argument applies unchanged to all of these.
 
     2026-08-01 — Sharpest case is secret.read_value. Brief §6.3 says Infrastructure cannot read PRODUCTION secret values — a sentence that cannot be expressed as a role at all without the split, only as an environment-scoped grant. RL-M1-010 resolved it by withholding the action entirely, which is stricter than the brief and should be revisited here.
+    2026-08-01 — PLAN §4 describes GRANT as carrying role_id, but the schema uses role_key text (migration 2). That is fine while roles are code-defined, and it bites here: custom roles become rows, so this task has to decide whether role_key stays a stable string key or becomes a foreign key.
 - id: RL-M5-003
   title: Implement break-glass elevation
   milestone: M5
