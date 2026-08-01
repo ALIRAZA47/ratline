@@ -442,9 +442,12 @@ test("a disabled service identity is denied", { skip }, async () => {
       [world.orgId],
     );
     const identityId = identity.rows[0]?.id ?? "";
+    // `admin`, not `owner`: RL-M1-033 makes organization-scope owner
+    // person-only, and automation that needs breadth takes admin — everything
+    // except organization deletion and ownership transfer.
     await client.query(
       `insert into grants (org_id, subject_type, subject_id, role_key, scope_type)
-       values ($1, 'service_identity', $2, 'owner', 'organization')`,
+       values ($1, 'service_identity', $2, 'admin', 'organization')`,
       [world.orgId, identityId],
     );
     await usingScratch(database, async () => {

@@ -238,6 +238,38 @@ test("deleting an organization is not blocked by its own owner grant", { skip },
   });
 });
 
+test("only a person can satisfy the last-owner floor", { skip }, async () => {
+  // Found while building API tokens (RL-M1-032). A service identity or token
+  // holding `owner` at organization scope used to satisfy the floor that §6.3
+  // intends a human to satisfy, so every person could be removed from ownership
+  // — leaving an organization administered only by a credential, which cannot
+  // answer a break-glass notification and, if lost, leaves no route back in.
+  await withMigratedDatabase(async (client) => {
+    const { orgId, grantId } = await seedOrganization(client);
+    const identity = await client.query<{ id: string }>(
+      "insert into service_identities (org_id, name) values ($1, 'deploy-bot') returning id",
+      [orgId],
+    );
+
+    await assert.rejects(
+      () =>
+        client.query(
+          `insert into grants (org_id, subject_type, subject_id, role_key, scope_type)
+           values ($1, 'service_identity', $2, 'owner', 'organization')`,
+          [orgId, identity.rows[0]?.id ?? ""],
+        ),
+      /grants_organization_owner_is_a_person/,
+      "a non-person must not be able to hold organization-scope owner at all",
+    );
+
+    // ...and the human owner is still the only thing holding the floor up.
+    await assert.rejects(
+      () => client.query("delete from grants where id = $1", [grantId]),
+      /no owner who is a person/,
+    );
+  });
+});
+
 test("one organization's owners do not satisfy another's floor", { skip }, async () => {
   // The trigger counts per organization. A global count would let a busy tenant
   // mask an ownerless one.
