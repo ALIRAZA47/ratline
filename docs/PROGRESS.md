@@ -14,6 +14,59 @@ and which task IDs.
 
 ---
 
+## 2026-08-01 — Session 9 — M1
+
+**Goal:** `can()` and the coverage gate that guards it, with the C2/C3 lint
+rules delegated.
+
+**Completed:** RL-M1-012, RL-M1-013, RL-M1-008 (delegated).
+
+**In progress:** none.
+
+**In review:** RL-M1-002, unchanged — still needs a first real CI run.
+
+**Blocked:** none in the tracker. RL-M1-028 still wants the DESIGN.md 10.1
+ruling.
+
+**Decisions made:** none new. ADRs 0001–0012 remain `proposed`.
+
+**Surprises / what I learned:**
+
+- **Mutation testing found a robustness bug, not a behaviour bug.** I had
+  duplicated the fail-closed comparison on the database's answer instead of
+  reusing `isAllowed()`. Inverting my copy to the fail-open form broke NO test:
+  the two forms agree on every value `grant_decision` returns today and differ
+  only on the values that would matter tomorrow. That class of defect is
+  invisible to ordinary tests by construction.
+- Reaching 100% branch coverage needed three *code* changes rather than three
+  tests bolted on — a ternary that existed only to satisfy
+  `exactOptionalPropertyTypes`, an optional field never exercised both ways, and
+  an exported guard with no test at all. That is the gate doing real work rather
+  than being satisfied.
+- A missing measurement has to FAIL the coverage gate, not pass it. Renaming
+  `can.ts` would otherwise switch off its own gate silently, which is the
+  failure mode most likely to survive for months. Verified by pointing the
+  matcher at a file that does not exist.
+- **I repeated the session-2 mistake: `git checkout` on an uncommitted file
+  destroyed the coverage gate I had just written.** Caught it because I checked
+  after, not because anything told me. Probes now get reverted from a `/tmp`
+  copy; `git checkout` is out of my working vocabulary for uncommitted work.
+- Lint fixtures under `test/` were being counted as passing tests — Node treats
+  every file in a directory named `test` as a test file. The agent flagged it as
+  outside its scope, correctly, and it was a real inflation of the number the
+  gate report quotes.
+- The lint agent verified each of its rule's *non*-catches empirically with
+  throwaway probes rather than asserting them, and wrote the blind spots into
+  the rule's header. That is the right instinct: a rule that claims more than it
+  detects is worse than none, because it stops people looking.
+
+**Deviations from brief:** none.
+
+**Next session should start with:** RL-M1-014, the hash-chained audit log — it
+is the last major C-constraint (C6) without an implementation, and RL-M1-016
+depends on it. RL-M1-024 (matrix generator) and RL-M1-032 (API tokens, which
+closes threat-model R-12) are both ready and independent.
+
 ## 2026-08-01 — Session 8 — M1
 
 **Goal:** RL-M1-007, the scoped data-access primitive and authorization context

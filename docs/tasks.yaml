@@ -780,21 +780,31 @@
 - id: RL-M1-008
   title: Add lint rules that make the forbidden patterns unwritable
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M1-007]
   blocks: []
   risk: high
+  started_at: 2026-08-01
+  done_at: 2026-08-01
   acceptance:
     - Importing the raw database handle outside the repository layer fails lint
     - Importing a process-spawning module in the control plane fails lint
     - Shell construction by template literal fails lint
     - Each rule has a fixture proving it fires
   artifacts:
+    - eslint.config.js
+    - tools/eslint/no-shell-template-literal.js
     - test/security/lint_rules.test.ts
   decisions: [3, 5]
+  notes: |
+    2026-08-01 — The custom shell rule states its own blind spots in its header rather than implying completeness. It does not catch concatenation, spawn with shell true, an aliased exec, or a template inside an argv array. Concatenation is the largest gap and needs taint tracking; the honest version of that check is RL-M2-028 on the Go side, which ESLint never sees.
 
+    2026-08-01 — Two source-scanning tests were superseded and removed rather than kept alongside: the handle-import scan in scoped_repository.test.ts and the shell-out scan in migrations.test.ts. Both are now import-declaration rules covering all of src/ rather than regexes over the one file each named. A comment sits where each used to be.
+    2026-08-01 — Lint fixtures live under test/ and Node treats every file in a test directory as a test file, so three purpose-built violations were being loaded and counted as passing tests. npm test now matches only *.test.ts, as ci-metrics already did.
+    2026-08-01 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). Each of the three rules was independently disabled here and the corresponding fixture test failed, so none is decorative.
+  acceptance_met: [1, 2, 3, 4]
 - id: RL-M1-009
   title: Define the permission catalogue as the single source of actions
   milestone: M1
@@ -881,40 +891,58 @@
 - id: RL-M1-012
   title: Implement the central can decision function
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: L
   depends_on: [RL-M1-011]
   blocks: [RL-M1-013, RL-M1-014, RL-M1-018, RL-M1-024, RL-M1-032]
   risk: high
+  started_at: 2026-08-01
+  done_at: 2026-08-01
   acceptance:
     - One function decides every authorization question and no permission logic exists elsewhere
     - An unmapped action denies
     - Inheritance downward and deny precedence are both covered by tests
     - The decision returns a reason so the audit log and the role editor can explain it
   artifacts:
+    - src/authz/can.ts
+    - src/repo/authorization.ts
     - test/authz/can.test.ts
-  decisions: []
+  decisions: [12]
   notes: |
     2026-08-01 — Two gaps RL-M1-011 left for can() deliberately, both now in the threat model as R-12 and R-13: an api_token grant is not intersected against its issuing user's permissions (RL-M1-032 owns that), and a disabled user's grants still resolve. Whether an actor may act at all is one question per request, not one per hierarchy node, so it belongs here.
 
+    2026-08-01 — can() holds no cache, deliberately. Brief §6.3 requires role changes to take effect immediately including on active sessions, and a cache here is the obvious optimisation that would break that silently. There is a test that changes a grant and re-asks with the same context.
+    2026-08-01 — The roles-carrying-an-action lookup is an injectable parameter, not a fixed call. Custom roles (RL-M5-001) come from the database, and the alternative — a second decision path for them — is exactly the permission-logic-elsewhere §6.3 forbids. It also makes the empty-role branch reachable, which RL-M1-013's coverage gate needs.
+    2026-08-01 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 249 tests pass; can() mutation-tested five ways with the one gap found and closed.
+  acceptance_met: [1, 2, 3, 4]
 - id: RL-M1-013
   title: Gate the build on full branch coverage of the authorization module
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M1-012]
   blocks: []
   risk: high
+  started_at: 2026-08-01
+  done_at: 2026-08-01
   acceptance:
     - Branch coverage of the decision function is 100% and enforced in CI
     - Line coverage of the authorization module is 100% and enforced in CI
     - The coverage numbers are written to the metrics file that STATUS reads
   artifacts:
-    - test/authz/coverage_gate.test.ts
+    - scripts/ci-metrics.ts
+    - test/authz/can.test.ts
   decisions: []
+  notes: |
+    2026-08-01 — Starting point measured at the end of RL-M1-012: can.ts is at 100% line and 93.33% branch, src/repo/authorization.ts at 100% line and 94.12% branch. The remaining branches are optional-chaining and nullish-coalescing fallbacks; closing them is this task's work.
 
+    2026-08-01 — Only two figures are gated, deliberately: can() branch coverage and src/authz/** line coverage. A blanket target buys tests written to raise a number; these buy the guarantee that every path through the decision function has been exercised, including the ones that deny.
+    2026-08-01 — A missing measurement fails the gate rather than passing it. Renaming or moving can.ts would otherwise switch off its own gate silently, which is the failure mode most likely to go unnoticed. Verified by pointing the matcher at a nonexistent file.
+    2026-08-01 — Reaching 100% needed three changes rather than three new tests: require() had a ternary that existed only because of exactOptionalPropertyTypes and became a default parameter; the optional ip on a context needed both shapes covered; and isSubjectType had no test at all.
+    2026-08-01 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). The gate is verified locally in both directions: an uncovered branch and an unmeasurable target each exit non-zero.
+  acceptance_met: [1, 2, 3]
 - id: RL-M1-014
   title: Build the hash-chained append-only audit log
   milestone: M1
