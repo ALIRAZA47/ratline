@@ -8,12 +8,13 @@ Generated 2026-08-01.
 | Milestone | Progress | Done | Total | Open high-risk |
 | --- | --- | ---: | ---: | ---: |
 | **M0** Plan | `########################` 100% | 26 | 26 | 0 |
-| **M1** Control plane skeleton | `###########-------------` 47% | 15 | 32 | 11 |
+| **M1** Control plane skeleton | `#############-----------` 55% | 18 | 33 | 9 |
 | **M2** Agent and first host | `------------------------` 0% | 0 | 29 | 20 |
 | **M3** Static sites end to end | `------------------------` 0% | 0 | 27 | 18 |
 | **M4** Node and Bun apps | `------------------------` 0% | 0 | 15 | 10 |
 | **M5** RBAC completion | `------------------------` 0% | 0 | 7 | 6 |
 | **M6** SSH access | `------------------------` 0% | 0 | 7 | 7 |
+| **M7** Managed databases | `------------------------` 0% | 0 | 16 | 15 |
 
 ## Current milestone — M1: Control plane skeleton
 
@@ -53,18 +54,23 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 - `RL-M4-004` (M4, todo) — Implement health checks and automatic abort
 - `RL-M4-015` (M4, todo) — Implement control plane self-update with rollback
 - `RL-M6-003` (M6, todo) — Enforce principals host-side and make revocation immediate
+- `RL-M7-001` (M7, todo) — Re-examine the failure story for workloads that cannot be rebuilt
+- `RL-M7-006` (M7, todo) — Restore a backup into a scratch instance and verify it byte-for-byte in CI
+- `RL-M7-013` (M7, todo) — Connect a database to a site and prove the credential path end to end
+- `RL-M7-015` (M7, todo) — Implement MongoDB support
+- `RL-M7-016` (M7, todo) — Decide how major-version upgrades are handled, or that they are not
 
 ## Test health
 
 | Suite | Passing | Rate |
 | --- | ---: | ---: |
-| Unit | 146 / 146 | 100% |
+| Unit | 162 / 162 | 100% |
 | Integration | not measured | — |
-| Authorization matrix | 106 / 106 | 100% |
+| Authorization matrix | 124 / 124 | 100% |
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | 100% | must be 100% |
 
-Measured 2026-08-01T22:38:26.778Z.
+Measured 2026-08-01T23:15:19.356Z.
 
 ## Security findings
 
@@ -84,7 +90,7 @@ CI: _no status recorded yet._
 
 | Status | Count |
 | --- | ---: |
-| todo | 101 |
+| todo | 115 |
 | review | 1 |
-| done | 41 |
-| **all** | **143** |
+| done | 44 |
+| **all** | **160** |

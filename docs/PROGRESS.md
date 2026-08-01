@@ -14,6 +14,62 @@ and which task IDs.
 
 ---
 
+## 2026-08-02 — Session 10 — M1, and a scope change
+
+**Goal:** The hash-chained audit log (C6), with API tokens delegated. Then a
+requested scope change: managed database engines.
+
+**Completed:** RL-M1-014, RL-M1-032 (delegated), RL-M1-033, RL-M7-001 (planning).
+
+**In progress:** none.
+
+**In review:** RL-M1-002, unchanged — still needs a first real CI run.
+
+**Blocked:** none in the tracker.
+
+**Decisions made:** ADR 0013 (proposed) — managed database engines, which amends
+brief §5.2.
+
+**Surprises / what I learned:**
+
+- **An invariant expressed as "count some rows" ages badly.** The last-owner
+  floor has now been defeated three times by later features: expiry (RL-M1-011),
+  and now a new subject kind — a service identity or API token holding `owner`
+  at organization scope satisfied a floor §6.3 intends a person to satisfy. The
+  durable fix each time was to make the bad state UNREPRESENTABLE rather than to
+  count more carefully. Worth assuming the next feature will find a fourth way.
+- The audit log's real question is not "does it write rows" but "would it notice
+  if someone changed one". That reframing is what produced the design: the
+  DATABASE computes the hash, because a chain computed by the thing being
+  audited proves nothing — an attacker owning the application recomputes it and
+  it verifies perfectly.
+- A hash chain cannot detect truncation of its own head. Recorded as a known
+  limit with its own test, and RL-M1-015 now carries the requirement to record
+  the expected head after each verification run.
+- Another test that proved the opposite of what it claimed: my first tamper set
+  `decision = 'allow'` on rows already `'allow'`, so it changed nothing and the
+  verifier was right to stay quiet. Third instance of this family after the
+  vacuous RLS tests and the empty coverage report.
+- **Managed databases change what the product is, not just what it does.** Every
+  workload so far is reconstructible from git; a database is not. Two accepted
+  ADRs — build on the target host, and build commands contained rather than
+  eliminated — were argued under the old assumption and now put user-authored
+  code next to data. Planning M7 without re-examining them would have been the
+  real mistake, so RL-M7-001 exists to do that first.
+- The one place C2's answer does not transfer: SQL DDL cannot parameterise
+  identifiers, so a database name is interpolated into statement text by
+  necessity. The replacement is to derive the identifier rather than accept one.
+
+**Deviations from brief:** ADR 0013 amends §5.2, which lists managed databases
+as out of scope for v1. Requested by the brief's author; the amendment itself is
+theirs to make. Planned as M7 after M6 rather than folded into v1 — reversible,
+and flagged.
+
+**Next session should start with:** RL-M1-015 (scheduled chain verification,
+which must close the truncation gap) or RL-M1-016 (actor attribution). RL-M1-017
+(sessions) remains the clean parallel candidate. M7 does not start until the v1
+scope question is answered.
+
 ## 2026-08-01 — Session 9 — M1
 
 **Goal:** `can()` and the coverage gate that guards it, with the C2/C3 lint
