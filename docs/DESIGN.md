@@ -221,10 +221,54 @@ default rather than a choice. What that pass changed:
 
 ---
 
-## 10. Open question
+## 10. Open questions
 
-Fonts. Archivo, Public Sans and JetBrains Mono are all open-licensed and
-self-hostable, which C5 requires. If there is an existing brand or a licensed
-family already in use, say so at the gate — the palette and layout survive a
-type substitution, but the display face carries most of the personality here and
-swapping it late is expensive.
+### 10.1 The environment chip contradicts §1 — needs a ruling
+
+§4 specifies an "environment chip (colour-coded, production is unmissable)".
+§1 says colour means status and nothing else may be saturated. **Those cannot
+both hold.** An environment is not a status: production is not a failure, and
+staging is not a warning. Colouring the chip would put a second, competing
+meaning on saturated colour — the exact thing §1 exists to prevent — and the
+first time an operator sees an amber chip beside an amber status they will read
+one as the other.
+
+This was written into the plan in M0 and only surfaced when the tokens were
+built (RL-M1-027). No environment palette has been invented; the tokens
+deliberately stop short of one.
+
+**Recommendation: distinguish the chip by form, not hue.** Production gets a
+filled chip in `--chalk` on `--tar` — maximum contrast, no saturation — while
+non-production environments get an outlined chip in `--chalk-dim`. That reads as
+"heavier means more dangerous" at a glance and across a room, costs no hue, and
+leaves the status language uncontested. The break-glass banner stays the single
+sanctioned exception to §1, because it *is* a status.
+
+**RL-M1-028 needs this settled before the shell is built.**
+
+### 10.2 Two contrast values sit at their limits
+
+Properties of this plan, not of the implementation. Both are encoded as rules in
+the token registry, so retuning either breaks a test rather than sliding by.
+
+- **`--st-idle` does not reach 4.5:1** in either mode (4.03:1 dark, 3.53:1
+  light on `--tar`). It is therefore mark-only: the `○` carries it and the label
+  beside it is set in `--chalk-dim`. Correct for "unknown / never deployed",
+  which should recede — but it means idle can never become a text colour.
+- **`--hemp` in light mode is 4.47:1** on `--tar`, three hundredths under the
+  body-text bar. Fine as specified, because it is only ever linework, markers
+  and the focus ring, all of which are non-text at 3:1. **It must not become a
+  text colour in light mode.**
+
+### 10.3 Fonts
+
+Archivo, Public Sans and JetBrains Mono are all open-licensed and self-hostable,
+which C5 requires. If there is an existing brand or a licensed family already in
+use, say so at the gate — the palette and layout survive a type substitution, but
+the display face carries most of the personality here and swapping it late is
+expensive.
+
+Note that the display face must carry a **width axis**. The static Archivo
+package ships only the normal width and physically cannot render the Expanded
+width §3 calls the signature, so the variable package is used instead. Any
+substitute needs the same property.
