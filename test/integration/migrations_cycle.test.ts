@@ -19,59 +19,20 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Client } from "pg";
 
 import {
   loadMigrations,
   migrateDown,
   migrateUp,
   migrationStatus,
-  type SqlClient,
 } from "../../src/db/migrate.ts";
+import { skipWithoutDatabase, withScratchDatabase } from "../support/db.ts";
 
-const EXPLICIT_URL = process.env["DATABASE_URL"];
-const URL = EXPLICIT_URL ?? "postgres://ratline@127.0.0.1:55432/ratline_test";
-
-async function reachable(): Promise<boolean> {
-  const client = new Client({ connectionString: URL, connectionTimeoutMillis: 3000 });
-  try {
-    await client.connect();
-    await client.end();
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-const available = await reachable();
-if (!available && EXPLICIT_URL !== undefined) {
-  throw new Error(
-    `DATABASE_URL is set to ${EXPLICIT_URL} but the database is unreachable. ` +
-      `Refusing to skip: an integration suite that silently skips is worse than one that fails.`,
-  );
-}
-const skip = available ? false : "no database — run ./scripts/pg start, or set DATABASE_URL";
-
-/** Run against an isolated schema, dropped afterwards whatever happens. */
-async function withSchema(fn: (client: SqlClient) => Promise<void>): Promise<void> {
-  const name = `mig_${process.hrtime.bigint().toString(36)}`;
-  const client = new Client({ connectionString: URL });
-  await client.connect();
-  try {
-    await client.query(`create schema "${name}"`);
-    await client.query(`set search_path to "${name}"`);
-    await fn(client);
-  } finally {
-    // CASCADE is correct here and only here: the scratch schema is ours, we
-    // created everything in it, and leaving debris would corrupt later runs.
-    await client.query(`drop schema if exists "${name}" cascade`);
-    await client.end();
-  }
-}
+const skip = skipWithoutDatabase;
 
 test("every migration applies, reverses, and applies again", { skip }, async () => {
   const migrations = loadMigrations();
-  await withSchema(async (client) => {
+  await withScratchDatabase(async (client) => {
     const up1 = await migrateUp(client, migrations);
     assert.equal(up1.length, migrations.length, "first up should apply everything");
 
@@ -90,7 +51,7 @@ test("every migration applies, reverses, and applies again", { skip }, async () 
 
 test("re-running up is a no-op rather than an error", { skip }, async () => {
   const migrations = loadMigrations();
-  await withSchema(async (client) => {
+  await withScratchDatabase(async (client) => {
     await migrateUp(client, migrations);
     const again = await migrateUp(client, migrations);
     assert.deepEqual(again, [], "migrations must be idempotent (brief §6.7)");
@@ -110,7 +71,7 @@ test("a failing migration leaves no partial state", { skip }, async () => {
       checksum: "deadbeefdeadbeef",
     },
   ];
-  await withSchema(async (client) => {
+  await withScratchDatabase(async (client) => {
     await assert.rejects(() => migrateUp(client, broken));
     const applied = (await migrationStatus(client, broken)).filter((r) => r.applied);
     assert.deepEqual(applied, [], "a failed migration must not be recorded as applied");
@@ -127,7 +88,7 @@ test("an applied migration edited afterwards is refused", { skip }, async () => 
   const first = migrations[0];
   assert.ok(first !== undefined, "there should be at least one migration");
 
-  await withSchema(async (client) => {
+  await withScratchDatabase(async (client) => {
     await migrateUp(client, [first]);
     const tampered = { ...first, checksum: "0000000000000000" };
     await assert.rejects(

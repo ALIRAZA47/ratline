@@ -123,16 +123,37 @@ test("committed migrations are uniquely and monotonically ordered", () => {
 });
 
 test("no committed migration uses a destructive shortcut", () => {
-  // `drop ... cascade` silently removes dependent objects the author may not
-  // know about, which makes the down path unreliable in exactly the moment it
-  // matters. Flag it here rather than discovering it during a rollback.
+  // Targets `DROP ... CASCADE`, which silently removes dependent objects the
+  // author may not know about and so makes a down path unreliable in exactly
+  // the moment it matters.
+  //
+  // Deliberately NOT a bare /cascade/ match. `ON DELETE CASCADE` on a foreign
+  // key is a different thing — a declared, reviewable ownership relationship,
+  // and the correct way to say "a membership cannot outlive its organization".
+  // The first version of this test flagged it and had to be tightened; a rule
+  // that cries wolf on correct code gets an exclusion added rather than a
+  // reading.
   const findings: string[] = [];
   for (const migration of loadMigrations()) {
     const sql = readFileSync(join(MIGRATIONS_DIR, migration.file), "utf8").toLowerCase();
-    if (/\bcascade\b/.test(sql)) findings.push(`${migration.file}: uses CASCADE`);
+    for (const match of sql.matchAll(/\bdrop\b[^;]*?\bcascade\b/g)) {
+      findings.push(`${migration.file}: DROP ... CASCADE — "${match[0].replace(/\s+/g, " ").slice(0, 60)}"`);
+    }
     if (/\bdrop\s+database\b/.test(sql)) findings.push(`${migration.file}: drops a database`);
+    if (/\btruncate\b/.test(sql)) findings.push(`${migration.file}: truncates a table`);
   }
   assert.deepEqual(findings, [], findings.join("\n"));
+});
+
+test("the destructive-shortcut check still catches what it is for", () => {
+  // Pins the tightening above. Loosening a rule is only safe if what it must
+  // still catch is written down.
+  const dropCascade = /\bdrop\b[^;]*?\bcascade\b/;
+  assert.ok(dropCascade.test("drop table t cascade;"));
+  assert.ok(dropCascade.test("drop schema foo cascade;"));
+  assert.ok(dropCascade.test("drop type colour cascade;"));
+  assert.ok(!dropCascade.test("references organizations (id) on delete cascade"));
+  assert.ok(!dropCascade.test("on delete cascade,\n  drop_me text"));
 });
 
 // ---------------------------------------------------------------------------
