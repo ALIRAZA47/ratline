@@ -99,7 +99,7 @@ function parse(lines: string[], errors: ParseError[]): Item[] {
   let cur: Item | null = null;
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
+    const line = lines[i] ?? "";
     if (isBlank(line) || isComment(line)) continue;
 
     if (line.startsWith("- ")) {
@@ -120,7 +120,9 @@ function parse(lines: string[], errors: ParseError[]): Item[] {
       continue;
     }
 
-    const key = m[2];
+    // KEY_RE always captures group 2 when it matches; the defaults keep the
+    // types honest without an assertion.
+    const key = m[2] ?? "";
     const rawValue = (m[3] ?? "").trim();
     if (cur.fields.has(key)) errors.push({ line: i, message: `duplicate key "${key}"` });
 
@@ -131,7 +133,7 @@ function parse(lines: string[], errors: ParseError[]): Item[] {
       const body: string[] = [];
       let j = i + 1;
       for (; j < lines.length; j++) {
-        const l = lines[j];
+        const l = lines[j] ?? "";
         if (isBlank(l)) { body.push(""); continue; }
         if (!l.startsWith("    ")) break;
         body.push(l.slice(4));
@@ -152,11 +154,11 @@ function parse(lines: string[], errors: ParseError[]): Item[] {
       let j = i + 1;
       const collected: string[] = [];
       for (; j < lines.length; j++) {
-        const l = lines[j];
+        const l = lines[j] ?? "";
         if (isBlank(l) || isComment(l)) continue;
         const li = LIST_ITEM_RE.exec(l);
         if (!li) break;
-        collected.push(unquote(li[1]));
+        collected.push(unquote(li[1] ?? ""));
       }
       if (collected.length > 0) {
         field.kind = "block-seq";
@@ -479,7 +481,7 @@ type Findings = { critical: number; high: number; medium: number; low?: number; 
 
 function cmdList(args: Args): void {
   const { tasks } = loadTasks();
-  const want = (k: string, v: string) => !args.opts[k] || args.opts[k] === v;
+  const want = (k: string, v: string) => { const o = args.opt(k); return o === undefined || o === v; };
   const rows = tasks.filter(
     (t) =>
       want("milestone", t.milestone) &&
@@ -487,7 +489,7 @@ function cmdList(args: Args): void {
       want("owner", t.owner) &&
       want("risk", t.risk),
   );
-  if (args.flags.json) {
+  if (args.flag("json")) {
     console.log(JSON.stringify(rows.map(({ item, ...rest }) => rest), null, 2));
     return;
   }
@@ -510,7 +512,7 @@ function cmdNext(args: Args): void {
       t.acceptance.length > 0 &&
       t.estimate !== "XL" &&
       t.depends_on.every((d) => byId.get(d)?.status === "done") &&
-      (!args.opts.milestone || t.milestone === args.opts.milestone),
+      (!args.opt("milestone") || t.milestone === args.opt("milestone")),
   );
   if (ready.length === 0) { console.log("nothing is ready — check blocked tasks and dependencies"); return; }
   console.log("Ready to start (dependencies met, acceptance defined):\n");
@@ -519,9 +521,9 @@ function cmdNext(args: Args): void {
 
 function cmdAdd(args: Args): void {
   const doc = loadTasks();
-  const milestone = required(args.opts.milestone, "--milestone");
+  const milestone = required(args.opt("milestone"), "--milestone");
   if (!/^M[0-6]$/.test(milestone)) die(`bad --milestone "${milestone}"`);
-  const title = required(args.opts.title, "--title");
+  const title = required(args.opt("title"), "--title");
   const seq = doc.tasks.filter((t) => t.milestone === milestone).reduce((mx, t) => Math.max(mx, Number(t.id.slice(6))), 0);
   const id = `RL-${milestone}-${String(seq + 1).padStart(3, "0")}`;
 
@@ -530,11 +532,11 @@ function cmdAdd(args: Args): void {
     `  title: ${title}`,
     `  milestone: ${milestone}`,
     `  status: todo`,
-    `  owner: ${args.opts.owner ?? "agent"}`,
-    `  estimate: ${args.opts.estimate ?? "M"}`,
+    `  owner: ${args.opt("owner") ?? "agent"}`,
+    `  estimate: ${args.opt("estimate") ?? "M"}`,
     `  depends_on: []`,
     `  blocks: []`,
-    `  risk: ${args.opts.risk ?? "low"}`,
+    `  risk: ${args.opt("risk") ?? "low"}`,
     `  acceptance:`,
     `    - TODO define acceptance before this task can start`,
     `  artifacts: []`,
@@ -571,7 +573,7 @@ function cmdStart(args: Args): void {
 
 function cmdBlock(args: Args): void {
   const id = required(args.positional[0], "<task-id>");
-  const reason = required(args.opts.reason, "--reason");
+  const reason = required(args.opt("reason"), "--reason");
   const doc = loadTasks();
   const prior = requireTask(doc, id);
 
@@ -595,12 +597,12 @@ function cmdUnblock(args: Args): void {
   const id = required(args.positional[0], "<task-id>");
   const doc = loadTasks();
   requireTask(doc, id);
-  setScalar(doc, id, "status", args.opts.status ?? "in-progress");
+  setScalar(doc, id, "status", args.opt("status") ?? "in-progress");
   save(doc);
   const d = reload();
-  appendNote(d, id, `${today()} — unblocked: ${args.opts.reason ?? "resolved"}`);
+  appendNote(d, id, `${today()} — unblocked: ${args.opt("reason") ?? "resolved"}`);
   save(d);
-  console.log(`${id} -> ${args.opts.status ?? "in-progress"}`);
+  console.log(`${id} -> ${args.opt("status") ?? "in-progress"}`);
 }
 
 function cmdCheck(args: Args): void {
@@ -612,16 +614,16 @@ function cmdCheck(args: Args): void {
     die(`${id} has ${t.acceptance.length} acceptance line(s); ${n} is out of range`);
   }
   const met = new Set(t.acceptance_met);
-  if (args.flags.uncheck) met.delete(n); else met.add(n);
+  if (args.flag("uncheck")) met.delete(n); else met.add(n);
   setFlowList(doc, id, "acceptance_met", [...met].sort((a, b) => a - b));
   save(doc);
-  console.log(`${id} acceptance ${n} ${args.flags.uncheck ? "uncleared" : "met"} (${met.size}/${t.acceptance.length})`);
+  console.log(`${id} acceptance ${n} ${args.flag("uncheck") ? "uncleared" : "met"} (${met.size}/${t.acceptance.length})`);
   t.acceptance.forEach((a, i) => console.log(`  [${met.has(i + 1) ? "x" : " "}] ${i + 1}. ${a}`));
 }
 
 function cmdNote(args: Args): void {
   const id = required(args.positional[0], "<task-id>");
-  const text = required(args.positional.slice(1).join(" ") || args.opts.text, "<text>");
+  const text = required(args.positional.slice(1).join(" ") || args.opt("text"), "<text>");
   const doc = loadTasks();
   requireTask(doc, id);
   appendNote(doc, id, `${today()} — ${text}`);
@@ -653,12 +655,12 @@ function cmdDone(args: Args): void {
   const ci = readJson<CiStatus>(CI_STATUS_PATH);
   if (ci?.status !== "green") {
     const why = ci ? `CI is "${ci.status}"` : `no CI status at ${rel(CI_STATUS_PATH)}`;
-    if (!args.opts["no-ci"]) {
+    if (!args.opt("no-ci")) {
       die(`${id} cannot be done — ${why}.\n` +
           `  Once CI runs it writes that file. To close a task before CI exists, pass:\n` +
           `    tasks done ${id} --no-ci "<reason, recorded in the task notes>"`);
     }
-    console.log(`  ! closing without CI: ${args.opts["no-ci"]}`);
+    console.log(`  ! closing without CI: ${args.opt("no-ci")}`);
   }
 
   setScalar(doc, id, "status", "done");
@@ -666,9 +668,9 @@ function cmdDone(args: Args): void {
   let d = reload();
   setScalar(d, id, "done_at", today());
   save(d);
-  if (args.opts["no-ci"]) {
+  if (args.opt("no-ci")) {
     d = reload();
-    appendNote(d, id, `${today()} — closed without CI verification: ${args.opts["no-ci"]}`);
+    appendNote(d, id, `${today()} — closed without CI verification: ${args.opt("no-ci")}`);
     save(d);
   }
   console.log(`${id} -> done`);
@@ -701,7 +703,7 @@ function cmdSyncBlocks(args: Args): void {
       wanted.get(d)!.push(t.id);
     }
   }
-  if (dangling && !args.flags.force) die(`${dangling} dangling dependency reference(s); fix them or pass --force`);
+  if (dangling && !args.flag("force")) die(`${dangling} dangling dependency reference(s); fix them or pass --force`);
 
   let changed = 0;
   for (const [id, list] of wanted) {
@@ -885,21 +887,33 @@ function ensureRiskEntry(id: string, reason: string, since: string): void {
 // Plumbing
 // ---------------------------------------------------------------------------
 
-type Args = { cmd: string; positional: string[]; opts: Record<string, string>; flags: Record<string, boolean> };
+/**
+ * Options and flags are exposed as accessors rather than bare records. A record
+ * indexed by an arbitrary string hands back `string | undefined` at every call
+ * site under `noPropertyAccessFromIndexSignature`; an accessor states that once.
+ */
+type Args = {
+  cmd: string;
+  positional: string[];
+  opt(name: string): string | undefined;
+  flag(name: string): boolean;
+};
 
 function parseArgv(argv: string[]): Args {
   const [cmd = "help", ...rest] = argv;
   const positional: string[] = [];
-  const opts: Record<string, string> = {};
-  const flags: Record<string, boolean> = {};
+  const opts = new Map<string, string>();
+  const flags = new Set<string>();
+
   for (let i = 0; i < rest.length; i++) {
-    const a = rest[i];
+    const a = rest[i] ?? "";
     if (!a.startsWith("--")) { positional.push(a); continue; }
     const key = a.slice(2);
     const next = rest[i + 1];
-    if (next !== undefined && !next.startsWith("--")) { opts[key] = next; i++; } else { flags[key] = true; }
+    if (next !== undefined && !next.startsWith("--")) { opts.set(key, next); i++; } else { flags.add(key); }
   }
-  return { cmd, positional, opts, flags };
+
+  return { cmd, positional, opt: (n) => opts.get(n), flag: (n) => flags.has(n) };
 }
 
 function requireTask(doc: Doc, id: string): Task {

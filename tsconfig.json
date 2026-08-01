@@ -1,0 +1,43 @@
+// Ratline control plane — strict per brief §6.7.
+//
+// There is no build step. Node runs the TypeScript directly via type
+// stripping, so tsc is a checker only (noEmit), and `erasableSyntaxOnly` keeps
+// the codebase inside the subset Node can strip: no enums, no namespaces, no
+// parameter properties, no decorators with emit.
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["es2023"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+
+    // Required by RL-M1-001. `strict` alone is not enough: the two flags the
+    // acceptance names catch the mistakes that actually cause runtime faults —
+    // unchecked index access, and optional properties that can hold undefined.
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "useUnknownInCatchVariables": true,
+
+    // No-build-step constraints.
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+
+    "noEmit": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts", "scripts/**/*.ts"],
+  "exclude": ["node_modules"]
+}
