@@ -415,11 +415,14 @@ test("no role lists the same action twice", () => {
   }
 });
 
-test("only Owner is defined so far, and it is named as the brief names it", () => {
-  // The other six default roles are RL-M1-010. This pins the shape that task
-  // extends, so adding a role is adding an entry rather than a redesign.
+test("the default roles are the seven of the brief, named as the brief names them", () => {
+  // Was "only Owner is defined so far" until RL-M1-010 added the other six, as
+  // that task was always the one this assertion was waiting for. What the roles
+  // hold, and the prohibitions §6.3 states for each, are asserted in
+  // test/authz/default_roles.test.ts; this file only cares that the permission
+  // map the completeness checks above run over is the whole of it.
   assert.deepEqual(
     ALL_DEFAULT_ROLES.map((role) => role.name),
-    ["Owner"],
+    ["Owner", "Admin", "Infrastructure", "Release Manager", "Developer", "Viewer", "Billing"],
   );
 });
