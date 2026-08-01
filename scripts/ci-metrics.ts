@@ -160,6 +160,48 @@ async function main(): Promise<void> {
     "utf8",
   );
 
+  // ---------------------------------------------------------------------------
+  // Coverage gates (RL-M1-013)
+  //
+  // Brief §6.3: "100% branch coverage on this module, enforced in CI." Enforced
+  // means the build fails, not that a number appears on a dashboard — an
+  // unenforced target drifts down one uncovered branch at a time, and each one
+  // looks reasonable on its own.
+  //
+  // These two are gated and nothing else is. A blanket coverage target buys
+  // tests written to raise a number; these buy the specific guarantee that every
+  // path through the decision function has been exercised, including the ones
+  // that deny.
+  // ---------------------------------------------------------------------------
+  const gates: { label: string; actual: number | null; required: number; why: string }[] = [
+    {
+      label: "can() branch coverage",
+      actual: canCoverage?.branches ?? null,
+      required: 100,
+      why: "every path through the decision function must be exercised, especially the ones that deny (brief §6.3)",
+    },
+    {
+      label: "src/authz/** line coverage",
+      actual: authzCoverage?.lines ?? null,
+      required: 100,
+      why: "the authorization module is the differentiator; an unexercised line here is an unknown permission outcome (brief §6.3)",
+    },
+  ];
+
+  const gateFailures: string[] = [];
+  for (const gate of gates) {
+    if (gate.actual === null) {
+      // Absent is a failure, not a pass. Renaming or moving can.ts would
+      // otherwise switch its own gate off silently, which is the failure mode
+      // most likely to go unnoticed for months.
+      gateFailures.push(`${gate.label}: not measured — expected ${gate.required}%. ${gate.why}`);
+      continue;
+    }
+    if (gate.actual < gate.required) {
+      gateFailures.push(`${gate.label}: ${gate.actual}% < ${gate.required}%. ${gate.why}`);
+    }
+  }
+
   const failed = main.counts.failed + (integration?.counts.failed ?? 0);
   console.log(
     `tests: ${main.counts.passed}/${main.counts.tests} passed` +
@@ -168,10 +210,18 @@ async function main(): Promise<void> {
   );
   console.log(`wrote ${relative(ROOT, join(OUT_DIR, "metrics.json"))}`);
 
-  if (failed > 0) {
-    console.error(`${failed} test(s) failed`);
-    process.exit(1);
+  for (const gate of gates) {
+    const actual = gate.actual === null ? "not measured" : `${gate.actual}%`;
+    console.log(`${gate.label}: ${actual} (require ${gate.required}%)`);
   }
+
+  if (gateFailures.length > 0) {
+    console.error(`\ncoverage gate failed:`);
+    for (const failure of gateFailures) console.error(`  ${failure}`);
+  }
+
+  if (failed > 0) console.error(`${failed} test(s) failed`);
+  if (failed > 0 || gateFailures.length > 0) process.exit(1);
 }
 
 await main();

@@ -191,11 +191,9 @@ export async function require(
   ctx: AuthzContext,
   action: string,
   scope: ScopeRef,
-  resolveRoles?: (action: Action) => readonly string[],
+  resolveRoles: (action: Action) => readonly string[] = rolesCarrying,
 ): Promise<AuthorizationDecision> {
-  const decision = resolveRoles === undefined
-    ? await can(ctx, action, scope)
-    : await can(ctx, action, scope, resolveRoles);
+  const decision = await can(ctx, action, scope, resolveRoles);
   if (!decision.allowed) throw new NotPermittedError(decision);
   return decision;
 }

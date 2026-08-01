@@ -22,7 +22,7 @@ import type { Client } from "pg";
 import { can, DECISION_REASONS, describeAction, NotPermittedError, require as requirePermission, rolesCarrying } from "../../src/authz/can.ts";
 import { contextForApiToken, contextForRequest, contextForServiceIdentity, type AuthzContext } from "../../src/authz/context.ts";
 import { connect, disconnect } from "../../src/db/internal/handle.ts";
-import { isAllowed } from "../../src/authz/grants.ts";
+import { isAllowed, isSubjectType } from "../../src/authz/grants.ts";
 import { DATABASE_URL, skipWithoutDatabase, withMigratedDatabase } from "../support/db.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -520,6 +520,52 @@ test("require throws with the decision attached", { skip }, async () => {
       );
     });
   });
+});
+
+test("require honours an injected role resolver", { skip }, async () => {
+  // Covers require()'s non-default path. RL-M5-001 will pass a database-backed
+  // resolver here, so the parameter is not test-only scaffolding.
+  await withMigratedDatabase(async (client, database) => {
+    const world = await seedWorld(client);
+    await grant(client, world, "owner", "organization", null);
+    await usingScratch(database, async () => {
+      await assert.rejects(
+        () => requirePermission(ctxOf(world), "site.read", at(world.orgNodeId), () => []),
+        (error: unknown) => error instanceof NotPermittedError && error.decision.reason === "no-role-carries-action",
+      );
+    });
+  });
+});
+
+test("a context records the address when given one and null when not", () => {
+  // The audit log records the address a decision was made from (§6.3), so both
+  // shapes have to work: an inbound request has one, a background job does not.
+  const orgId = randomUUID();
+  const userId = randomUUID();
+  assert.equal(contextForRequest({ orgId, userId, requestId: "r" }).ip, null);
+  assert.equal(contextForRequest({ orgId, userId, requestId: "r", ip: "203.0.113.9" }).ip, "203.0.113.9");
+  assert.equal(contextForRequest({ orgId, userId, requestId: "r", ip: null }).ip, null);
+
+  const token = contextForApiToken({ orgId, tokenId: randomUUID(), issuedByUserId: userId, requestId: "r" });
+  assert.equal(token.ip, null);
+  const tokenWithIp = contextForApiToken({
+    orgId, tokenId: randomUUID(), issuedByUserId: userId, requestId: "r", ip: "198.51.100.4",
+  });
+  assert.equal(tokenWithIp.ip, "198.51.100.4");
+});
+
+test("isSubjectType rejects anything not a subject kind", () => {
+  // The runtime boundary guard for subject kinds arriving as data.
+  for (const good of ["user", "service_identity", "api_token"]) {
+    assert.equal(isSubjectType(good), true, `${good} should be a subject type`);
+  }
+  const bad: [string, unknown][] = [
+    ["User", "User"], ["token", "token"], ["empty string", ""], ["admin", "admin"],
+    ["a number", 1], ["null", null], ["undefined", undefined], ["an object", {}],
+  ];
+  for (const [label, value] of bad) {
+    assert.equal(isSubjectType(value), false, `${label} must not be a subject type`);
+  }
 });
 
 test("require returns the decision when permitted", { skip }, async () => {
