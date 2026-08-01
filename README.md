@@ -61,7 +61,44 @@ inside the repository function, the unscoped variant cannot be written, and
 Postgres row-level security holds independently of application code. A handler
 that forgets its check still returns nothing.
 
+## Local development
+
+Node 22.6+ is required — the code runs TypeScript directly via type stripping,
+so there is no build step. `.node-version` pins the version.
+
+Start a project-local Postgres. It lives in `.ratline/` on port 55432, so it
+neither collides with nor disturbs any Postgres you already run, and
+`./scripts/pg reset` throws it away:
+
+```bash
+./scripts/pg start
+```
+
+Apply migrations:
+
+```bash
+./scripts/migrate up
+```
+
+Check a host is ready to serve — generates secrets on first run, refuses on
+anything missing, weak or publicly bound:
+
+```bash
+./scripts/preflight
+```
+
+Run everything CI runs:
+
+```bash
+npm run check
+```
+
+`./scripts/migrate cycle` applies every migration up, down and up again. That is
+the gate a new migration has to pass: asserting a down path exists is a parser
+check, but only the second `up` reveals a rollback that left something behind.
+
 ## Requirements
 
-- Node 22.6+ for the tracking CLI (22.18+ recommended)
-- Postgres 16+ and a Go toolchain from M1 and M2 respectively
+- Node 22.6+ for the tracking CLI and the control plane (22.18+ recommended)
+- Postgres 17 for development; 16+ is the floor, since C3 needs forced row-level security
+- A Go toolchain from M2, for the agent

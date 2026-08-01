@@ -1,0 +1,70 @@
+#!/bin/sh
+# Project-local Postgres for development (RL-M1-003).
+#
+# Runs a cluster inside .ratline/ on a non-default port, so it never collides
+# with — or disturbs — whatever Postgres the developer already has. The whole
+# thing is disposable: `./scripts/pg reset` throws it away and rebuilds it.
+#
+# CI does not use this. There, ci.yml runs a Postgres service container.
+#
+#   ./scripts/pg start | stop | status | psql | reset | url
+set -eu
+
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+root=$(dirname "$here")
+PGDATA="$root/.ratline/pgdata"
+PORT="${RATLINE_PG_PORT:-55432}"
+PGUSER_="${RATLINE_PG_USER:-ratline}"
+
+# Homebrew's postgres is not on the default PATH, and macOS needs an explicit
+# locale or the postmaster aborts with "became multithreaded during startup".
+for prefix in /opt/homebrew/opt/postgresql@17 /opt/homebrew/opt/postgresql@16 /usr/local/opt/postgresql@17; do
+  if [ -x "$prefix/bin/pg_ctl" ]; then PATH="$prefix/bin:$PATH"; break; fi
+done
+export PATH
+export LC_ALL=C LANG=C
+
+if ! command -v pg_ctl >/dev/null 2>&1; then
+  echo "error: no postgres found. Install one (brew install postgresql@17) or set PATH." >&2
+  exit 1
+fi
+
+url() { echo "postgres://$PGUSER_@127.0.0.1:$PORT/${1:-ratline_dev}"; }
+
+init() {
+  [ -d "$PGDATA" ] && return 0
+  mkdir -p "$(dirname "$PGDATA")"
+  initdb -D "$PGDATA" -U "$PGUSER_" --auth=trust --encoding=UTF8 >/dev/null
+  echo "created cluster at .ratline/pgdata"
+}
+
+start() {
+  init
+  if pg_isready -h 127.0.0.1 -p "$PORT" >/dev/null 2>&1; then echo "already running on $PORT"; return 0; fi
+  pg_ctl -D "$PGDATA" -o "-p $PORT" -l "$PGDATA/server.log" start >/dev/null
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    pg_isready -h 127.0.0.1 -p "$PORT" >/dev/null 2>&1 && break
+    sleep 1
+  done
+  pg_isready -h 127.0.0.1 -p "$PORT" >/dev/null 2>&1 || { tail -20 "$PGDATA/server.log" >&2; exit 1; }
+  for db in ratline_dev ratline_test; do
+    psql -h 127.0.0.1 -p "$PORT" -U "$PGUSER_" -d postgres -tAc \
+      "select 1 from pg_database where datname='$db'" | grep -q 1 \
+      || psql -h 127.0.0.1 -p "$PORT" -U "$PGUSER_" -d postgres -c "create database $db" >/dev/null
+  done
+  echo "postgres up on $PORT — $(url)"
+}
+
+case "${1:-start}" in
+  start)  start ;;
+  stop)   pg_ctl -D "$PGDATA" stop >/dev/null 2>&1 && echo "stopped" || echo "not running" ;;
+  status) pg_isready -h 127.0.0.1 -p "$PORT" ;;
+  psql)   shift; exec psql "$(url "${1:-ratline_dev}")" ;;
+  url)    shift; url "${1:-ratline_dev}" ;;
+  reset)
+    pg_ctl -D "$PGDATA" stop >/dev/null 2>&1 || true
+    rm -rf "$PGDATA"
+    start
+    ;;
+  *) echo "usage: $0 {start|stop|status|psql|url|reset}" >&2; exit 1 ;;
+esac

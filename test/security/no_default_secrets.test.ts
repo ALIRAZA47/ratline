@@ -258,8 +258,49 @@ function literalAssignments(source: string): { identifier: string; value: string
   return found;
 }
 
-const SECRET_ISH =
-  /(secret|password|passwd|apikey|api_key|privatekey|private_key|signingkey|signing_key|token|credential|salt|kek|cookiekey|cookie_key)/i;
+/**
+ * Does this identifier name something that holds a credential?
+ *
+ * "token" cannot be matched bare. `colorToken`, `designToken` and `tokenScale`
+ * are ordinary names in a design system, and flagging them would train whoever
+ * hits it to add an exclusion rather than to look. So a token counts only when
+ * it is the whole name or is credential-qualified. The unambiguous words below
+ * are matched anywhere.
+ */
+function isSecretIsh(identifier: string): boolean {
+  const flat = identifier.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const unambiguous = /(secret|password|passwd|apikey|privatekey|signingkey|credential|passphrase|kek)/;
+  if (unambiguous.test(flat)) return true;
+  if (/^(token|tokens|salt|nonce)$/.test(flat)) return true;
+  if (/(api|access|auth|bearer|refresh|session|csrf|webhook|deploy|registry)tokens?$/.test(flat)) return true;
+  if (/(password|secret|key)salt$/.test(flat)) return true;
+  return false;
+}
+const SECRET_ISH = { test: isSecretIsh };
+
+test("the secret-shaped-identifier detector is neither blind nor trigger-happy", () => {
+  // This guards the scanner itself. It was loosened once, because it flagged
+  // `colorToken` in the design system — a real false positive that would have
+  // taught the next person to add an exclusion instead of looking. Loosening a
+  // security check is only safe if the things it must still catch are pinned.
+  const mustCatch = [
+    "cookieSecret", "SESSION_SECRET", "adminPassword", "apiKey", "API_KEY",
+    "privateKey", "signingKey", "webhookSecret", "kek", "credentials",
+    "token", "tokens", "accessToken", "refreshToken", "authToken",
+    "deployToken", "registryToken", "csrfToken", "passphrase", "salt",
+  ];
+  const mustIgnore = [
+    "colorToken", "designTokens", "tokenScale", "spacingToken", "tokenName",
+    "displayFont", "statusId", "bindAddress", "migrationId", "checksum",
+    "resourceType", "scopeLevel", "actionName", "roleName", "assaltedName",
+  ];
+  for (const name of mustCatch) {
+    assert.ok(SECRET_ISH.test(name), `"${name}" must be treated as secret-shaped`);
+  }
+  for (const name of mustIgnore) {
+    assert.ok(!SECRET_ISH.test(name), `"${name}" must not be treated as secret-shaped`);
+  }
+});
 
 test("the exclusion list stays a single file", () => {
   assert.equal(

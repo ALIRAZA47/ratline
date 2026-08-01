@@ -81,10 +81,52 @@ jobs:
           path: .ratline/
           retention-days: 30
 
+  database:
+    name: Migrations up, down, up
+    runs-on: ubuntu-latest
+
+    # A real Postgres, not a mock. Brief §9 forbids mocking the thing under
+    # test, and a migration runner tested against a fake proves nothing about
+    # whether the SQL applies.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ratline
+          POSTGRES_PASSWORD: ratline
+          POSTGRES_DB: ratline_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - run: npm ci
+
+      # Acceptance 2 (RL-M1-003). Applying up then down then up is the only way
+      # to know a down path works rather than merely exists: a down that drops
+      # the wrong object, or leaves state behind, only shows up on the second up.
+      - name: Migration cycle
+        run: ./scripts/migrate cycle
+        env:
+          DATABASE_URL: postgres://ratline:ratline@127.0.0.1:5432/ratline_test
+
+      - name: Integration tests
+        run: ./scripts/ci-metrics --integration
+        env:
+          DATABASE_URL: postgres://ratline:ratline@127.0.0.1:5432/ratline_test
+
   status:
     name: Record CI status
     runs-on: ubuntu-latest
-    needs: [tracker, code]
+    needs: [tracker, code, database]
     if: success()
     steps:
       - uses: actions/checkout@v4
