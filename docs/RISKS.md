@@ -1,0 +1,134 @@
+# Ratline — open risks
+
+**Task:** RL-M0-023
+**Reviewed at every milestone gate.**
+
+Blocked tasks are appended automatically by `./scripts/tasks block` (brief §2.3).
+Risks below R-01..R-09 were identified during planning and carry an owner.
+
+**Owner "human"** means it needs a decision or a resource the agent cannot
+create. Those are repeated in the gate report under "What I need from you".
+
+---
+
+## R-01 — No integration test host — **blocks the M2 gate**
+
+- **Owner:** human
+- **Likelihood:** certain — it is already true
+- **Impact:** high. M2's exit criteria cannot be demonstrated.
+- **Detail:** §6.7 forbids mocking anything that touches a host, and M2 must
+  prove a clean Debian 12 host provisions idempotently with zero root SSH. The
+  development machine has Docker but no VM tooling (no Lima, multipass or UTM)
+  and no Go toolchain. A container cannot faithfully exercise
+  `ProtectSystem=strict`, `PrivateTmp`, cgroup limits or `sshd` behaviour, which
+  is precisely what M2 and M4 depend on.
+- **Mitigation:** needs one of — cloud API credentials for ephemeral VMs
+  (Hetzner is cheapest for this shape), permission to install a local VM tool, or
+  a persistent test host. Raised at the M0 gate. `RL-M2-024` is owned by human
+  and blocks `RL-M2-025`, `RL-M2-026` and `RL-M2-029`.
+- **Do not work around this.** §2.10 forbids fabricating a substitute for a
+  missing host.
+
+## R-02 — C2 versus user-authored build commands
+
+- **Owner:** human
+- **Likelihood:** certain — the conflict exists in the brief as written
+- **Impact:** high. Determines whether sites have editable build commands.
+- **Detail:** C2 forbids shell construction from user-derived data. §6.5
+  requires configurable build and install commands, which are shell strings by
+  nature. ADR 0005 proposes containment — materialise the command as a file,
+  execute by argv, run as the site user in a resource-limited sandbox, make
+  setting it a distinct permission.
+- **Mitigation:** explicit ruling at the M0 gate. If the strict reading is
+  intended, `RL-M3-004` becomes fixed per-framework pipelines and the product is
+  materially smaller.
+
+## R-03 — Front-end framework chosen without knowing the team
+
+- **Owner:** human
+- **Likelihood:** medium
+- **Impact:** medium. Cheap to change now, expensive after `RL-M1-028`.
+- **Detail:** ADR 0001 recommends SvelteKit on runtime size and reactivity
+  grounds, but the brief offers React too and the team's daily language beats
+  both arguments.
+- **Mitigation:** confirm at the M0 gate, before M1 builds the shell.
+
+## R-04 — Timing may distinguish nonexistent from unauthorized
+
+- **Owner:** agent
+- **Likelihood:** medium
+- **Impact:** low-medium. Leaks existence, not contents.
+- **Detail:** §6.3 requires the two to be indistinguishable. `RL-M1-026` tests
+  status and body byte-for-byte, but a nonexistent identifier may short-circuit
+  earlier than a foreign one.
+- **Mitigation:** documented as residual (threat model R-04). Revisit at the M5
+  gate; equalising response timing is a real cost and should be a deliberate
+  decision rather than an assumption.
+
+## R-05 — Production and non-production co-located on one host
+
+- **Owner:** agent, then human for the policy call
+- **Likelihood:** high — operators will do this
+- **Impact:** high. It is the sharpest finding in the threat model.
+- **Detail:** a Developer with `site.build_command.write` on a non-production
+  site gets code execution as that site's Linux user. If a production site runs
+  on the same host, that is one sandbox escape from production data. Isolation
+  is Linux users plus systemd, not a namespace, because containers are out of
+  scope (§5.2).
+- **Mitigation:** warn in the interface when the two are placed together;
+  recommend against it in documentation; adversarial escape test (`RL-M3-006`).
+  Not eliminable within v1 scope.
+
+## R-06 — Offline hosts survive SSH authority rotation
+
+- **Owner:** agent
+- **Likelihood:** medium
+- **Impact:** high if the authority is ever compromised
+- **Detail:** a host unreachable during rotation still trusts the old authority.
+- **Mitigation:** the rotation procedure must report unreachable hosts loudly
+  and refuse to declare success. Covered by `RL-M6-001`.
+
+## R-07 — A compromised agent's false reporting is undetected
+
+- **Owner:** agent
+- **Likelihood:** low
+- **Impact:** medium
+- **Detail:** nothing cross-checks an agent's claims about its own host, so a
+  compromised agent could report plausible-but-false inventory and health.
+- **Mitigation:** none in v1. `privd`'s independent root-owned audit log gives a
+  partial cross-check for privileged operations. Revisit at the M2 gate.
+
+## R-08 — All three crown-jewel keys live on one machine
+
+- **Owner:** human
+- **Likelihood:** n/a — a structural property
+- **Impact:** high. Control plane compromise reaches all of them.
+- **Detail:** SSH authority, instruction signing and secret wrapping keys all sit
+  on the control plane. The external key manager is a seam, not v1 scope.
+- **Mitigation candidate, not yet scoped:** require second-human approval for
+  the highest-risk operations — adding a host, installing a sudoers fragment,
+  authority operations. Raised at the M0 gate as a scope question.
+
+## R-09 — Build contention is bounded, not eliminated
+
+- **Owner:** agent
+- **Likelihood:** medium
+- **Impact:** medium
+- **Detail:** `CPUQuota` and `MemoryMax` bound a build, but page cache pressure
+  and disk I/O are not partitioned. A heavy build will be visible on a
+  latency-sensitive site sharing the host.
+- **Mitigation:** lower default build limits than runtime limits, per-host
+  concurrency caps, and build load shown separately from application load on the
+  host detail screen (ADR 0009).
+
+## R-10 — No remote repository yet
+
+- **Owner:** human
+- **Likelihood:** certain
+- **Impact:** low, rising at M1
+- **Detail:** the repository is local only. The CI workflow is written but has
+  never run, so the metrics and CI-status files `STATUS.md` reads do not exist
+  and the `tasks done` CI gate has to be bypassed with a recorded reason.
+- **Mitigation:** create the GitHub organization (`ratline-dev` or `getratline`
+  per §1) and push. Until then, M0 tasks are closed with `--no-ci` and the reason
+  is recorded in each task's notes.
