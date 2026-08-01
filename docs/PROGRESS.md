@@ -14,6 +14,59 @@ and which task IDs.
 
 ---
 
+## 2026-08-02 — Session 11 — M1
+
+**Goal:** Close the audit truncation gap (RL-M1-015), prove attribution
+(RL-M1-016), with password authentication and sessions delegated.
+
+**Completed:** RL-M1-015, RL-M1-016, RL-M1-017 (delegated).
+
+**In progress:** none.
+
+**In review:** RL-M1-002, unchanged — still needs a first real CI run.
+
+**Blocked:** none.
+
+**Decisions made:** ADR 0014 (proposed) — sessions and password storage.
+
+**Surprises / what I learned:**
+
+- **A hash chain provably cannot detect truncation of its own head**, because
+  the evidence is the part that was removed. That is not a bug to fix but a
+  property to work around, and the workaround is remembering the head outside
+  the chain. Worth being precise about what it buys: not impossibility, but
+  turning a silent deletion into a loud contradiction.
+- Testing attribution as a NEGATIVE — that no code path can omit an actor —
+  produced better tests than testing that we currently write one. The three
+  routes (nullable column, context without an actor, job inventing a principal)
+  each needed a different mechanism, and listing them was what found the third.
+- **My own mutation reproductions were wrong twice in one session.** One regex
+  missed a table alias and silently did nothing; one replacement referenced
+  undefined variables and failed to compile rather than changing semantics. Both
+  produced numbers that contradicted the agent's report — and the agent was
+  right. A mutation that does not compile is not a mutation, and a mutation that
+  matches nothing is worse, because it looks like a passing result. Check that
+  the mutation applied before believing what the suite says about it.
+- The sessions agent reported, unprompted, that no functional test can catch a
+  non-constant-time comparison — every variant accepts the same passwords and
+  differs only in rejection timing — and that its structural assertion is
+  incomplete in a specific, named way. That is the most useful kind of report:
+  it says which guarantees are enforced and which are conventional, instead of
+  letting a green suite imply they are the same.
+- Two things it declined to build rather than paper over: sign-in audit entries,
+  because inventing an action name outside the catalogue would be the
+  decentralised vocabulary this codebase avoids; and an administrative password
+  reset, because shipping an ungated one is worse than shipping none. Both are
+  now tasks rather than silences.
+
+**Deviations from brief:** none.
+
+**Next session should start with:** RL-M1-018 (role changes take effect on
+active sessions) — it closes the sign-in audit gap and the administrative
+revocation stand-in at once, and RL-M1-034 depends on it. RL-M1-020 (rate
+limiting) is the mitigation for R-15 and is independent. RL-M1-024 has to
+resolve the pre-auth context seam ADR 0014 names.
+
 ## 2026-08-02 — Session 10 — M1, and a scope change
 
 **Goal:** The hash-chained audit log (C6), with API tokens delegated. Then a

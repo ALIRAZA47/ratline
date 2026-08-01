@@ -974,55 +974,82 @@
 - id: RL-M1-015
   title: Schedule audit chain verification and surface its result
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M1-014]
   blocks: []
   risk: medium
+  started_at: 2026-08-01
+  done_at: 2026-08-01
   acceptance:
     - Verification runs on a schedule and records its own result as an audit entry
     - A broken chain raises an alert rather than failing silently
     - The last verification time is visible in the interface
-  artifacts: []
+  artifacts:
+    - src/db/migrations/20260801000009_audit_verification.sql
+    - src/repo/audit_verification.ts
+    - src/jobs/audit_verification_job.ts
+    - test/security/audit_verification.test.ts
   decisions: []
   notes: |
     2026-08-01 — RL-M1-014 leaves one gap this task must close: truncating the tail of a chain leaves it internally consistent, so verification alone reports clean. Scheduled verification has to record the expected head — sequence and hash — after each run and compare on the next, so a shortened log is detected as a head that moved backwards.
 
+    2026-08-01 — Closes the truncation gap RL-M1-014 recorded. A hash chain provably cannot detect removal of its own head — the evidence is the part that was deleted — so each run records the head it saw in a separate append-only table, and the next run refuses a head that moved backwards. That does not make truncation impossible, but it turns a silent deletion into a loud contradiction.
+    2026-08-01 — The job raises rather than logs. A verification job that writes a line and exits zero is a job whose failures nobody sees, and a chain that quietly stopped verifying three weeks ago is worse than no chain — it is one someone will rely on.
+    2026-08-01 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 12 tests against real Postgres; watermark and alerting mutation-tested four ways.
+  acceptance_met: [1, 2, 3]
 - id: RL-M1-016
   title: Ensure every privileged action carries an attributable actor
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M1-014]
   blocks: []
   risk: high
+  started_at: 2026-08-01
+  done_at: 2026-08-01
   acceptance:
     - Automation acts as a named service identity with its own permissions
     - There is no code path that writes an audit entry without an actor
     - A test asserts that a background job with no actor fails rather than defaulting to a system principal
   artifacts:
     - test/security/actor_attribution.test.ts
+    - src/repo/audit.ts
+    - src/authz/context.ts
   decisions: []
+  notes: |
+    2026-08-01 — Tested as a negative: not that we currently write an actor, but that no code path can omit one. A nullable column, a context built without an actor, and a job inventing a principal are the three routes, and each is closed by a different mechanism.
 
+    2026-08-01 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 11 tests; the attribution guarantees mutation-tested three ways.
+  acceptance_met: [1, 2, 3]
 - id: RL-M1-017
   title: Implement password authentication and session management
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: L
   depends_on: [RL-M1-004]
-  blocks: [RL-M1-018, RL-M1-019, RL-M1-020, RL-M1-021]
+  blocks: [RL-M1-018, RL-M1-019, RL-M1-020, RL-M1-021, RL-M1-034]
   risk: high
+  started_at: 2026-08-01
+  done_at: 2026-08-01
   acceptance:
     - Passwords are hashed with a memory-hard function using vetted parameters
     - Session identifiers rotate on privilege change and on login
     - A session fixation test confirms a pre-login identifier is never honoured after login
     - Sessions are revocable server-side and revocation is immediate
   artifacts:
+    - src/db/migrations/20260801000010_sessions.sql
+    - src/auth/passwords.ts
+    - src/auth/sessions.ts
+    - src/repo/sessions.ts
     - test/security/session_fixation.test.ts
-  decisions: []
+  decisions: [14]
+  acceptance_met: [1, 2, 3, 4]
+  notes: |
+    2026-08-01 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 337 tests pass; the expiry, clock and comparison mutations were each re-verified here after correcting my own malformed first attempts.
 
 - id: RL-M1-018
   title: Make role changes take effect immediately on active sessions
@@ -3195,3 +3222,37 @@
 
     2026-08-01 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). Verified against real Postgres; migration cycle clean.
   acceptance_met: [1, 2, 3]
+- id: RL-M1-034
+  title: Add an administrative password reset action to the catalogue
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M1-017]
+  blocks: []
+  risk: high
+  acceptance:
+    - Resetting another member's password is a catalogued action that only Owner and Admin hold
+    - The reset is audited with the actor, and never records the new value
+    - Every session belonging to that member is revoked by the reset
+  artifacts:
+    - test/authz/password_reset_permission.test.ts
+  decisions: [14]
+  notes: |
+    2026-08-02 — RL-M1-017 shipped updatePasswordHash refusing non-self writes
+    rather than an ungated administrative reset, which is the right refusal but
+    leaves a real gap: an operator whose colleague has lost access has no route.
+    Recorded as threat-model R-17.
+- id: RL-M1-035
+  title: Decide whether sessions need an idle timeout
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: S
+  depends_on: []
+  blocks: []
+  risk: medium
+  acceptance:
+    - TODO define acceptance before this task can start
+  artifacts: []
+  decisions: []
