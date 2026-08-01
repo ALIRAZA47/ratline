@@ -14,6 +14,52 @@ and which task IDs.
 
 ---
 
+## 2026-08-01 — Session 7 — M1
+
+**Goal:** RL-M1-006 — row-level security, the layer C3 rests on.
+
+**Completed:** RL-M1-006.
+
+**In progress:** none.
+
+**In review:** RL-M1-002, unchanged — still needs a first real CI run.
+
+**Blocked:** none in the tracker. RL-M1-028 still wants the DESIGN.md 10.1
+ruling before the shell is built.
+
+**Decisions made:** none new. ADRs 0001–0011 remain `proposed`.
+
+**Surprises / what I learned:**
+
+- **The development role is a superuser, and a superuser bypasses RLS
+  unconditionally.** Had I written these tests on the migration connection they
+  would all have passed while exercising no policy at all — a suite that cannot
+  fail, which is worse than no suite. Every assertion now connects as
+  `ratline_app`, an unprivileged NOBYPASSRLS role, and there is a test asserting
+  that role is neither superuser nor BYPASSRLS.
+- **Found a complete bypass I had introduced in RL-M1-005.** A view runs with
+  its OWNER's permissions unless `security_invoker` is set, so `scope_ancestry`
+  would have returned every tenant's hierarchy to anyone able to select from it.
+  Any view over a tenant table needs the same setting; the RLS suite now covers
+  it.
+- Deleting the `WITH CHECK` clause from a policy is NOT caught by the tests, and
+  that is correct: Postgres falls back to the `USING` expression, so the
+  mutation is semantically null. Making it `with check (true)` IS caught. Worth
+  recording, because "the test didn't catch it" and "the change did nothing" look
+  identical from the outside and lead to opposite conclusions.
+- No parallel agent this session, deliberately. The remaining ready work all
+  touches the database schema, and two streams writing migrations would collide
+  on ordering and on which tables carry policies. Fanning out here would have
+  cost more than it bought.
+
+**Deviations from brief:** none.
+
+**Next session should start with:** RL-M1-007 — the scoped repository primitive
+and the AuthzContext type, which is layer 2 of C3 and the last piece before
+RL-M1-008 can make the forbidden patterns unwritable. RL-M1-011 (grants) and
+RL-M1-017 (sessions) are also ready; RL-M1-017 is the better parallel candidate
+once RL-M1-007 lands, since by then the repository shape it needs will exist.
+
 ## 2026-08-01 — Session 6 — M1
 
 **Goal:** The C3 spine — identity and hierarchy schema — with the six remaining

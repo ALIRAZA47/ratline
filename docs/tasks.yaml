@@ -725,20 +725,30 @@
 - id: RL-M1-006
   title: Implement row-level security policies and per-transaction scoping
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: L
   depends_on: [RL-M1-005]
   blocks: [RL-M1-007]
   risk: high
+  started_at: 2026-08-01
+  done_at: 2026-08-01
   acceptance:
     - Every tenant-scoped table has row-level security enabled and forced
     - The application connects as a role that cannot bypass those policies
     - A test proves a query with the wrong tenant set returns zero rows even when the application predicate is removed
   artifacts:
+    - src/db/migrations/20260801000004_row_level_security.sql
     - test/security/rls_cross_tenant.test.ts
+    - test/support/db.ts
   decisions: [3]
+  notes: |
+    2026-08-01 — The development role created by initdb is a superuser, and a superuser bypasses RLS unconditionally. Every assertion therefore connects as ratline_app, an unprivileged NOBYPASSRLS role — running these on the migration connection would pass without exercising a single policy.
 
+    2026-08-01 — scope_ancestry needed security_invoker. A view runs with its owner's permissions by default, so as created in RL-M1-005 it would have returned every tenant's hierarchy to anyone who could select from it — a complete bypass of this layer. Any view added later over a tenant table needs the same.
+    2026-08-01 — ratline_app is NOLOGIN by design: a login role created automatically with no password is exactly the default credential C4 forbids. Enabling login is a deployment act, done by the test harness for tests and by the operator in production.
+    2026-08-01 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 11 RLS tests pass against real Postgres as an unprivileged role, mutation-tested five ways.
+  acceptance_met: [1, 2, 3]
 - id: RL-M1-007
   title: Build the scoped data-access primitive and the authorization context
   milestone: M1
