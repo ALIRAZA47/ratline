@@ -289,6 +289,8 @@ src/
                        # every function takes AuthzContext first
   authz/               # can(), permission catalogue, roles, grant resolution
                        # 100% line and branch coverage enforced in CI
+  auth/                # passwords and sessions (ADR 0014). Holds no database
+                       # handle — its queries live in src/repo/sessions.ts
   api/                 # Hono routes; declare required action, hold no permission logic
   jobs/                # queue workers
   crypto/              # envelope encryption, signing, key loading
