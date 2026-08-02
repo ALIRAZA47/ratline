@@ -43,15 +43,21 @@ create. Those are repeated in the gate report under "What I need from you".
   intended, `RL-M3-004` becomes fixed per-framework pipelines and the product is
   materially smaller.
 
-## R-03 — Front-end framework chosen without knowing the team
+## R-03 — Front-end framework chosen without knowing the team — CLOSED
 
 - **Owner:** human
-- **Likelihood:** medium
-- **Impact:** medium. Cheap to change now, expensive after `RL-M1-028`.
-- **Detail:** ADR 0001 recommends SvelteKit on runtime size and reactivity
+- **Status:** **closed 2026-08-02. React.**
+- **Detail:** ADR 0001 recommended SvelteKit on runtime size and reactivity
   grounds, but the brief offers React too and the team's daily language beats
-  both arguments.
-- **Mitigation:** confirm at the M0 gate, before M1 builds the shell.
+  both arguments. It does: a framework nobody reaches for fluently is paid for
+  on every screen for the life of the product, while the runtime-size cost is
+  paid once per page load.
+- **Outcome:** ruled before `RL-M1-028` started, which is what the mitigation
+  asked for. ADR 0001 revised to record the ruling and keep the original
+  recommendation visible. The residual — a larger bundle on a box the operator
+  pays for — is carried as a requirement to server-render the M1 screens where
+  possible and to measure the log stream and the tension line, the two surfaces
+  the SvelteKit argument was built around.
 
 ## R-04 — Timing may distinguish nonexistent from unauthorized
 

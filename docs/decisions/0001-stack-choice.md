@@ -80,17 +80,40 @@ Postgres, not Redis. Argued separately.
 
 ### Front end
 
-SvelteKit. The reasoning: one framework covers server rendering and client
-behaviour with no separate routing story; the runtime is small, which matters for
-a tool people load during an incident on a hotel wifi VPN; and Svelte 5's
-fine-grained reactivity suits the log stream, which is the highest-frequency
-surface in the product.
+**React — ruled by the human owner on 2026-08-02, superseding this ADR's original
+recommendation of SvelteKit.** The original text is kept below because an ADR
+that quietly rewrites itself is a record of nothing.
 
-**This is the weakest recommendation in this ADR and the most reversible.** The
-signature screen needs virtualisation either way, `xterm.js` is framework
-agnostic, and if the team writes React daily then React is the better answer for
-reasons no benchmark captures. This is listed as an open question in the M0 gate
-report.
+The ruling closes R-03, which existed for exactly this and named `RL-M1-028` as
+the point after which the change gets expensive. It was taken before that task
+started, which is what the risk asked for.
+
+> *Original recommendation, not taken:* SvelteKit. The reasoning: one framework
+> covers server rendering and client behaviour with no separate routing story;
+> the runtime is small, which matters for a tool people load during an incident
+> on a hotel wifi VPN; and Svelte 5's fine-grained reactivity suits the log
+> stream, which is the highest-frequency surface in the product.
+>
+> **This is the weakest recommendation in this ADR and the most reversible.** The
+> signature screen needs virtualisation either way, `xterm.js` is framework
+> agnostic, and if the team writes React daily then React is the better answer
+> for reasons no benchmark captures.
+
+The argument that decided it is the one the original text already conceded: the
+team's daily language beats a runtime-size benchmark, because the cost of a
+framework nobody reaches for fluently is paid on every screen for the life of the
+product, while the runtime-size cost is paid once per page load and is
+measurable in kilobytes.
+
+What this costs, recorded rather than waved past. The shipped bundle will be
+larger on a box the operator pays for, which cuts against §1's "an operations
+console should feel like an instrument" more than it cuts against any hard
+constraint. Two things follow and are treated as requirements rather than hopes:
+the M1 screens are server-rendered wherever they can be, and the log stream and
+the tension line — the two high-frequency surfaces the original reasoning was
+built around — get measured, because fine-grained reactivity was a real argument
+and losing it is a real cost. `xterm.js` and the virtualised signature screen are
+unaffected; both were framework-agnostic in either world.
 
 ### Agent
 
@@ -109,7 +132,7 @@ standard library" is realistic rather than aspirational.
 | Data access | Drizzle behind a mandatory scoping layer (ADR 0003) |
 | Database | Postgres 16+, row-level security enabled |
 | Queue | Postgres (ADR 0007) |
-| Front end | SvelteKit — **subject to confirmation, see gate report** |
+| Front end | React — **ruled 2026-08-02, closing R-03.** This ADR originally recommended SvelteKit |
 | Agent | Go, static binary |
 | Privileged helper | Go, static binary (ADR 0004) |
 | Assets | All self-hosted: fonts, icons, scripts. No external origin at runtime. |

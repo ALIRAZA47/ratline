@@ -12,7 +12,19 @@ hurry?** Density and scannability beat polish, while still feeling deliberate.
 
 ## 1. The organising rule
 
-> **Colour means status. Nothing else is allowed to be saturated.**
+> **Colour means status or production. Nothing else is allowed to be saturated.**
+
+*Amended 2026-08-02, ruling on §10.1.* The rule was "colour means status" and
+nothing else. It now admits exactly one more meaning — **production** — because
+§4's environment chip needs to be unmissable and form alone was judged not to
+carry far enough across a room. The amendment is written into the rule itself
+rather than kept as an exception list, so that a third meaning has to argue with
+this sentence instead of appending to a footnote.
+
+The reserved production hue is used **nowhere else in the interface**. That is
+the whole basis of the amendment: a hue that appears in one place has one
+meaning, and the confusion §1 exists to prevent — reading an amber chip as an
+amber status — needs the two vocabularies to overlap. They must not.
 
 Ratline has no brand accent colour. Every saturated hue on screen carries
 operational meaning, so a spot of red is *always* a failure and never a
@@ -237,14 +249,38 @@ This was written into the plan in M0 and only surfaced when the tokens were
 built (RL-M1-027). No environment palette has been invented; the tokens
 deliberately stop short of one.
 
-**Recommendation: distinguish the chip by form, not hue.** Production gets a
-filled chip in `--chalk` on `--tar` — maximum contrast, no saturation — while
-non-production environments get an outlined chip in `--chalk-dim`. That reads as
-"heavier means more dangerous" at a glance and across a room, costs no hue, and
-leaves the status language uncontested. The break-glass banner stays the single
-sanctioned exception to §1, because it *is* a status.
+**RULED 2026-08-02 by the human owner: form AND a single production-only hue.**
 
-**RL-M1-028 needs this settled before the shell is built.**
+The recommendation put to them was form alone — production filled in `--chalk`
+on `--tar`, non-production outlined in `--chalk-dim`. The ruling takes that and
+adds one reserved hue, so production is distinguished twice over:
+
+- **Production:** a filled chip, plus the reserved production hue.
+- **Everything else:** an outlined chip in `--chalk-dim`, no hue.
+
+§1 is amended to say so — "colour means status **or production**" — rather than
+carrying this as an exception, because an exception list grows and a rule
+argues back. Three requirements follow, and they are what make the amendment
+safe rather than the beginning of a palette:
+
+1. **The production hue appears nowhere else.** Not on a button, not on a
+   heading, not on a chart series. A hue used once has one meaning; the
+   confusion §1 exists to prevent needs the two vocabularies to overlap.
+2. **It must not be confusable with any status hue.** It cannot sit near
+   `--st-fail`, `--st-warn` or `--st-ok` in hue, because the failure mode being
+   guarded against is precisely reading a chip as a status.
+3. **Form still carries it on its own.** The filled/outlined distinction is not
+   decoration beside the hue; it is the fallback for a monochrome display, a
+   colour-deficient reader and a photograph of a screen — the same reasoning as
+   §1's "status is never colour alone" corollary.
+
+The break-glass banner remains the other sanctioned use of saturation, because
+it *is* a status.
+
+**Owed by RL-M1-027's token work:** the reserved hue does not exist yet. The
+tokens deliberately stopped short of an environment palette and now need exactly
+one entry, with a contrast test and a test asserting it is unused elsewhere —
+requirement 1 above is only real if something enforces it.
 
 ### 10.2 Two contrast values sit at their limits
 
