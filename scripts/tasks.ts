@@ -898,10 +898,17 @@ function cmdRender(args: Args): void {
       );
       if ((by?.transport ?? 0) === 0) {
         out.push(
-          `> No cell is verified end to end yet: there is no HTTP server, so nothing can be`,
-          `> asked of a real route. A route that forgets to consult \`can()\` would not be caught`,
-          `> by this suite today. \`test/authz/matrix.test.ts\` fails the moment \`src/api/server.ts\``,
-          `> appears, so the harness cannot be left pointed at the wrong layer.`,
+          `> No cell is verified end to end. Either there is no HTTP server, or the harness`,
+          `> has stopped driving it — both mean a route that forgets to consult the data`,
+          `> layer would not be caught here.`,
+          ``,
+        );
+      } else if ((by?.decision ?? 0) > 0) {
+        out.push(
+          `> The remainder is verified one layer down, against \`can()\` with real grants and`,
+          `> row-level security. Two things are not expressible as a request: a route the`,
+          `> server does not bind, and a cross-tenant subject on a route with no identifier`,
+          `> in its path — the tenant comes from the session, so a URL cannot name another.`,
           ``,
         );
       }

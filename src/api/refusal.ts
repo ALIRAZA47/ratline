@@ -157,9 +157,30 @@ export function refuse(truth: RefusalTruth): { readonly wire: Refusal; readonly 
   };
 }
 
+/**
+ * A second factor is owed (RL-M1-019, added by RL-M1-042).
+ *
+ * Two constants rather than one parameterised response, so this module keeps
+ * the property the whole file is built on: nothing here varies by request.
+ *
+ * Safe to distinguish from {@link UNAUTHENTICATED}, and from each other, for the
+ * same reason 401 is safe at all — both are only ever reached by somebody who
+ * has already presented a correct password, so neither tells an unauthenticated
+ * caller anything they could not learn by trying. What they DO tell a legitimate
+ * one is which screen to show, and getting that wrong means asking somebody to
+ * verify a factor they have not enrolled.
+ */
+const SECOND_FACTOR_REQUIRED = seal(401, `{"error":"second_factor_required"}`);
+const SECOND_FACTOR_ENROLMENT_REQUIRED = seal(401, `{"error":"second_factor_enrolment_required"}`);
+
 /** No session. Takes nothing, so it can report nothing. */
 export function unauthenticated(): Refusal {
   return UNAUTHENTICATED;
+}
+
+/** The password was right and a factor is owed. `enrolmentRequired` picks which. */
+export function secondFactorOwed(enrolmentRequired: boolean): Refusal {
+  return enrolmentRequired ? SECOND_FACTOR_ENROLMENT_REQUIRED : SECOND_FACTOR_REQUIRED;
 }
 
 /**

@@ -3555,19 +3555,23 @@
 - id: RL-M1-042
   title: Serve the API, and bind every guard that is waiting for it
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: L
   depends_on: [RL-M1-043]
   blocks: [RL-M1-030]
   risk: high
+  started_at: 2026-08-02
+  done_at: 2026-08-02
   acceptance:
     - Hono binds to the route table rather than declaring routes, so a route the matrix cannot see cannot exist
     - Every state-changing request passes the CSRF guard and every authentication path spends its rate-limit budget
     - Authorization is resolved by the repository layer alone; no handler calls can()
     - Every refusal is produced by refuse(), so unauthorized and nonexistent stay byte-identical over a real socket
     - The authorization matrix verifies cells through real requests, and transport coverage stops being zero
-  artifacts: []
+  artifacts:
+    - src/api/server.ts
+    - test/authz/matrix.test.ts
   decisions: []
   notes: |
     2026-08-02 — Found while looking for what blocks RL-M1-030: NOTHING in the tracker built the control plane's own HTTP server. Every 'web server' task in the plan is about the managed nginx/caddy on hosts, which is a different thing entirely. That is a planning gap, not a sequencing choice — four open risks are each worded 'owed by whoever builds src/api/' and nobody was.
@@ -3577,6 +3581,16 @@
     2026-08-02 — OPEN QUESTION THIS TASK MUST ANSWER FIRST, and it is a §9 question rather than a plumbing one. Every route declares the action it requires, which invites a middleware that calls can() before the handler. §9 rejects 'permission checks in route handlers instead of, OR IN ADDITION TO, the data layer' — and 'in addition to' is explicit. src/auth/privilege_changes.ts already states the reason: a second check is the shape that eventually disagrees with the first.
     2026-08-02 — The three readings, so whoever starts does not rediscover them. (a) The guard DECIDES by calling can(), and repositories keep their own checks — duplication, rejected by §9 as written. (b) The guard RESOLVES the context and scope and decides nothing; the repository is the only decision. Honest, and it means an unimplemented route performs no check at all, so transport coverage cannot rise until handlers exist — acceptance 5 would be unmeetable in this task alone. (c) The guard is defence in depth, like RLS is for C3, argued as a generated-from-data outer layer that cannot be forgotten and cannot vary per handler. Consistent with how C3 is already built and in tension with §9's wording.
     2026-08-02 — My reading is (b), because §9's 'in addition to' is not ambiguous and the codebase already pays for that discipline elsewhere — but it changes what this task can deliver, so it wants an ADR proposed and a human ruling before the code, not after. Deliberately NOT started on a guess: picking (a) or (c) quietly would put a second authorization decision in the system, which is the one thing C3 is built to prevent.
+    2026-08-02 — Built on the human ruling of 2026-08-02: reading (b). THERE IS NO AUTHORIZATION MIDDLEWARE. Not a weakened one, not a defence-in-depth one — none, and can() is not imported by src/api/server.ts. A handler calls a repository function, that function resolves the permission, and a denial arrives as a thrown NotPermittedError rendered identically for every route. The route table's 'requires' is used to NAME the action in the audit entry and to decide which cells the matrix drives; naming is not deciding.
+    2026-08-02 — The ruling paid for itself before the server existed: it exposed nine repository reads that resolved no permission at all, including the audit log (RL-M1-043, R-29). A route-table middleware would have covered every one and left the repositories exactly as wrong.
+    2026-08-02 — Routes without a repository function are NOT bound. A stub would answer everybody the same way and report itself as guarded, so the matrix would measure a guard that does not exist. Eight of 27 are real; the rest 404 from the framework and transportCoverage() reports the split.
+    2026-08-02 — Three bugs the transport layer forced out that no unit test would have. A lookup returning null answered 200-null, which made 'absent' distinguishable from 'refused' at the HTTP layer and reintroduced exactly the oracle the data layer had closed. The matrix drove POSTs without a CSRF token and three cells failed — the guard is live, and a harness that omitted the token would have measured CSRF while reporting a permission failure. And a path parameter was left unsubstituted on organization-scoped routes, so /members/:userId/revoke-sessions went to the server as the literal text and recorded three roles as refused a permission they hold.
+    2026-08-02 — THE MATRIX MUTATES THE WORLD IT MEASURES. revoke-sessions is a real request against a real repository, so aiming it at the Viewer really signed the Viewer out, and the Viewer's later cells answered 401 — two roles recorded as denied a permission they hold, because an earlier cell had ended their session. There is a bystander member now, and the note says that any state-changing route the matrix learns to drive must be aimed at it.
+    2026-08-02 — Not every cell is expressible as a request, and the report says so rather than inflating. A route with no identifier in its path cannot name another tenant — the tenant comes from the session — and an unguarded route cannot prove 'no permission required' by succeeding, because a sign-in with no credentials answers 401 about a password rather than about a permission. Those stay verified one layer down. 56 transport, 448 decision, 63 declaration.
+    2026-08-02 — RL-M1-026's structural scan caught the server building its own 401 for the second-factor case. Correct: a response constructed at a call site can differ from the others. It is two more frozen constants in refusal.ts now, safe to distinguish because both are only reachable by somebody who has already presented a correct password.
+    2026-08-02 — Owed, and named rather than hidden: resolveTenant is injected because how an UNAUTHENTICATED request names its organization is a deployment question this task is not entitled to settle — one organization per installation, a subdomain, or a slug on the form. R-30 records that transport coverage is 56 of 567 and why.
+    2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 551 tests green locally; the matrix now verifies 56 cells through real requests.
+  acceptance_met: [1, 2, 3, 4, 5]
 - id: RL-M1-043
   title: Gate the repository reads that never checked
   milestone: M1

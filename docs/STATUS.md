@@ -8,7 +8,7 @@ Generated 2026-08-02.
 | Milestone | Progress | Done | Total | Open high-risk |
 | --- | --- | ---: | ---: | ---: |
 | **M0** Plan | `########################` 100% | 26 | 26 | 0 |
-| **M1** Control plane skeleton | `####################----` 84% | 37 | 44 | 3 |
+| **M1** Control plane skeleton | `#####################---` 86% | 38 | 44 | 2 |
 | **M2** Agent and first host | `------------------------` 0% | 0 | 29 | 20 |
 | **M3** Static sites end to end | `------------------------` 0% | 0 | 27 | 18 |
 | **M4** Node and Bun apps | `------------------------` 0% | 0 | 15 | 10 |
@@ -61,7 +61,6 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 - `RL-M7-015` (M7, todo) — Implement MongoDB support
 - `RL-M7-016` (M7, todo) — Decide how major-version upgrades are handled, or that they are not
 - `RL-M1-037` (M1, todo) — Require re-authentication for the highest-risk actions
-- `RL-M1-042` (M1, todo) — Serve the API, and bind every guard that is waiting for it
 
 ## Test health
 
@@ -73,7 +72,7 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | 100% | must be 100% |
 
-Measured 2026-08-02T11:16:38.179Z.
+Measured 2026-08-02T12:04:36.656Z.
 
 ### Authorization matrix (role × endpoint × subject)
 
@@ -81,14 +80,14 @@ Measured 2026-08-02T11:16:38.179Z.
 | --- | ---: |
 | Cells passing | 567 / 567 |
 | Endpoints × roles | 27 × 7 |
-| Verified end to end (real request) | 0 |
-| Verified at the decision layer (`can()`) | 504 |
+| Verified end to end (real request) | 56 |
+| Verified at the decision layer (`can()`) | 448 |
 | Unguarded by declaration, nothing to decide | 63 |
 
-> No cell is verified end to end yet: there is no HTTP server, so nothing can be
-> asked of a real route. A route that forgets to consult `can()` would not be caught
-> by this suite today. `test/authz/matrix.test.ts` fails the moment `src/api/server.ts`
-> appears, so the harness cannot be left pointed at the wrong layer.
+> The remainder is verified one layer down, against `can()` with real grants and
+> row-level security. Two things are not expressible as a request: a route the
+> server does not bind, and a cross-tenant subject on a route with no identifier
+> in its path — the tenant comes from the session, so a URL cannot name another.
 
 ## Security findings
 
@@ -108,7 +107,7 @@ CI: _no status recorded yet._
 
 | Status | Count |
 | --- | ---: |
-| todo | 106 |
+| todo | 105 |
 | review | 2 |
-| done | 63 |
+| done | 64 |
 | **all** | **171** |

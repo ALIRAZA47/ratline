@@ -50,17 +50,31 @@ import {
   type MatrixCell,
   type MatrixSubject,
 } from "../../src/authz/matrix.ts";
-import { ROUTES, routeKey, type Route } from "../../src/api/routes.ts";
+import { isSafeMethod, ROUTES, routeKey, type Route } from "../../src/api/routes.ts";
 import { connect, disconnect } from "../../src/db/internal/handle.ts";
 import {
   describeFailure,
   runMatrix,
   summariseResults,
-  transportLayerExists,
   writeMatrixReport,
   type CellExecutor,
   type CellResult,
 } from "../support/matrix_harness.ts";
+import {
+  boundRouteKeys,
+  createServer,
+  transportCoverage,
+  validateBindings,
+  type ServerDeps,
+} from "../../src/api/server.ts";
+import { mintSessionToken, sessionTokenDigest } from "../../src/auth/model.ts";
+import {
+  cookiePolicy,
+  CSRF_HEADER,
+  csrfTokenForSessionId,
+  insecureCookiesAcknowledged,
+  resolveTrustedOrigins,
+} from "../../src/api/csrf.ts";
 import {
   asApplicationRole,
   DATABASE_URL,
@@ -71,11 +85,24 @@ import {
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const skip = skipWithoutDatabase;
 
+/**
+ * The server, driven as the deployment drives it.
+ *
+ * `resolveTenant` is replaced per-world below; everything else is real. A
+ * harness that constructed a rearranged server would verify the rearrangement.
+ */
+const SERVER_DEPS: ServerDeps = {
+  cookieSecret: new Uint8Array(32).fill(7),
+  resolveTenant: () => Promise.resolve(null),
+  signInIdentityId: "00000000-0000-4000-8000-000000000000",
+  trustedOrigins: ["http://127.0.0.1:7712"],
+};
+
 // ---------------------------------------------------------------------------
 // The world
 // ---------------------------------------------------------------------------
 
-type Tree = { organization: string; project: string; environment: string };
+type Tree = { organization: string; project: string; environment: string; projectId: string };
 
 type World = {
   readonly orgId: string;
@@ -83,6 +110,23 @@ type World = {
   readonly other: Tree;
   /** One user per role, each granted exactly that role at organization scope. */
   readonly userForRole: ReadonlyMap<string, string>;
+  /** A REAL member of the other tenant — the IDOR subject for member routes. */
+  readonly otherUserId: string;
+  /**
+   * A member who holds no role and whose sessions nothing depends on.
+   *
+   * THE MATRIX MUTATES THE WORLD IT MEASURES. `POST /members/:userId/revoke-sessions`
+   * is a real request against a real repository, so it really ends that
+   * member's sessions — and the first version aimed it at the Viewer, whose
+   * own cells then answered 401 for the rest of the run. Two roles were
+   * recorded as denied a permission they hold, because an earlier cell had
+   * signed them out.
+   *
+   * The bystander exists to absorb that. Any state-changing route the matrix
+   * learns to drive should be aimed here, and a route whose effect cannot be
+   * absorbed needs the world rebuilt per cell rather than a shared one.
+   */
+  readonly bystanderId: string;
 };
 
 /** organization → team → project → environment, returning the interesting nodes. */
@@ -112,6 +156,7 @@ async function seedTree(client: Client, orgId: string): Promise<Tree> {
     "insert into projects (org_id, scope_node_id, slug, name) values ($1, $2, 'shop', 'Shop') returning id",
     [orgId, projectNode],
   );
+  const projectId = project.rows[0]?.id ?? "";
 
   const environmentNode = await node("environment", projectNode);
   await client.query(
@@ -120,7 +165,7 @@ async function seedTree(client: Client, orgId: string): Promise<Tree> {
     [orgId, project.rows[0]?.id ?? "", environmentNode],
   );
 
-  return { organization, project: projectNode, environment: environmentNode };
+  return { organization, project: projectNode, environment: environmentNode, projectId };
 }
 
 async function seedWorld(client: Client): Promise<World> {
@@ -168,11 +213,19 @@ async function seedWorld(client: Client): Promise<World> {
     [otherOrgId, strangerId],
   );
 
+  const bystander = await client.query<{ id: string }>(
+    "insert into users (email, name) values ('bystander@acme.example', 'Bystander') returning id",
+  );
+  const bystanderId = bystander.rows[0]?.id ?? "";
+  await client.query("insert into memberships (org_id, user_id) values ($1, $2)", [orgId, bystanderId]);
+
   return {
     orgId,
     own: await seedTree(client, orgId),
     other: await seedTree(client, otherOrgId),
     userForRole,
+    otherUserId: strangerId,
+    bystanderId,
   };
 }
 
@@ -272,6 +325,156 @@ function decisionExecutor(world: World): CellExecutor {
   };
 }
 
+// ---------------------------------------------------------------------------
+// The transport executor — a real request, through the real server
+// ---------------------------------------------------------------------------
+
+/**
+ * Which cells a real request can actually express.
+ *
+ * Not all of them, and the reason is worth stating rather than hiding behind a
+ * lower number. `other-tenant` and `nonexistent` are expressed by naming a
+ * resource in the path. A route with NO identifier in its path — `GET /members`,
+ * `GET /audit` — has no way to name one over HTTP: the tenant comes from the
+ * session and nothing else. At the decision layer those cells are expressible,
+ * because `can()` takes a scope node directly, so they stay verified there.
+ *
+ * Pretending otherwise would be the worse failure: driving `GET /audit` with a
+ * foreign identifier that the URL cannot carry would test the actor's own
+ * tenant and record it as an IDOR check that passed.
+ */
+function expressibleOverHttp(route: Route, subject: MatrixSubject): boolean {
+  // An UNGUARDED route has nothing for this layer to say. Its claim is "no
+  // permission is required", and a request cannot prove that by succeeding:
+  // POST /auth/sign-in with no credentials answers 401, which is a refusal
+  // about a password rather than about a permission. Driving it here recorded
+  // seven roles being "denied" a route that has no guard at all. It stays a
+  // declaration, checked structurally.
+  if (route.requires === null) return false;
+
+  if (subject === "own") return true;
+  return route.scope !== "organization";
+}
+
+/** A live session for a role's user, written the way the schema defines one. */
+async function mintSessionFor(
+  client: Client,
+  orgId: string,
+  userId: string,
+): Promise<{ token: string; sessionId: string }> {
+  const token = mintSessionToken();
+  const row = await client.query<{ id: string }>(
+    `insert into sessions (org_id, user_id, token_hash, expires_at)
+     values ($1, $2, $3, now() + interval '8 hours') returning id`,
+    [orgId, userId, sessionTokenDigest(token)],
+  );
+  return { token, sessionId: row.rows[0]?.id ?? "" };
+}
+
+/**
+ * Verify one cell by making a real request.
+ *
+ * The mapping from response to verdict is deliberately blunt: anything the
+ * server answers other than a refusal is an allow. A 200 that happens to carry
+ * an empty list is still the guard letting the request through, which is what
+ * the matrix is asking about — and RL-M1-026's refusal is the only 404 the
+ * server produces, which is why the comparison can be this simple.
+ */
+function transportExecutor(
+  world: World,
+  sessions: ReadonlyMap<string, { token: string; sessionId: string }>,
+  cookieName: string,
+): CellExecutor {
+  const bound = boundRouteKeys(SERVER_DEPS);
+  const app = createServer({
+    ...SERVER_DEPS,
+    resolveTenant: () => Promise.resolve(world.orgId),
+  });
+
+  const decide = decisionExecutor(world);
+
+  return async (cell: MatrixCell) => {
+    const route = ROUTE_BY_KEY.get(cell.routeKey);
+    if (route === undefined) throw new Error(`no route for cell ${cell.routeKey}`);
+
+    // Fall back rather than pretend. A cell the server does not bind, or one a
+    // URL cannot express, is still verified — one layer down, and the report
+    // says which.
+    if (!bound.has(cell.routeKey) || !expressibleOverHttp(route, cell.subject)) {
+      return decide(cell);
+    }
+
+    const session = sessions.get(cell.roleKey);
+    const path = pathFor(route, cell.subject, world);
+
+    // A real CSRF token on every unsafe method. Omitting it was the first
+    // version's other bug, and the refusal it produced was CORRECT — the guard
+    // is live. A matrix that left it out would measure CSRF instead of
+    // authorization and report a permission failure for both.
+    const headers: Record<string, string> = {
+      cookie: `${cookieName}=${session?.token ?? ""}`,
+      origin: "http://127.0.0.1:7712",
+    };
+    if (!isSafeMethod(route.method) && session !== undefined) {
+      headers[CSRF_HEADER] = csrfTokenForSessionId(SERVER_DEPS.cookieSecret, session.sessionId);
+    }
+
+    const response = await app.request(path, { method: route.method, headers });
+
+    const allowed = response.status !== 404 && response.status !== 401;
+    return {
+      layer: "transport",
+      actual: allowed ? "allow" : "deny",
+      signature: `${String(response.status)}:${(await response.text()).slice(0, 40)}`,
+      detail: `${route.method} ${path} answered ${String(response.status)}`,
+    };
+  };
+}
+
+/**
+ * The concrete path a cell asks for.
+ *
+ * Every `:param` is substituted, including on organization-scoped routes.
+ * Leaving them was the first version's bug: `/members/:userId/revoke-sessions`
+ * went to the server with the literal text `:userId`, the repository found no
+ * such member, and three roles that DO hold the permission were recorded as
+ * refused. A path parameter is not decoration because the scope happens to be
+ * the organization.
+ *
+ * A parameter this does not know throws rather than passing through, for the
+ * same reason NODE_FOR_PARAM does: a route silently addressed with a literal
+ * would report its whole row as denied and look like a working guard.
+ */
+function pathFor(route: Route, subject: MatrixSubject, world: World): string {
+  let path = route.path;
+  for (const match of route.path.matchAll(/:([A-Za-z][A-Za-z0-9]*)/g)) {
+    const param = match[1] ?? "";
+    path = path.replace(`:${param}`, valueFor(param, subject, world));
+  }
+  return path;
+}
+
+function valueFor(param: string, subject: MatrixSubject, world: World): string {
+  if (subject === "nonexistent") return randomUUID();
+  const own = subject === "own";
+  switch (param) {
+    case "projectId":
+      return own ? world.own.projectId : world.other.projectId;
+    case "userId":
+      // The bystander, not a role user. Someone other than the caller, so the
+      // self-shortcut in revokeSessionsOfUser does not answer instead of the
+      // permission — and someone the rest of the run does not depend on, because
+      // this route really does end their sessions.
+      return own ? world.bystanderId : world.otherUserId;
+    default:
+      throw new Error(
+        `${param} is a path parameter the matrix harness cannot supply a value for. ` +
+          `Add it — a route addressed with the literal ":${param}" reports its whole row ` +
+          `as denied and looks like a working guard.`,
+      );
+  }
+}
+
 /** Connect the pool as `ratline_app` against the scratch database. */
 async function usingApplicationConnection(database: string, fn: () => Promise<void>): Promise<void> {
   // `ratline_app` is created NOLOGIN by migration 2 — a login role with no
@@ -302,8 +505,16 @@ test("the authorization matrix", { skip }, async (t) => {
     const cells = generateMatrix();
     let results: CellResult[] = [];
 
+    // A live session per role, so the transport executor can present a real
+    // cookie rather than a manufactured actor.
+    const tokens = new Map<string, { token: string; sessionId: string }>();
+    for (const [roleKey, userId] of world.userForRole) {
+      tokens.set(roleKey, await mintSessionFor(client, world.orgId, userId));
+    }
+    const cookieName = cookiePolicy(resolveTrustedOrigins(), insecureCookiesAcknowledged()).name;
+
     await usingApplicationConnection(database, async () => {
-      results = await runMatrix(cells, decisionExecutor(world));
+      results = await runMatrix(cells, transportExecutor(world, tokens, cookieName));
     });
 
     const report = summariseResults(results);
@@ -329,13 +540,16 @@ test("the authorization matrix", { skip }, async (t) => {
 
     await t.test("no cell passed without something being decided or declared", () => {
       // A cell with no layer would be a cell nobody checked, counted as passing.
+      // `transport` joined the accepted set when the server landed — it is the
+      // STRONGEST of the three, not an exception to the rule.
       for (const result of results) {
         assert.ok(
-          result.layer === "decision" || result.layer === "declaration",
+          result.layer === "transport" || result.layer === "decision" || result.layer === "declaration",
           `${describeFailure(result)}: verified by nothing`,
         );
       }
       assert.ok(report.verified_by.decision > 0);
+      assert.ok(report.verified_by.transport > 0);
     });
 
     await t.test("another tenant's real node is refused to every role, Owner included", () => {
@@ -375,10 +589,18 @@ test("the authorization matrix", { skip }, async (t) => {
       assert.ok(compared > 0, "nothing was compared, so this test proved nothing");
     });
 
-    await t.test("the report says how much of the matrix is not yet verified end to end", () => {
-      // The number that matters is the one that is zero. If this ever reads
-      // above zero without the harness being re-pointed, something is lying.
-      assert.equal(report.verified_by.transport, 0);
+    await t.test("the report says how much of the matrix is verified end to end", () => {
+      // This assertion used to demand ZERO, because there was no server. It now
+      // demands the opposite: real requests reach real routes, and the number
+      // is on the page rather than in a caveat.
+      assert.ok(
+        report.verified_by.transport > 0,
+        "no cell was verified through a real request — the executor is falling back for all of them",
+      );
+      assert.ok(
+        report.verified_by.decision > 0,
+        "every cell claims transport verification, including ones a URL cannot express",
+      );
       assert.match(report.note, /verified end to end/);
       assert.equal(report.executed, true);
     });
@@ -456,20 +678,18 @@ test("the failure list is capped but says how much it dropped", async () => {
   assert.ok(report.failed > report.failures.length);
 });
 
-test("the harness must be re-pointed at real requests the moment a server exists", () => {
-  // The tripwire. Verifying at the decision layer is the strongest thing
-  // available while there is no HTTP layer, and it stops being sufficient the
-  // instant there is one: a route can consult can() correctly in the model and
-  // still forget to call it, which is the single most common way an endpoint
-  // ends up unguarded.
+test("the transport executor drives every route the server actually binds", () => {
+  // This replaces the tripwire RL-M1-025 left here, which failed the moment
+  // src/api/server.ts appeared. It has done its job: the harness is now pointed
+  // at real requests, and what remains is to keep it honest about WHICH cells
+  // it reaches.
   //
-  // If this test is failing, you have just added src/api/server.ts. Add a
-  // transport executor that drives real requests through it, use it for every
-  // cell it can reach, and delete this test — do not delete it first.
-  assert.equal(
-    transportLayerExists(ROOT),
-    false,
-    "src/api/server.ts now exists, so the matrix must verify cells through real " +
-      "requests rather than through can() alone. See the note above this assertion.",
-  );
+  // Not every declared route is bound — the server refuses to stub one it has
+  // no repository function for, because a stub answers everybody the same way
+  // and reports itself as guarded. So the coverage this asserts is the
+  // intersection, and `transportCoverage()` is what STATUS reports.
+  const coverage = transportCoverage(SERVER_DEPS);
+  assert.ok(coverage.bound > 0, "the server binds nothing; transport coverage would still be zero");
+  assert.ok(coverage.bound <= coverage.declared);
+  assert.deepEqual(validateBindings(SERVER_DEPS), [], "a handler is bound to a route the table does not declare");
 });

@@ -2,7 +2,7 @@
   "name": "ratline",
   "version": "0.0.0",
   "private": true,
-  "description": "Self-hosted deployment and server management platform \u2014 control plane",
+  "description": "Self-hosted deployment and server management platform — control plane",
   "type": "module",
   "license": "UNLICENSED",
   "engines": {
@@ -33,6 +33,8 @@
     "@fontsource-variable/archivo": "5.3.0",
     "@fontsource/jetbrains-mono": "5.3.0",
     "@fontsource/public-sans": "5.3.0",
+    "@hono/node-server": "^2.0.12",
+    "hono": "^4.12.33",
     "pg": "^8.22.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
