@@ -33,7 +33,23 @@ _None._
 
 ## Blocked
 
-_None._
+| Task | Age | Owner | Risk | Acceptance | Title |
+| --- | ---: | --- | --- | ---: | --- |
+| `RL-M2-010` | 0d | agent | **high** | 0/4 | Implement agent installation over SSH as the only raw SSH path |
+| `RL-M2-011` | 0d | agent | medium | 0/3 | Make bootstrap idempotent and resumable |
+| `RL-M2-012` | 0d | agent | low | 0/3 | Collect host inventory |
+| `RL-M2-013` | 0d | agent | low | 0/3 | Implement health reporting and heartbeat |
+| `RL-M2-015` | 0d | agent | **high** | 0/3 | Provision base packages and unattended security upgrades |
+| `RL-M2-016` | 0d | agent | medium | 0/3 | Install and baseline the web server |
+| `RL-M2-019` | 0d | agent | medium | 0/3 | Install the runtime version manager and pin runtimes per site |
+| `RL-M2-020` | 0d | agent | **high** | 0/4 | Create per-site Linux users and the site directory layout |
+| `RL-M2-021` | 0d | agent | **high** | 0/3 | Manage the host firewall |
+| `RL-M2-022` | 0d | agent | medium | 0/3 | Apply an intrusion response policy for repeated authentication failures |
+| `RL-M2-023` | 0d | agent | **high** | 0/4 | Implement agent self-update with rollback |
+| `RL-M2-024` | 0d | human | **high** | 0/3 | Build the integration test harness against real hosts |
+| `RL-M2-025` | 0d | agent | medium | 0/3 | Prove provisioning is idempotent end to end |
+| `RL-M2-026` | 0d | agent | **high** | 0/3 | Chaos test the provisioning path against connection loss |
+| `RL-M2-029` | 0d | agent | **high** | 0/3 | Verify zero root SSH remains after bootstrap |
 
 ## In review
 
@@ -46,9 +62,9 @@ _None._
 
 These cannot be marked `done` until they name a security-suite artifact (brief §2.2).
 
-- `RL-M2-021` (M2, todo) — Manage the host firewall
-- `RL-M2-024` (M2, todo) — Build the integration test harness against real hosts
-- `RL-M2-026` (M2, todo) — Chaos test the provisioning path against connection loss
+- `RL-M2-021` (M2, blocked) — Manage the host firewall
+- `RL-M2-024` (M2, blocked) — Build the integration test harness against real hosts
+- `RL-M2-026` (M2, blocked) — Chaos test the provisioning path against connection loss
 - `RL-M3-010` (M3, todo) — Implement one-click rollback
 - `RL-M3-013` (M3, todo) — Issue certificates over HTTP validation
 - `RL-M4-003` (M4, todo) — Implement zero-downtime reload
@@ -106,7 +122,8 @@ CI: _no status recorded yet._
 
 | Status | Count |
 | --- | ---: |
-| todo | 102 |
+| todo | 87 |
+| blocked | 15 |
 | review | 2 |
 | done | 68 |
 | **all** | **172** |

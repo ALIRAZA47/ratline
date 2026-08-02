@@ -1634,12 +1634,13 @@
 - id: RL-M2-010
   title: Implement agent installation over SSH as the only raw SSH path
   milestone: M2
-  status: todo
+  status: blocked
   owner: agent
   estimate: L
   depends_on: [RL-M2-005]
   blocks: [RL-M2-011, RL-M2-029]
   risk: high
+  blocked_at: 2026-08-02
   acceptance:
     - Bootstrap uses an operator-supplied key for that single action and does not retain it
     - The binary is verified by checksum and signature before it is executed
@@ -1648,54 +1649,65 @@
   artifacts:
     - test/security/bootstrap_no_shell_test.go
   decisions: [2, 4, 5]
+  notes: |
+    2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
 - id: RL-M2-011
   title: Make bootstrap idempotent and resumable
   milestone: M2
-  status: todo
+  status: blocked
   owner: agent
   estimate: M
   depends_on: [RL-M2-010]
   blocks: []
   risk: medium
+  blocked_at: 2026-08-02
   acceptance:
     - Running bootstrap twice on the same host converges rather than duplicating anything
     - An interrupted bootstrap resumes cleanly rather than requiring manual cleanup
     - Partial state is detected and reported rather than assumed
   artifacts: []
   decisions: []
+  notes: |
+    2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
 - id: RL-M2-012
   title: Collect host inventory
   milestone: M2
-  status: todo
+  status: blocked
   owner: agent
   estimate: M
   depends_on: [RL-M2-006]
   blocks: [RL-M2-013]
   risk: low
+  blocked_at: 2026-08-02
   acceptance:
     - Distribution, kernel, architecture, processor count, memory, disk and installed runtimes are reported
     - Inventory survives a reboot and is refreshed on reconnection
     - Collection never shells out
   artifacts: []
   decisions: []
+  notes: |
+    2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
 - id: RL-M2-013
   title: Implement health reporting and heartbeat
   milestone: M2
-  status: todo
+  status: blocked
   owner: agent
   estimate: M
   depends_on: [RL-M2-012]
   blocks: [RL-M2-014]
   risk: low
+  blocked_at: 2026-08-02
   acceptance:
     - Load, memory, disk and service health are reported on an interval
     - A missed heartbeat marks the host degraded within a bounded time
     - Thresholds are configurable and drive alerting
   artifacts: []
   decisions: []
+  notes: |
+    2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
 - id: RL-M2-014
   title: Build the host list and host detail screens
@@ -1716,12 +1728,13 @@
 - id: RL-M2-015
   title: Provision base packages and unattended security upgrades
   milestone: M2
-  status: todo
+  status: blocked
   owner: agent
   estimate: M
   depends_on: [RL-M2-008]
   blocks: [RL-M2-016, RL-M2-019, RL-M2-021]
   risk: high
+  blocked_at: 2026-08-02
   acceptance:
     - Base package installation runs through the enumerated operation set with typed arguments
     - Unattended security upgrades are configurable per host and default to on
@@ -1729,22 +1742,27 @@
   artifacts:
     - test/security/package_argument_fuzz_test.go
   decisions: [4, 5]
+  notes: |
+    2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
 - id: RL-M2-016
   title: Install and baseline the web server
   milestone: M2
-  status: todo
+  status: blocked
   owner: agent
   estimate: M
   depends_on: [RL-M2-015]
   blocks: [RL-M2-017]
   risk: medium
+  blocked_at: 2026-08-02
   acceptance:
     - Caddy is installed with a minimal baseline configuration and runs under its own user
     - The Nginx path is left as a documented seam and is not implemented
     - Installation is idempotent
   artifacts: []
   decisions: [10]
+  notes: |
+    2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
 - id: RL-M2-017
   title: Generate web server virtual host configuration from templates
@@ -1784,28 +1802,32 @@
 - id: RL-M2-019
   title: Install the runtime version manager and pin runtimes per site
   milestone: M2
-  status: todo
+  status: blocked
   owner: agent
   estimate: L
   depends_on: [RL-M2-015]
   blocks: [RL-M2-025, RL-M3-006]
   risk: medium
+  blocked_at: 2026-08-02
   acceptance:
     - Multiple Node and Bun versions coexist on one host with no global install
     - A site's runtime is pinned and changing it is a deliberate rollback-able action
     - Runtime downloads are checksum verified
   artifacts: []
   decisions: []
+  notes: |
+    2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
 - id: RL-M2-020
   title: Create per-site Linux users and the site directory layout
   milestone: M2
-  status: todo
+  status: blocked
   owner: agent
   estimate: L
   depends_on: [RL-M2-008]
   blocks: [RL-M2-025, RL-M2-027, RL-M3-003]
   risk: high
+  blocked_at: 2026-08-02
   acceptance:
     - Each site gets its own unprivileged user following the naming convention
     - Directory modes prevent one site user from reading another site's files
@@ -1814,16 +1836,19 @@
   artifacts:
     - test/security/site_path_traversal_test.go
   decisions: [4]
+  notes: |
+    2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
 - id: RL-M2-021
   title: Manage the host firewall
   milestone: M2
-  status: todo
+  status: blocked
   owner: agent
   estimate: L
   depends_on: [RL-M2-015]
   blocks: [RL-M2-022]
   risk: high
+  blocked_at: 2026-08-02
   acceptance:
     - Default policy denies inbound except the ports the host actually needs
     - Rule changes are validated and rolled back if connectivity to the control plane is lost
@@ -1831,32 +1856,38 @@
   artifacts:
     - test/integration/firewall_lockout_test.go
   decisions: []
+  notes: |
+    2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
 - id: RL-M2-022
   title: Apply an intrusion response policy for repeated authentication failures
   milestone: M2
-  status: todo
+  status: blocked
   owner: agent
   estimate: M
   depends_on: [RL-M2-021]
   blocks: []
   risk: medium
+  blocked_at: 2026-08-02
   acceptance:
     - Repeated failed authentication attempts result in a temporary source block
     - The policy is configurable per host and visible in the interface
     - Blocks are recorded in the audit trail
   artifacts: []
   decisions: []
+  notes: |
+    2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
 - id: RL-M2-023
   title: Implement agent self-update with rollback
   milestone: M2
-  status: todo
+  status: blocked
   owner: agent
   estimate: L
   depends_on: [RL-M2-006]
   blocks: []
   risk: high
+  blocked_at: 2026-08-02
   acceptance:
     - Updates are signature verified before installation
     - A failed update rolls back to the previous binary automatically
@@ -1865,16 +1896,19 @@
   artifacts:
     - test/security/agent_update_signature_test.go
   decisions: [2]
+  notes: |
+    2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
 - id: RL-M2-024
   title: Build the integration test harness against real hosts
   milestone: M2
-  status: todo
+  status: blocked
   owner: human
   estimate: L
   depends_on: [RL-M2-001]
   blocks: [RL-M2-025, RL-M2-029]
   risk: high
+  blocked_at: 2026-08-02
   acceptance:
     - Provisioning tests run against a real Debian 12 machine with a working init system
     - The harness creates and destroys hosts without manual steps
@@ -1888,15 +1922,17 @@
     systemd sandboxing this milestone depends on. Blocks the M2 gate. See
     RISKS.md and the M0 gate report question on test infrastructure.
 
+    2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 - id: RL-M2-025
   title: Prove provisioning is idempotent end to end
   milestone: M2
-  status: todo
+  status: blocked
   owner: agent
   estimate: M
   depends_on: [RL-M2-024, RL-M2-018, RL-M2-019, RL-M2-020]
   blocks: [RL-M2-026, RL-M3-001]
   risk: medium
+  blocked_at: 2026-08-02
   acceptance:
     - A bare host reaches fully provisioned in one action
     - The same action run twice produces no change on the second run
@@ -1904,16 +1940,19 @@
   artifacts:
     - test/integration/provision_idempotent_test.go
   decisions: []
+  notes: |
+    2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
 - id: RL-M2-026
   title: Chaos test the provisioning path against connection loss
   milestone: M2
-  status: todo
+  status: blocked
   owner: agent
   estimate: L
   depends_on: [RL-M2-025]
   blocks: []
   risk: high
+  blocked_at: 2026-08-02
   acceptance:
     - The connection is killed at randomised points across many runs
     - Every run leaves the host in a state that either completes or cleanly resumes
@@ -1921,6 +1960,8 @@
   artifacts:
     - test/integration/provision_chaos_test.go
   decisions: []
+  notes: |
+    2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
 - id: RL-M2-027
   title: Fuzz every user-controllable field that reaches a host
@@ -1959,12 +2000,13 @@
 - id: RL-M2-029
   title: Verify zero root SSH remains after bootstrap
   milestone: M2
-  status: todo
+  status: blocked
   owner: agent
   estimate: M
   depends_on: [RL-M2-010, RL-M2-024]
   blocks: []
   risk: high
+  blocked_at: 2026-08-02
   acceptance:
     - An automated check confirms the control plane holds no credential granting root SSH to a managed host
     - The check runs in CI and is part of the gate evidence
@@ -1972,6 +2014,8 @@
   artifacts:
     - test/security/no_root_ssh_test.go
   decisions: [4]
+  notes: |
+    2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
 # ===========================================================================
 # M3 — Static sites end to end
