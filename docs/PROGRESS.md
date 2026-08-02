@@ -14,6 +14,74 @@ and which task IDs.
 
 ---
 
+## 2026-08-02 — Session 13 — M1
+
+**Completed:** RL-M1-024 (closed at the top of the session), RL-M1-025,
+RL-M1-026, RL-M1-034, RL-M1-035, and — delegated to subagents, then reviewed and
+merged — RL-M1-021 and RL-M1-019. M1 is 31/40. Opened RL-M1-036 through
+RL-M1-040 for gaps found while reviewing.
+
+**Two human rulings taken, both of which were blocking RL-M1-028:** React over
+SvelteKit, closing R-03 before the point the risk register named as expensive;
+and the environment chip distinguished by form *and* one reserved hue, which
+amends DESIGN §1 from "colour means status" to "colour means status or
+production".
+
+**Surprises / what I learned:**
+
+- **The honest number is the one that is zero.** RL-M1-025 could have reported
+  567/567 and been useless: there is no HTTP server, so no cell is verified end
+  to end and every endpoint could be unguarded with the suite still green. Every
+  cell now records the layer that verified it, `transport: 0` is rendered in
+  STATUS, and `test/authz/matrix.test.ts` fails the moment `src/api/server.ts`
+  appears. §9 calls "TODO: add auth check later" an anti-pattern; that is the
+  same TODO written as a build failure.
+- **Staleness is better handled by deletion than by a timestamp.** ci-metrics
+  removes the matrix report before the suite runs, so a report present
+  afterwards was written by this run. Verified by stopping Postgres: the matrix
+  flipped to `executed: false` rather than reporting yesterday's green.
+- **RL-M1-026's real requirement is not "both return 404".** Two code paths that
+  produce the same bytes today are two code paths, and one grows a helpful
+  message. The wire response is one frozen constant, `Refusal` is branded so
+  nothing else can construct one, and `refuse()` returns the response and the
+  audit record together — you cannot get the refusal without producing the entry
+  that says what really happened.
+- **A test of mine found a real ordering bug in my own work.** RL-M1-034 copied
+  `setOwnPassword`'s revoke-first order, which meant an Infrastructure operator —
+  holding `member.revoke_sessions` but not `member.reset_password` — ENDED a
+  member's sessions on the way to being refused. A refusal with an effect, and
+  an unaudited one. The write goes first because the write is where the
+  permission is resolved.
+- **An idle timeout on `last_seen_at` would be a control that is not one.** It
+  records the last request, not the last human, and a polling dashboard writes it
+  on a timer — so it would fire only when the tab is closed, which the absolute
+  lifetime already covers, and never for the abandoned open tab, which is the
+  whole scenario. Shipping it is worse than not: an operator who believes the
+  console signs itself out locks their screen less often.
+- **Delegation worked this time, and the difference was one line.** The two
+  agents that stalled last session almost certainly hit `node` v20 rejecting
+  `--experimental-strip-types`; telling them to put Node 22 on PATH first, and
+  giving them isolated worktrees, produced two substantial merged features.
+- **Both agents reported their own gaps without being asked**, including one
+  uncaught mutation. Neither report was accurate about everything: the CSRF
+  agent reported lint clean when eslint was sweeping the other agent's worktree
+  and failing. Read the tree, not the report.
+- **My own backup collapsed two files onto one name** — `src/auth/sessions.ts`
+  and `src/repo/sessions.ts` both copied to `$SCRATCH/sessions.ts` — and
+  restoring clobbered an hour of uncommitted work. Recovered from HEAD plus the
+  edits in this transcript. Distinct backup names from now on, not just a
+  distinct directory.
+
+**Still owed / next session should start with:** RL-M1-040 (the reserved
+production hue, now blocking RL-M1-028), then the M1 front end on React —
+RL-M1-028, 029, 030, 031. RL-M1-002 and RL-M1-020 remain in `review` and cannot
+leave it until there is a remote and CI has actually run (R-10). R-28 is the
+sharpest open security item: two-factor verification publishes a rate-limit
+budget that nothing spends, because the limiter must run before the work and
+that ordering belongs to a route handler that does not exist.
+
+---
+
 ## 2026-08-02 — Session 12 (continued) — M1
 
 **Completed:** RL-M1-020 reached `review`, not done.
