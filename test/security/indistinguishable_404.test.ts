@@ -43,7 +43,13 @@ import {
   unauthenticated,
   type RefusalCause,
 } from "../../src/api/refusal.ts";
-import { RESOURCE_TYPES, type ResourceType } from "../../src/authz/catalogue.ts";
+import {
+  ACTION_CATALOGUE,
+  ALL_ACTIONS,
+  RESOURCE_TYPES,
+  type Action,
+  type ResourceType,
+} from "../../src/authz/catalogue.ts";
 import { DECISION_REASONS } from "../../src/authz/can.ts";
 import { contextForRequest } from "../../src/authz/context.ts";
 import { connect, disconnect } from "../../src/db/internal/handle.ts";
@@ -58,6 +64,20 @@ import {
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const skip = skipWithoutDatabase;
+
+/**
+ * A real action for each resource type.
+ *
+ * Was `${resourceType}.read` until RL-M1-036 typed the field, which caught it
+ * immediately: `secret.read` does not exist, because §6.3 splits it into
+ * `secret.read_name` and `secret.read_value`. The invented name had been
+ * flowing into an audit record that would have been unsearchable.
+ */
+function someActionFor(resourceType: ResourceType): Action {
+  const action = ALL_ACTIONS.find((candidate) => ACTION_CATALOGUE[candidate].resource === resourceType);
+  if (action === undefined) throw new Error(`${resourceType} has no actions; the catalogue is malformed`);
+  return action;
+}
 
 /** Every way a caller could try to make the refusal say something. */
 function everyTruth(): { resourceType: ResourceType; cause: RefusalCause; reason: string; resourceId: string | null }[] {
@@ -89,7 +109,7 @@ test("every refusal is the same bytes, whatever caused it", () => {
   let compared = 0;
 
   for (const truth of everyTruth()) {
-    const { wire } = refuse({ action: `${truth.resourceType}.read`, ...truth });
+    const { wire } = refuse({ action: someActionFor(truth.resourceType), ...truth });
     distinct.add(serialiseRefusal(wire).toString("base64"));
     compared += 1;
   }

@@ -62,7 +62,7 @@
  * attacker can take, rather than here.
  */
 
-import type { ResourceType } from "../authz/catalogue.ts";
+import type { AuditAction, AuditResourceType } from "../authz/audit_events.ts";
 import type { AuditRecord } from "../repo/audit.ts";
 
 declare const brand: unique symbol;
@@ -114,8 +114,14 @@ export const REFUSAL_CAUSES = ["denied", "absent"] as const;
 export type RefusalCause = (typeof REFUSAL_CAUSES)[number];
 
 export type RefusalTruth = {
-  readonly action: string;
-  readonly resourceType: ResourceType;
+  /**
+   * What was attempted. A catalogued action or event (RL-M1-036), never a free
+   * string: the audit entry this produces is the ONLY record of the refusal,
+   * because the response deliberately says nothing, so a name nobody can search
+   * for loses the event entirely.
+   */
+  readonly action: AuditAction;
+  readonly resourceType: AuditResourceType;
   /** Null when nothing resolved — which is itself the fact being withheld. */
   readonly resourceId: string | null;
   readonly cause: RefusalCause;

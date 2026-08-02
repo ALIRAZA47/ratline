@@ -16,10 +16,19 @@
 
 import { scoped } from "../db/internal/handle.ts";
 import type { AuthzContext } from "../authz/context.ts";
+import type { AuditAction, AuditResourceType } from "../authz/audit_events.ts";
 
 export type AuditRecord = {
-  readonly action: string;
-  readonly resourceType: string;
+  /**
+   * A catalogued permission action, or a catalogued EVENT (RL-M1-036).
+   *
+   * Typed rather than `string`, because this column is read exactly once —
+   * during an incident, by somebody searching for a specific name — and a typo
+   * does not degrade the log, it removes the entry from the only view anyone
+   * will ever take of it.
+   */
+  readonly action: AuditAction;
+  readonly resourceType: AuditResourceType;
   readonly resourceId?: string | null;
   readonly decision: "allow" | "deny";
   readonly reason?: string;

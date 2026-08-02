@@ -184,6 +184,7 @@ import { isIPv6 } from "node:net";
 
 import type { Session } from "../auth/model.ts";
 import type { AuthzContext } from "../authz/context.ts";
+import type { AuditEvent } from "../authz/audit_events.ts";
 import {
   classifyAddress,
   resolveBindAddress,
@@ -654,8 +655,15 @@ export function checkCsrf(
 // The audited entry point (C6)
 // ---------------------------------------------------------------------------
 
-/** The audit action a refusal is recorded under. An event, not a permission. */
-export const CSRF_AUDIT_ACTION = "session.csrf_rejected";
+/**
+ * The audit action a refusal is recorded under. An event, not a permission.
+ *
+ * Typed as an `AuditEvent` (RL-M1-036), so the name is drawn from the closed
+ * audit vocabulary rather than written here as a string. Nobody holds this and
+ * no role could carry it — which is exactly why it cannot live in the
+ * permission catalogue, and exactly why it needed a closed set of its own.
+ */
+export const CSRF_AUDIT_ACTION: AuditEvent = "session.csrf_rejected";
 
 /** Attacker-controlled text going into a log people read. Bounded. */
 const MAX_LOGGED_ORIGIN = 256;

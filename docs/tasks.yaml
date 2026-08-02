@@ -3392,22 +3392,33 @@
 - id: RL-M1-036
   title: Close the audit event namespace so a typo cannot vanish
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: S
   depends_on: []
   blocks: []
   risk: medium
+  started_at: 2026-08-02
+  done_at: 2026-08-02
   acceptance:
     - Audit entries name their action and resource type from a closed set, the way the permission catalogue is closed
     - An event outside that set fails a test rather than being written
     - Permission actions and non-permission events are distinguishable, so the audit viewer can enumerate both
-  artifacts: []
+  artifacts:
+    - src/authz/audit_events.ts
+    - test/security/audit_namespace.test.ts
   decisions: []
   notes: |
     2026-08-02 — Found while reviewing RL-M1-021. guardCsrf audits with action 'session.csrf_rejected' and resourceType 'session', neither of which the permission catalogue declares — and neither the type system nor the database objects, because AuditRecord types both as string and audit_entries has no check constraint. That is correct as a decision (a CSRF rejection is an event, not a permission) and unpoliced as a mechanism: a typo like 'sesion.csrf_rejected' writes cleanly and the entry disappears from every filter that looks for the real name.
 
     2026-08-02 — Adding 'session' to RESOURCE_TYPES is NOT the fix — catalogue_completeness rejects a resource type no action touches, which is the right rule. The audit namespace needs to be its own closed set, related to the catalogue but not identical to it.
+    2026-08-02 — Closed as its own set rather than by extending the catalogue, because catalogue_completeness is right to reject the alternative: every catalogued action must be carried by a role and every resource type must have an action. A CSRF rejection is exactly the kind of action nobody should hold, and forcing it into a role to satisfy completeness would put a meaningless permission in the role editor. So AUDIT_EVENTS is related to the catalogue and not identical to it, and AuditAction is the union.
+    2026-08-02 — Why a typo here is worse than it sounds: an audit log is read exactly once, during an incident, by somebody searching for a specific name. A misspelled action does not degrade the log — it removes the entry from the only view anyone will ever take of it. The row is still there and it is invisible, which is the failure mode that looks like nothing happened.
+    2026-08-02 — Typing AuditRecord.action immediately caught a fake name in MY OWN RL-M1-026 test: it built action as resourceType + '.read', and secret.read does not exist because §6.3 splits it into read_name and read_value. That invented name had been flowing into an audit record nobody could have searched for.
+    2026-08-02 — 'session' is an audit-only resource type, not a catalogue one, because there is no session.* permission — signing somebody else out is member.revoke_sessions, a member action. A test asserts the two vocabularies stay disjoint and that session gains a permission only by MOVING to RESOURCE_TYPES rather than being duplicated.
+    2026-08-02 — Mutation-tested four ways, all caught. The interesting one: a misspelled event smuggled in by a cast was caught by the declared-and-used test rather than by the cast scan, which was luck — the scan looked for a cast written inline at an action: property and the real case is a named constant. Broadened it to look for the TYPE NAME wherever the cast appears, and re-ran the mutation; now caught by both.
+    2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 518 tests green locally; four mutations all caught.
+  acceptance_met: [1, 2, 3]
 - id: RL-M1-037
   title: Require re-authentication for the highest-risk actions
   milestone: M1
