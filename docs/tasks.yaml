@@ -1031,7 +1031,7 @@
   owner: agent
   estimate: L
   depends_on: [RL-M1-004]
-  blocks: [RL-M1-018, RL-M1-019, RL-M1-020, RL-M1-021, RL-M1-034]
+  blocks: [RL-M1-018, RL-M1-019, RL-M1-020, RL-M1-021, RL-M1-030, RL-M1-034]
   risk: high
   started_at: 2026-08-01
   done_at: 2026-08-01
@@ -1394,7 +1394,7 @@
   status: todo
   owner: agent
   estimate: L
-  depends_on: [RL-M1-028, RL-M1-019]
+  depends_on: [RL-M1-017, RL-M1-019, RL-M1-028, RL-M1-042]
   blocks: []
   risk: medium
   acceptance:
@@ -3453,20 +3453,31 @@
 - id: RL-M1-038
   title: Catalogue an administrative reset of a second factor
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: M
   depends_on: []
   blocks: []
   risk: high
+  started_at: 2026-08-02
+  done_at: 2026-08-02
   acceptance:
     - Turning off another member’s second factor is a catalogued action that only Owner and Admin hold
     - The reset is audited with the actor, and the member is signed out by it
     - A member with no second factor left is forced into enrolment at next login if the organization requires one
-  artifacts: []
+  artifacts:
+    - test/security/two_factor_reset.test.ts
   decisions: [18]
   notes: |
     2026-08-02 — Raised by ADR 0018 / R-26. The 2FA work deliberately shipped WITHOUT this: turning off anybody's second factor is the most dangerous capability in the feature and the catalogue had no action to check an administrator against, so src/repo/two_factor.ts refuses to write anyone else's enrolment at all. That is the same answer updatePasswordHash gave before RL-M1-034 catalogued member.reset_password, and it wants the same treatment.
+    2026-08-02 — The most dangerous capability in the two-factor feature, and the reason is precise: R-17 is closed 'as far as a password alone permits' BECAUSE the second factor stands — an operator who resets a password still cannot sign in as that person. This removes that bound. Whoever holds both can take an account outright, so the two are held by the same two roles and a test asserts they move together in BOTH directions. Splitting them would suggest the pair is safer than either, and it is the opposite.
+    2026-08-02 — Enrolments AND recovery codes go, in one transaction. Leaving the codes would leave live credentials for a factor that no longer exists — the same reasoning confirmEnrolment already applies when it replaces a secret.
+    2026-08-02 — Ordering: the clear goes FIRST, because the clear is where the permission is resolved. This is the RL-M1-034 lesson applied rather than relearned — revoking first would let an Infrastructure operator, who holds member.revoke_sessions and not this, end a member's sessions on the way to being refused. Mutation testing confirmed: restoring the revoke-first order fails four refusal tests.
+    2026-08-02 — Acceptance 3 needed no new forcing code and the test proves that rather than assuming it: with no confirmed enrolment, signIn consults the organization's requirement and issues an ENROLMENT challenge on its own. What was worth testing is that clearing actually reaches that state instead of leaving a stale row that still counts.
+    2026-08-02 — A fixture surprise worth recording: the subject could not be signed in to get a live session, because a member WITH a confirmed factor cannot reach one from a password alone — that is RL-M1-019 working. The session is minted directly from the schema instead, and the test says why, since 'reaching past the auth layer' otherwise reads as laziness.
+    2026-08-02 — Mutation-tested five ways, all caught: the write ungated (4 tests), recovery codes surviving the reset (1), revoke-first ordering restored (4), sessions not revoked at all (1), and Developer gaining the action (3).
+    2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 547 tests green locally; five mutations all caught.
+  acceptance_met: [1, 2, 3]
 - id: RL-M1-039
   title: Collapse the three copies of organizationScopeNode
   milestone: M1
@@ -3541,3 +3552,28 @@
     2026-08-02 — The repo has two conventions and neither was chosen deliberately. indistinguishable_404.test.ts strips comments before scanning (codeOf). scoped_repository.test.ts, design_tokens.test.ts and audit_namespace.test.ts do not, and all three have now caught prose that merely NAMED the pattern they forbid — three times in one session, in comments I was writing to explain why the pattern was being avoided.
 
     2026-08-02 — The argument for not stripping is real and should be weighed rather than assumed away: a scanner that tries to tell comments from code is a second parser to get wrong, and it would get it wrong in the direction of missing a violation hidden in something that looks like a comment. The argument against is the observed tax — the rule silently forbids explaining itself, which pushes authors toward vaguer comments in exactly the files that most need precise ones.
+- id: RL-M1-042
+  title: Serve the API, and bind every guard that is waiting for it
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: []
+  blocks: [RL-M1-030]
+  risk: high
+  acceptance:
+    - Hono binds to the route table rather than declaring routes, so a route the matrix cannot see cannot exist
+    - Every state-changing request passes the CSRF guard and every authentication path spends its rate-limit budget
+    - Authorization is resolved by the repository layer alone; no handler calls can()
+    - Every refusal is produced by refuse(), so unauthorized and nonexistent stay byte-identical over a real socket
+    - The authorization matrix verifies cells through real requests, and transport coverage stops being zero
+  artifacts: []
+  decisions: []
+  notes: |
+    2026-08-02 — Found while looking for what blocks RL-M1-030: NOTHING in the tracker built the control plane's own HTTP server. Every 'web server' task in the plan is about the managed nginx/caddy on hosts, which is a different thing entirely. That is a planning gap, not a sequencing choice — four open risks are each worded 'owed by whoever builds src/api/' and nobody was.
+
+    2026-08-02 — What it converts from mechanism into protection: R-23 (nothing calls the CSRF guard), R-15 (nothing spends the rate limiter's budget), R-28 (two-factor verification is unlimited — a six-digit code is a million possibilities and an unlimited verifier finds one inside a day), and the authorization matrix's transport: 0. All four are currently honest reporting of the same absence.
+    2026-08-02 — test/authz/matrix.test.ts fails the moment src/api/server.ts appears. That is deliberate — RL-M1-025 put the tripwire there so the matrix could not be left verifying at the decision layer once real requests existed — so re-pointing the harness is part of this task, not a follow-up.
+    2026-08-02 — OPEN QUESTION THIS TASK MUST ANSWER FIRST, and it is a §9 question rather than a plumbing one. Every route declares the action it requires, which invites a middleware that calls can() before the handler. §9 rejects 'permission checks in route handlers instead of, OR IN ADDITION TO, the data layer' — and 'in addition to' is explicit. src/auth/privilege_changes.ts already states the reason: a second check is the shape that eventually disagrees with the first.
+    2026-08-02 — The three readings, so whoever starts does not rediscover them. (a) The guard DECIDES by calling can(), and repositories keep their own checks — duplication, rejected by §9 as written. (b) The guard RESOLVES the context and scope and decides nothing; the repository is the only decision. Honest, and it means an unimplemented route performs no check at all, so transport coverage cannot rise until handlers exist — acceptance 5 would be unmeetable in this task alone. (c) The guard is defence in depth, like RLS is for C3, argued as a generated-from-data outer layer that cannot be forgotten and cannot vary per handler. Consistent with how C3 is already built and in tension with §9's wording.
+    2026-08-02 — My reading is (b), because §9's 'in addition to' is not ambiguous and the codebase already pays for that discipline elsewhere — but it changes what this task can deliver, so it wants an ADR proposed and a human ruling before the code, not after. Deliberately NOT started on a guess: picking (a) or (c) quietly would put a second authorization decision in the system, which is the one thing C3 is built to prevent.

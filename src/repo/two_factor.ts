@@ -599,6 +599,70 @@ export async function confirmEnrolment(
 }
 
 /** How many recovery codes the acting user has left. */
+/**
+ * Turn off another member's second factor (RL-M1-038).
+ *
+ * The route back for somebody who has lost both their authenticator and their
+ * recovery codes. RL-M1-019 shipped without it deliberately — the catalogue had
+ * no action to check an administrator against, and shipping the capability with
+ * the check "to follow" is what §9 rejects — and R-26 recorded the gap.
+ *
+ * ## What this actually is
+ *
+ * The most dangerous capability in the two-factor feature, and it is worth
+ * being blunt about why. `member.reset_password` (RL-M1-034) is bounded by the
+ * second factor: an operator who resets a password still cannot sign in as that
+ * person. This action removes that bound. Whoever holds BOTH can take an
+ * account outright, which is why the two are held by the same two roles rather
+ * than split — splitting them would suggest the pair is safer than either one,
+ * and it is the exact opposite.
+ *
+ * ## Everything goes, including the recovery codes
+ *
+ * Enrolments AND recovery codes, in one statement each, inside one transaction.
+ * Leaving the codes would leave live credentials for a factor that no longer
+ * exists — the same reasoning `confirmEnrolment` already applies when it
+ * replaces a secret.
+ *
+ * Returns how many enrolments were removed, so a caller can tell a real reset
+ * from a no-op. Zero is not an error: an operator clearing a factor somebody
+ * already removed should not see a failure.
+ */
+export async function clearSecondFactor(ctx: AuthzContext, subjectUserId: string): Promise<number> {
+  if (ctx.actor.kind === "user" && ctx.actor.id === subjectUserId) {
+    // Not a permission refusal — a meaning refusal, the same shape
+    // `resetMemberPassword` uses. Removing your OWN factor is an ordinary
+    // account action that must prove possession of the factor first, and is
+    // not this.
+    throw new Error(
+      "clearSecondFactor is for somebody else's account. Removing your own second factor " +
+        "is a self-service action that must prove possession first.",
+    );
+  }
+
+  await requirePermission(ctx, "member.reset_two_factor", await organizationScopeRef(ctx));
+
+  return scoped(ctx, async (query) => {
+    // Scoped through memberships so the write cannot reach somebody outside
+    // this tenant, exactly as `updatePasswordHash` is. Row-level security
+    // refuses it anyway; this makes the attempt unwriteable.
+    const removed = await query<{ id: string }>(
+      `delete from two_factor_enrolments
+       where user_id = $1
+         and exists (select 1 from memberships m where m.user_id = two_factor_enrolments.user_id)
+       returning id`,
+      [subjectUserId],
+    );
+    await query(
+      `delete from two_factor_recovery_codes
+       where user_id = $1
+         and exists (select 1 from memberships m where m.user_id = two_factor_recovery_codes.user_id)`,
+      [subjectUserId],
+    );
+    return removed.length;
+  });
+}
+
 export async function countOwnRecoveryCodes(ctx: AuthzContext): Promise<number> {
   const userId = actingUser(ctx, "counting your recovery codes");
   return scoped(ctx, async (query) => {

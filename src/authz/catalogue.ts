@@ -227,6 +227,16 @@ const ACTIONS = {
     scope: "organization",
     description: "Set another member's password when they have lost access to their account.",
   },
+  // The counterpart to the reset above, and the one that makes it dangerous
+  // again. Two-factor is what stops a reset password being sufficient on its
+  // own (R-17), so a role able to turn BOTH off can take an account outright.
+  // Held by the same two roles for exactly that reason: separating them would
+  // suggest the pair is safer than either, and it is the opposite.
+  "member.reset_two_factor": {
+    resource: "member",
+    scope: "organization",
+    description: "Turn off another member's second factor when they have lost their authenticator and their recovery codes.",
+  },
 
   // --- role ---------------------------------------------------------------
   // Roles are editable and custom roles compose the raw permission set (§6.3),

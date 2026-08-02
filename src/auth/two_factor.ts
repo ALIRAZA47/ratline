@@ -72,6 +72,8 @@
 
 import type { AuthzContext } from "../authz/context.ts";
 import { recordAudit } from "../repo/audit.ts";
+import { NotPermittedError } from "../authz/can.ts";
+import { revokeSessionsOfUser } from "../repo/sessions.ts";
 import { currentOrganization, findMember } from "../repo/organizations.ts";
 import { startSession } from "../repo/sessions.ts";
 import {
@@ -92,6 +94,7 @@ import {
   type RedemptionRefusal,
   type SecurityPolicy,
   type StoredEnrolment,
+  clearSecondFactor,
 } from "../repo/two_factor.ts";
 import {
   challengeTokenDigest,
@@ -581,6 +584,97 @@ async function mintSessionFor(
   });
   return { session, token };
 }
+
+/**
+ * Thrown when the actor may not turn off somebody else's second factor.
+ *
+ * A distinct type, so the caller renders it as the same indistinguishable
+ * refusal as any other denial (RL-M1-026) while the audit log keeps the real
+ * reason. The same split `resetMemberPassword` and `applyPrivilegeChange` make.
+ */
+export class NotPermittedToResetSecondFactor extends Error {
+  constructor(actorId: string, subjectUserId: string) {
+    super(`actor ${actorId} may not reset the second factor for ${subjectUserId}`);
+    this.name = "NotPermittedToResetSecondFactor";
+  }
+}
+
+/**
+ * Turn off another member's second factor, for somebody who has lost both their
+ * authenticator and their recovery codes (RL-M1-038).
+ *
+ * ## The bound this removes
+ *
+ * R-17 is closed "as far as a password alone permits" because two-factor is
+ * what stops an administrative password reset being sufficient: an operator who
+ * resets a password still cannot sign in as that person. This removes that
+ * bound, so whoever holds both actions can take an account outright. They are
+ * deliberately held by the same two roles — splitting them would suggest the
+ * pair is safer than either one, and it is the opposite.
+ *
+ * What bounds it instead is the same three things RL-M1-034 relies on, and they
+ * are this task's acceptance criteria rather than three unrelated requirements:
+ * a small pinned set of holders, an audit entry written before the account can
+ * be used, and the member signed out so they notice.
+ *
+ * ## Ordering, and the lesson RL-M1-034 paid for
+ *
+ * The clear goes FIRST, because the clear is where the permission is resolved.
+ * Revoking first would mean an operator holding `member.revoke_sessions` but not
+ * `member.reset_two_factor` ended a member's sessions on the way to being
+ * refused — a refusal with an effect, and an unaudited one. That exact bug was
+ * found by a test in RL-M1-034 and is not repeated here.
+ *
+ * ## What happens next, which is the third acceptance
+ *
+ * Nothing here forces re-enrolment, and it does not need to: with no confirmed
+ * enrolment, `signIn` consults the organization's requirement and issues an
+ * enrolment challenge on its own. The forcing already exists. This task's job is
+ * to make sure clearing the factor actually reaches that state, rather than
+ * leaving a stale row that still counts.
+ *
+ * Returns how many enrolments were removed.
+ */
+export async function resetMemberSecondFactor(
+  ctx: AuthzContext,
+  subjectUserId: string,
+): Promise<number> {
+  let removed: number;
+  try {
+    removed = await clearSecondFactor(ctx, subjectUserId);
+  } catch (error: unknown) {
+    if (error instanceof NotPermittedError) {
+      await recordAudit(ctx, {
+        action: "member.reset_two_factor",
+        resourceType: "member",
+        resourceId: subjectUserId,
+        decision: "deny",
+        reason: error.decision.reason,
+      });
+      throw new NotPermittedToResetSecondFactor(ctx.actor.id, subjectUserId);
+    }
+    throw error;
+  }
+
+  // Their sessions passed a factor that no longer exists. Ending them is what
+  // makes the reset visible to the person it was done to, which is the only
+  // detection this capability has.
+  const sessionsRevoked = await revokeSessionsOfUser(ctx, subjectUserId, "revoked");
+
+  await recordAudit(ctx, {
+    action: "member.reset_two_factor",
+    resourceType: "member",
+    resourceId: subjectUserId,
+    decision: "allow",
+    reason: "administrative-reset",
+    // Counts and flags only. Nothing that could reconstruct the secret, and
+    // nothing about the recovery codes beyond the fact that they went with it.
+    metadata: { enrolments_removed: removed, sessions_revoked: sessionsRevoked, administrative: true },
+  });
+
+  return removed;
+}
+
 
 // ---------------------------------------------------------------------------
 // What the interface layer still owes — RL-M1-024 and whoever builds src/api/

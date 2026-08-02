@@ -8,7 +8,7 @@ Generated 2026-08-02.
 | Milestone | Progress | Done | Total | Open high-risk |
 | --- | --- | ---: | ---: | ---: |
 | **M0** Plan | `########################` 100% | 26 | 26 | 0 |
-| **M1** Control plane skeleton | `####################----` 85% | 35 | 41 | 3 |
+| **M1** Control plane skeleton | `#####################---` 86% | 36 | 42 | 3 |
 | **M2** Agent and first host | `------------------------` 0% | 0 | 29 | 20 |
 | **M3** Static sites end to end | `------------------------` 0% | 0 | 27 | 18 |
 | **M4** Node and Bun apps | `------------------------` 0% | 0 | 15 | 10 |
@@ -61,19 +61,19 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 - `RL-M7-015` (M7, todo) — Implement MongoDB support
 - `RL-M7-016` (M7, todo) — Decide how major-version upgrades are handled, or that they are not
 - `RL-M1-037` (M1, todo) — Require re-authentication for the highest-risk actions
-- `RL-M1-038` (M1, todo) — Catalogue an administrative reset of a second factor
+- `RL-M1-042` (M1, todo) — Serve the API, and bind every guard that is waiting for it
 
 ## Test health
 
 | Suite | Passing | Rate |
 | --- | ---: | ---: |
-| Unit | 345 / 345 | 100% |
+| Unit | 358 / 358 | 100% |
 | Integration | not measured | — |
 | Authorization matrix | 189 / 189 | 100% |
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | 100% | must be 100% |
 
-Measured 2026-08-02T10:29:10.983Z.
+Measured 2026-08-02T10:46:45.215Z.
 
 ### Authorization matrix (role × endpoint × subject)
 
@@ -110,5 +110,5 @@ CI: _no status recorded yet._
 | --- | ---: |
 | todo | 105 |
 | review | 2 |
-| done | 61 |
-| **all** | **168** |
+| done | 62 |
+| **all** | **169** |
