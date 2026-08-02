@@ -61,6 +61,7 @@ import {
   skipWithoutDatabase,
   withMigratedDatabase,
 } from "../support/db.ts";
+import { codeOf } from "../support/source_scan.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const skip = skipWithoutDatabase;
@@ -265,12 +266,6 @@ test("the truth the response withholds reaches the audit log", { skip }, async (
 // The assertion that survives the next handler
 // ---------------------------------------------------------------------------
 
-/** Source with comments removed, so prose mentioning a status code is not a hit. */
-function codeOf(path: string): string {
-  return readFileSync(path, "utf8")
-    .replace(/\/\*[\s\S]*?\*\//g, " ")
-    .replace(/(^|[^:])\/\/.*$/gm, "$1");
-}
 
 test("nothing else in src/ builds a refusal of its own", () => {
   // The real risk is not that this module is wrong; it is that a handler
@@ -283,7 +278,7 @@ test("nothing else in src/ builds a refusal of its own", () => {
   for (const file of globSync("src/**/*.ts", { cwd: ROOT })) {
     const path = join(ROOT, file);
     if (relative(ROOT, path) === join("src", "api", "refusal.ts")) continue;
-    const code = codeOf(path);
+    const code = codeOf(readFileSync(path, "utf8"));
     for (const status of ["401", "403", "404"]) {
       if (new RegExp(`\\b${status}\\b`).test(code)) offenders.push(`${file} mentions ${status}`);
     }

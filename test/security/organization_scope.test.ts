@@ -38,6 +38,7 @@ import {
   skipWithoutDatabase,
   withMigratedDatabase,
 } from "../support/db.ts";
+import { codeOf } from "../support/source_scan.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const skip = skipWithoutDatabase;
@@ -137,7 +138,7 @@ test("no repository keeps a private copy of the lookup", () => {
   for (const file of globSync("src/**/*.ts", { cwd: ROOT })) {
     const path = relative(ROOT, join(ROOT, file)).replaceAll("\\", "/");
     if (path === "src/repo/scope.ts") continue;
-    const source = readFileSync(join(ROOT, file), "utf8");
+    const source = codeOf(readFileSync(join(ROOT, file), "utf8"));
     if (/function\s+organizationScopeNode/.test(source)) {
       offenders.push(`${path} defines its own organizationScopeNode`);
     }

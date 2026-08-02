@@ -256,9 +256,32 @@ export class NotPermittedError extends Error {
   }
 }
 
+/**
+ * The throwing form — and the one that names a REAL action (RL-M1-044).
+ *
+ * The asymmetry with `can()` above is deliberate and is the whole point of this
+ * task, so it is written down rather than left to look like an inconsistency.
+ *
+ *   `can(action: string)` — the name may have come from a request body, a
+ *   stored custom role (RL-M5-002) or a token's scope list. It is UNTRUSTED, so
+ *   the signature accepts anything and step 1 denies what the catalogue does
+ *   not know. Narrowing it would push that check to every caller, and the
+ *   caller that forgot would cast.
+ *
+ *   `require(action: Action)` — every caller is our own repository code asking
+ *   for a permission it wrote into the source. There is no untrusted name on
+ *   this path, so the type can be the check.
+ *
+ * What that buys: an invented permission used to fail CLOSED but SILENTLY.
+ * `requirePermission(ctx, "audit_log.verify", …)` — a name I wrote during
+ * RL-M1-043 — denied every caller with `unknown-action`, which reads in the
+ * audit log exactly like a legitimate refusal. Nothing was insecure and nothing
+ * would have told anybody the feature was simply dead. It is now a compile
+ * error.
+ */
 export async function require(
   ctx: AuthzContext,
-  action: string,
+  action: Action,
   scope: ScopeRef,
   resolveRoles: (action: Action) => readonly string[] = rolesCarrying,
 ): Promise<AuthorizationDecision> {

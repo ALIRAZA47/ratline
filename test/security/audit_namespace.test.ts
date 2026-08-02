@@ -39,6 +39,7 @@ import {
   type AuditAction,
 } from "../../src/authz/audit_events.ts";
 import { ACTION_CATALOGUE, ALL_ACTIONS, isAction, RESOURCE_TYPES } from "../../src/authz/catalogue.ts";
+import { codeOf } from "../support/source_scan.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -143,8 +144,8 @@ test("nothing casts its way around the type", () => {
   for (const file of globSync("src/**/*.ts", { cwd: ROOT })) {
     const path = relative(ROOT, join(ROOT, file)).replaceAll("\\", "/");
     if (path === "src/authz/audit_events.ts") continue;
-    const source = readFileSync(join(ROOT, file), "utf8");
-    for (const match of source.matchAll(/\bas\s+(AuditEvent|AuditAction|AuditResourceType)\b/g)) {
+    const code = codeOf(readFileSync(join(ROOT, file), "utf8"));
+    for (const match of code.matchAll(/\bas\s+(AuditEvent|AuditAction|AuditResourceType)\b/g)) {
       offenders.push(`${path}: ${match[0]}`);
     }
   }

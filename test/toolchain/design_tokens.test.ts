@@ -64,6 +64,7 @@ import {
   type StatusId,
   type Token,
 } from "../../src/web/lib/design/index.ts";
+import { codeOf } from "../support/source_scan.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -401,7 +402,7 @@ test("nothing but the environment chip may use the production hue", () => {
   for (const file of sourceFiles(join(ROOT, "src", "web"))) {
     const relativePath = relative(ROOT, file).replaceAll("\\", "/");
     if (ALLOWED.includes(relativePath)) continue;
-    const source = readFileSync(file, "utf8");
+    const source = codeOf(readFileSync(file, "utf8"));
     for (const needle of needles) {
       if (source.includes(needle)) offenders.push(`${relativePath} uses ${needle}`);
     }

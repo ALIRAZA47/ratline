@@ -3537,22 +3537,30 @@
 - id: RL-M1-041
   title: Make the source scanners agree about comments
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: S
   depends_on: []
   blocks: []
   risk: low
+  done_at: 2026-08-02
   acceptance:
     - Every source-scanning test uses one shared helper with one rule about comments
     - The helper is itself tested against a fixture containing the pattern in prose and in code
     - Whichever rule is chosen is written down once, with the reason
-  artifacts: []
+  artifacts:
+    - test/support/source_scan.ts
+    - test/security/source_scan.test.ts
   decisions: []
   notes: |
     2026-08-02 — The repo has two conventions and neither was chosen deliberately. indistinguishable_404.test.ts strips comments before scanning (codeOf). scoped_repository.test.ts, design_tokens.test.ts and audit_namespace.test.ts do not, and all three have now caught prose that merely NAMED the pattern they forbid — three times in one session, in comments I was writing to explain why the pattern was being avoided.
 
     2026-08-02 — The argument for not stripping is real and should be weighed rather than assumed away: a scanner that tries to tell comments from code is a second parser to get wrong, and it would get it wrong in the direction of missing a violation hidden in something that looks like a comment. The argument against is the observed tax — the rule silently forbids explaining itself, which pushes authors toward vaguer comments in exactly the files that most need precise ones.
+    2026-08-02 — Settled: comments are STRIPPED, by one shared helper, used by all five scanners. The case against is real and is written into the module rather than dismissed — a scanner that tells comments from code is a second parser to get wrong, and it would get it wrong in the direction of missing a violation. What decides it is that the other cost is not hypothetical: four times in one session a comment written to explain WHY a pattern is avoided contained the pattern and was flagged. A rule that forbids its own explanation pushes authors toward vaguer comments in exactly the files that most need precise ones, and it does so invisibly.
+    2026-08-02 — The parser risk is answered rather than accepted. codeOf is tested against every construct that could fool a naive stripper: a URL with // inside a string, a comment opener inside a regex and a template, an APOSTROPHE inside a comment (the one that eats a whole file, because a naive stripper reads don't as an opening quote), an escaped quote, a multi-line template, and an unterminated block comment. Plus the strongest available statement — on a file with no comments, codeOf is the identity function byte for byte.
+    2026-08-02 — Line numbers survive the removal: newlines inside a stripped comment are preserved, so a scanner reporting line 40 still points at line 40 of the original. A scanner that sent somebody to the wrong line would be worse than one that reported no line at all.
+    2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 566 tests green locally.
+  acceptance_met: [1, 2, 3]
 - id: RL-M1-042
   title: Serve the API, and bind every guard that is waiting for it
   milestone: M1
@@ -3627,13 +3635,44 @@
 - id: RL-M1-044
   title: Type the permission passed to require(), not just to can()
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: S
   depends_on: []
   blocks: []
   risk: medium
+  started_at: 2026-08-02
+  done_at: 2026-08-02
   acceptance:
-    - TODO define acceptance before this task can start
+    - require() names an Action, so an invented permission is a compile error rather than a silent denial
+    - can() keeps its string parameter, because a name arriving from a request or a stored role is untrusted
+    - A test pins the difference, with the reason each way round
+  artifacts:
+    - src/authz/can.ts
+    - test/authz/can.test.ts
+  decisions: []
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-02 — The asymmetry is now deliberate and written down rather than looking like an inconsistency. can(action: string) accepts anything because the name may have come from a request body, a stored custom role or a token's scope list — narrowing it would push the untrusted-input check to every caller, and the caller that forgot would cast. require(action: Action) is only ever called by our own repository code with a name written into the source, so the type can be the check.
+    2026-08-02 — What it closes: an invented permission used to fail CLOSED but SILENTLY. requirePermission(ctx, 'audit_log.verify', ...) — a name I wrote during RL-M1-043 — denied every caller with unknown-action, which reads in the audit log exactly like a legitimate refusal. Nothing was insecure and nothing would have told anybody the feature was dead. Backed by a runtime scan as well as the type, so the reason survives somebody widening the parameter back.
+    2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 566 tests green locally.
+- id: RL-M1-045
+  title: Chase the intermittent failure in the API token ceiling suite
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: []
+  blocks: []
+  risk: high
+  acceptance:
+    - The cause is identified rather than the test retried
+    - The suite passes fifty consecutive full runs
+    - If the cause is in the product rather than the fixture, it is recorded as a finding
   artifacts: []
   decisions: []
+  notes: |
+    2026-08-02 — Observed once during RL-M1-041: 'a deny on the issuer strips the token, wherever the deny sits' (test/authz/token_subset.test.ts) failed in a full-suite run and passed in three isolated runs and two subsequent full runs. Node runs each test FILE in its own process with concurrency, so the suspect is contention between scratch databases rather than the assertion.
+
+    2026-08-02 — Recorded rather than shrugged at, and marked high risk, because of what the test guards: the API token ceiling is R-12 — a token must carry a SUBSET of its issuer's current permissions and never more. A flake there is either a fixture race or a real ordering bug in grant resolution, and the two are indistinguishable from a green re-run. A test that sometimes fails is a test that eventually gets ignored, which is the worse outcome for this one specifically.
+    2026-08-02 — Do NOT close this by adding a retry. The acceptance says the cause is identified, because a retry on this suite would convert a possible privilege-escalation bug into a slower green build.

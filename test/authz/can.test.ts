@@ -23,6 +23,8 @@ import { can, DECISION_REASONS, describeAction, NotPermittedError, require as re
 import { contextForApiToken, contextForRequest, contextForServiceIdentity, type AuthzContext } from "../../src/authz/context.ts";
 import { connect, disconnect } from "../../src/db/internal/handle.ts";
 import { isAllowed, isSubjectType } from "../../src/authz/grants.ts";
+import { isAction } from "../../src/authz/catalogue.ts";
+import { codeOf } from "../support/source_scan.ts";
 import { DATABASE_URL, skipWithoutDatabase, withMigratedDatabase } from "../support/db.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -580,4 +582,42 @@ test("require returns the decision when permitted", { skip }, async () => {
       assert.equal(decision.allowed, true);
     });
   });
+});
+
+// ---------------------------------------------------------------------------
+// can() takes a string and require() takes an Action (RL-M1-044)
+// ---------------------------------------------------------------------------
+
+test("can() still accepts an untrusted name, and denies it", () => {
+  // The asymmetry is deliberate. A name reaching `can()` may have come from a
+  // request body, a stored custom role (RL-M5-002) or a token's scope list, so
+  // the signature accepts anything and step 1 denies what the catalogue does
+  // not know. Narrowing it would push that check to every caller, and the
+  // caller that forgot would cast.
+  assert.ok(!isAction("audit_log.verify"), "the fixture name must not become real");
+});
+
+test("every require() call in src/ names an action the catalogue declares", () => {
+  // What typing `require()` bought, asserted at runtime as well so the reason
+  // survives even if somebody widens the parameter back.
+  //
+  // The failure it closes is specific and quiet: `requirePermission(ctx,
+  // "audit_log.verify", ...)` — a name written during RL-M1-043 — denied every
+  // caller with `unknown-action`, which reads in the audit log exactly like a
+  // legitimate refusal. Nothing was insecure, and nothing would have told
+  // anybody the feature was simply dead.
+  const offenders: string[] = [];
+  for (const file of globSync("src/**/*.ts", { cwd: ROOT })) {
+    const code = codeOf(readFileSync(join(ROOT, file), "utf8"));
+    for (const match of code.matchAll(/require(?:Permission)?\(\s*ctx\s*,\s*"([^"]+)"/g)) {
+      const name = match[1] ?? "";
+      if (!isAction(name)) offenders.push(`${file}: require(…, "${name}")`);
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    "a permission nobody can hold denies every caller with unknown-action, which looks " +
+      "exactly like a working guard and is a dead feature",
+  );
 });
