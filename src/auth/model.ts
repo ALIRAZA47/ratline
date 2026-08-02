@@ -1,11 +1,20 @@
 /**
- * The session vocabulary (RL-M1-017).
+ * The vocabulary of the credentials on the sign-in path (RL-M1-017, extended by
+ * RL-M1-019).
  *
- * Shared by the logic in `src/auth/sessions.ts` and the queries in
- * `src/repo/sessions.ts`. It lives in its own module for one structural reason:
- * the repository has to digest a presented token to look it up, and the logic
- * has to mint one, so if either owned the minting the other would import it and
- * the two directories would depend on each other in a cycle.
+ * Shared by the logic in `src/auth/` and the queries in `src/repo/`. It lives in
+ * its own module for one structural reason: the repository has to digest a
+ * presented token to look it up, and the logic has to mint one, so if either
+ * owned the minting the other would import it and the two directories would
+ * depend on each other in a cycle.
+ *
+ * Two credentials live here, and they are different things with the same shape.
+ * A SESSION identifier says "this person is authenticated"; a second-factor
+ * CHALLENGE identifier says only "this person's password was accepted and they
+ * owe a second factor". Keeping both here rather than inventing a second module
+ * for the second one means the minting, the prefix rule and the digest rule are
+ * stated once — and it makes it obvious at a glance that a challenge is minted
+ * by exactly the same mechanism as a session and is therefore no weaker.
  *
  * Nothing here decides anything or touches the database. Where a value here
  * mirrors a database constraint — {@link SESSION_END_REASONS} against migration
@@ -69,6 +78,25 @@ export type Session = {
 };
 
 /**
+ * A session and the identifier that names it. The identifier exists only here.
+ *
+ * It lives in this module rather than beside `signIn` because two things now
+ * produce one: an ordinary sign-in (`src/auth/sessions.ts`) and the redemption
+ * of a second-factor challenge (`src/auth/two_factor.ts`). A type owned by one
+ * of them would make the other import it and put a cycle between two modules
+ * that already point one way.
+ */
+export type IssuedSession = {
+  readonly session: Session;
+  /**
+   * The plaintext identifier, the only time it exists outside the caller's
+   * memory. Set it in a cookie and forget it; it is not recoverable, because
+   * what the database holds is a digest.
+   */
+  readonly token: string;
+};
+
+/**
  * How long a new session lives, absolutely, from the moment it is created.
  *
  * Eight hours, matching the SSH certificate default in brief §6.4, so "how long
@@ -116,5 +144,46 @@ export function mintSessionToken(): string {
  * slower. A password is different because a person chose it.
  */
 export function sessionTokenDigest(token: string): string {
+  return createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+// ---------------------------------------------------------------------------
+// The second-factor challenge (RL-M1-019)
+// ---------------------------------------------------------------------------
+
+/**
+ * A distinct prefix, so that an operator who finds one in a log knows it is NOT
+ * a session.
+ *
+ * That distinction is worth a separate string rather than reusing
+ * {@link SESSION_TOKEN_PREFIX}: the two credentials mean very different things,
+ * and an incident where a challenge identifier leaked is a much smaller incident
+ * than one where a session identifier did. A log line that cannot tell them
+ * apart makes that a research question at 2am.
+ */
+export const CHALLENGE_TOKEN_PREFIX = "rl2fa_";
+
+/**
+ * A fresh challenge identifier. The only place one is created.
+ *
+ * The same 256 bits from the same CSPRNG as a session identifier, for the same
+ * reason: it is a bearer credential, so it has to be unguessable against an
+ * attacker who may try forever. It is deliberately not weaker for being
+ * short-lived — a shorter identifier would be an invitation to guess one inside
+ * its window, and the window is measured in minutes, not milliseconds.
+ */
+export function mintChallengeToken(): string {
+  return `${CHALLENGE_TOKEN_PREFIX}${randomBytes(IDENTIFIER_BYTES).toString("base64url")}`;
+}
+
+/**
+ * What gets stored: a SHA-256 digest, lowercase hex, 64 characters — the shape
+ * migration 12's `two_factor_challenges_hash_shape` constrains the column to.
+ *
+ * A plain digest, for {@link sessionTokenDigest}'s reason unchanged: the input
+ * is 256 bits from a cryptographic source, so there is no dictionary to attack
+ * and no work factor to buy.
+ */
+export function challengeTokenDigest(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
 }

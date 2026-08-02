@@ -30,6 +30,17 @@
  * cannot be skipped: the old identifier names the old tenant and is invisible
  * from the new one.
  *
+ * ## The second factor (RL-M1-019)
+ *
+ * {@link signIn} can now end in three ways rather than two. When the person
+ * holds a second factor, or their organization requires one, a correct password
+ * produces a CHALLENGE and no session at all — see {@link SignInResult} for why
+ * that case is written as `ok: false`, and the header of
+ * `src/auth/two_factor.ts` for why it is a separate credential rather than a
+ * flag on a session. Nothing else in this module changed: rotation, revocation
+ * and validation know nothing about second factors, because a session that
+ * exists is a session that was fully authenticated.
+ *
  * ## The context a sign-in runs in — a real seam, reported rather than papered over
  *
  * Every function here takes an `AuthzContext`, because everything reaches the
@@ -73,22 +84,13 @@ import {
   DEFAULT_SESSION_LIFETIME_MS,
   mintSessionToken,
   sessionTokenDigest,
+  type IssuedSession,
   type Session,
 } from "./model.ts";
 import { hashPassword, needsRehash, verifyPassword } from "./passwords.ts";
 import { NotPermittedError } from "../authz/can.ts";
 import { recordAudit } from "../repo/audit.ts";
-
-/** A session and the identifier that names it. The identifier exists only here. */
-export type IssuedSession = {
-  readonly session: Session;
-  /**
-   * The plaintext identifier, the only time it exists outside the caller's
-   * memory. Set it in a cookie and forget it; it is not recoverable, because
-   * what the database holds is a digest.
-   */
-  readonly token: string;
-};
+import { demandFor, issueChallenge, type SecondFactorChallenge } from "./two_factor.ts";
 
 /**
  * Why a sign-in was refused.
@@ -113,6 +115,24 @@ export const SIGN_IN_REFUSALS = [
 
 export type SignInRefusal = (typeof SIGN_IN_REFUSALS)[number];
 
+/**
+ * The outcome of a sign-in attempt.
+ *
+ * THREE cases, not two, and the third is written as `ok: false` on purpose
+ * (RL-M1-019). "The password was right and a second factor is owed" is not a
+ * sign-in: no session exists, no session identifier was minted, and a caller
+ * that branches on `ok` — including every caller written before two-factor
+ * authentication existed — treats it as a refusal and lets nobody in. That is
+ * the correct reading and it is the safe one.
+ *
+ * `secondFactor` is non-null exactly when `refusal` is null, and vice versa. The
+ * two are separate fields rather than one discriminated union because
+ * `refusal` has a promise attached to it that the challenge cannot keep: every
+ * value of {@link SignInRefusal} must be rendered identically to the caller,
+ * while a second-factor challenge has to be rendered as a prompt. Folding the
+ * challenge into that list would have quietly broken the indistinguishability
+ * rule for the four values that still need it.
+ */
 export type SignInResult =
   | (IssuedSession & {
       readonly ok: true;
@@ -125,7 +145,20 @@ export type SignInResult =
        */
       readonly mustRehash: boolean;
     })
-  | { readonly ok: false; readonly refusal: SignInRefusal };
+  | {
+      readonly ok: false;
+      /** Why it was refused, or null when a second factor is owed instead. */
+      readonly refusal: SignInRefusal | null;
+      /**
+       * What to present next, or null when this was an ordinary refusal.
+       *
+       * Non-null means the password was accepted. The person is not signed in
+       * and holds no session; they hold a challenge, and
+       * `verifySecondFactor` (or `confirmEnrolment`, when
+       * `enrolmentRequired`) is what turns it into one.
+       */
+      readonly secondFactor: SecondFactorChallenge | null;
+    };
 
 export type SignInInput = {
   readonly email: string;
@@ -162,10 +195,17 @@ function expiryFrom(lifetimeMs: number | undefined): Date {
  *      path that succeeds.
  *   3. Decide, and refuse with a reason that is for the audit log only.
  *   4. Revoke whatever the client was carrying.
- *   5. Mint a new identifier.
+ *   5. **Ask what second factor this person owes** (RL-M1-019). If they owe one,
+ *      mint a CHALLENGE and stop: no session exists, and none will until the
+ *      factor is presented.
+ *   6. Otherwise mint a new session identifier.
  *
- * Steps 4 and 5 are in that order on purpose. Interrupted between them, nobody
- * is signed in — which is the failure worth having.
+ * Steps 4 and 5 are in that order on purpose: the planted identifier dies as
+ * soon as the password is known to be right, whether or not a second factor
+ * follows — otherwise a person who owed one and abandoned the prompt would walk
+ * away with the attacker's cookie still live. Steps 4 and 6 are in that order for
+ * the original reason: interrupted between them, nobody is signed in, which is
+ * the failure worth having.
  */
 export async function signIn(ctx: AuthzContext, input: SignInInput): Promise<SignInResult> {
   const credential = await findPasswordCredential(ctx, input.email);
@@ -175,10 +215,15 @@ export async function signIn(ctx: AuthzContext, input: SignInInput): Promise<Sig
   // not the account exists. It is deliberately not inside a conditional.
   const matched = await verifyPassword(credential?.storedHash ?? null, input.password);
 
-  if (credential === null) return { ok: false, refusal: "unknown-account" };
-  if (credential.disabled) return { ok: false, refusal: "account-disabled" };
-  if (credential.storedHash === null) return { ok: false, refusal: "no-password-set" };
-  if (!matched) return { ok: false, refusal: "credential-rejected" };
+  const refuse = (refusal: SignInRefusal): SignInResult => ({
+    ok: false,
+    refusal,
+    secondFactor: null,
+  });
+  if (credential === null) return refuse("unknown-account");
+  if (credential.disabled) return refuse("account-disabled");
+  if (credential.storedHash === null) return refuse("no-password-set");
+  if (!matched) return refuse("credential-rejected");
 
   // Step 4. Whatever the client presented ends here, whoever it belonged to.
   let ended: Session | null = null;
@@ -187,7 +232,21 @@ export async function signIn(ctx: AuthzContext, input: SignInInput): Promise<Sig
     ended = await revokeSessionByToken(ctx, presented, "rotated");
   }
 
-  // Step 5. A fresh identifier, always. Nothing the client supplied is reused.
+  // Step 5. A password alone is not authentication here if this person holds a
+  // second factor, or if their organization requires one of everybody. Either
+  // way what they get is a challenge, not a session — see the header of
+  // `src/auth/two_factor.ts` for why that is a different table rather than a
+  // flag on this one.
+  const demand = await demandFor(ctx, credential.userId);
+  if (demand !== "none") {
+    return {
+      ok: false,
+      refusal: null,
+      secondFactor: await issueChallenge(ctx, credential.userId, demand),
+    };
+  }
+
+  // Step 6. A fresh identifier, always. Nothing the client supplied is reused.
   const token = mintSessionToken();
   const session = await startSession(ctx, {
     userId: credential.userId,

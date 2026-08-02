@@ -8,7 +8,7 @@ Generated 2026-08-02.
 | Milestone | Progress | Done | Total | Open high-risk |
 | --- | --- | ---: | ---: | ---: |
 | **M0** Plan | `########################` 100% | 26 | 26 | 0 |
-| **M1** Control plane skeleton | `##################------` 76% | 28 | 37 | 3 |
+| **M1** Control plane skeleton | `##################------` 73% | 29 | 40 | 3 |
 | **M2** Agent and first host | `------------------------` 0% | 0 | 29 | 20 |
 | **M3** Static sites end to end | `------------------------` 0% | 0 | 27 | 18 |
 | **M4** Node and Bun apps | `------------------------` 0% | 0 | 15 | 10 |
@@ -29,9 +29,7 @@ Auth, org/team/project model, the can() function with 100% branch coverage, hash
 
 ## In progress
 
-| Task | Age | Owner | Risk | Acceptance | Title |
-| --- | ---: | --- | --- | ---: | --- |
-| `RL-M1-019` | 0d | agent | **high** | 0/3 | Add two-factor authentication with an organization-level policy |
+_None._
 
 ## Blocked
 
@@ -63,18 +61,19 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 - `RL-M7-015` (M7, todo) — Implement MongoDB support
 - `RL-M7-016` (M7, todo) — Decide how major-version upgrades are handled, or that they are not
 - `RL-M1-037` (M1, todo) — Require re-authentication for the highest-risk actions
+- `RL-M1-038` (M1, todo) — Catalogue an administrative reset of a second factor
 
 ## Test health
 
 | Suite | Passing | Rate |
 | --- | ---: | ---: |
-| Unit | 256 / 256 | 100% |
+| Unit | 292 / 292 | 100% |
 | Integration | not measured | — |
 | Authorization matrix | 176 / 176 | 100% |
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | 100% | must be 100% |
 
-Measured 2026-08-02T06:35:50.416Z.
+Measured 2026-08-02T08:13:37.155Z.
 
 ### Authorization matrix (role × endpoint × subject)
 
@@ -109,8 +108,7 @@ CI: _no status recorded yet._
 
 | Status | Count |
 | --- | ---: |
-| todo | 107 |
-| in-progress | 1 |
+| todo | 110 |
 | review | 2 |
-| done | 54 |
-| **all** | **164** |
+| done | 55 |
+| **all** | **167** |

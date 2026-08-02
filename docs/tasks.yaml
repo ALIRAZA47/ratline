@@ -1083,23 +1083,32 @@
 - id: RL-M1-019
   title: Add two-factor authentication with an organization-level policy
   milestone: M1
-  status: in-progress
+  status: done
   owner: agent
   estimate: L
   depends_on: [RL-M1-017]
   blocks: [RL-M1-030]
   risk: high
   started_at: 2026-08-02
+  done_at: 2026-08-02
   acceptance:
     - Time-based one-time passwords enrol, verify and produce recovery codes
     - An organization can require it, and non-compliant members are forced into enrolment at next login
     - Recovery codes are single use and stored hashed
   artifacts:
     - test/security/twofactor.test.ts
-  decisions: []
+  decisions: [18]
   notes: |
     2026-08-02 — unblocked: delegated agent stalled with no output; task never started
 
+    2026-08-02 — Delegated to a subagent in an isolated worktree, then reviewed and merged. The decision everything follows from: somebody who owes a second factor gets NO SESSION — a five-minute single-use challenge instead, returned from signIn as ok:false. A pending flag on the sessions row was rejected because it makes every existing reader of that table wrong by omission (validateSession, listOwnSessions, revokeSessionsOfUser, the CSRF token derivation), and the one that forgot the clause would fail open. Returning it as ok:false means callers written before 2FA existed refuse rather than proceed.
+    2026-08-02 — Verified rather than taken on trust: no npm dependency (RFC 4226 §5.3 truncation and RFC 4648 §6 base32 written out against node:crypto and checked against the RFCs' own vectors); the TOTP secret's storage shape is a CHECK constraint, so a plaintext base32 secret is a constraint violation rather than a review finding; comparison goes through the one secretEquals in the codebase; and the verification loop has no break, so it does not leak which step matched.
+    2026-08-02 — 17 mutations run, 16 caught immediately. The agent reported the miss honestly: redeemChallenge read the enrolments table rather than the confirmed view, and no test reached that second guard because the public path stops earlier. It added a test driving the repository function directly — a superseded enrolment's recovery codes cannot be redeemed, which is the real exposure — and the mutation is now caught.
+    2026-08-02 — ADR 0018 written during the merge, not by the agent: it skipped proposing one because a concurrent agent might claim the same number. That is a reason to coordinate numbering, not a reason to leave the decisions in module headers where the human owner cannot review them (§2.6). Proposed, not accepted.
+    2026-08-02 — Merge conflicts resolved by hand: both agents appended R-22..R-25 to the threat model independently, so the two-factor rows became R-25..R-28; and src/auth/sessions.ts had IssuedSession moved to model.ts on one side while RL-M1-034 added resetMemberPassword on the other. Gaps opened as tasks rather than left in the report: RL-M1-038 (no administrative reset of a second factor, R-26) and RL-M1-039 (organizationScopeNode now written out three times).
+    2026-08-02 — R-28 is the sharpest open item and it is not this task's to close: AUTH_RATE_LIMITS['two-factor'] publishes a budget and nothing spends it, because the limiter must run before the work and that ordering belongs to a route handler that does not exist. A six-digit code is a million possibilities and an unlimited verifier finds one inside a day.
+    2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 468 tests green locally after merge; lint, typecheck and both coverage gates clean.
+  acceptance_met: [1, 2, 3]
 - id: RL-M1-020
   title: Rate limit every authentication path
   milestone: M1
@@ -1323,7 +1332,7 @@
   status: todo
   owner: agent
   estimate: L
-  depends_on: [RL-M1-027]
+  depends_on: [RL-M1-027, RL-M1-040]
   blocks: [RL-M1-029, RL-M1-030, RL-M1-031, RL-M2-014, RL-M3-020]
   risk: low
   acceptance:
@@ -3388,3 +3397,53 @@
   decisions: []
   notes: |
     2026-08-02 — Proposed by ADR 0017 as the control an idle timeout was reaching for. Targets the moment of danger rather than a clock, and unlike an idle timeout it is not defeated by the dashboard's own polling. Candidate actions: secret.read_value, terminal.open, grant.create, role.update, host.create.
+- id: RL-M1-038
+  title: Catalogue an administrative reset of a second factor
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: []
+  blocks: []
+  risk: high
+  acceptance:
+    - Turning off another member’s second factor is a catalogued action that only Owner and Admin hold
+    - The reset is audited with the actor, and the member is signed out by it
+    - A member with no second factor left is forced into enrolment at next login if the organization requires one
+  artifacts: []
+  decisions: [18]
+  notes: |
+    2026-08-02 — Raised by ADR 0018 / R-26. The 2FA work deliberately shipped WITHOUT this: turning off anybody's second factor is the most dangerous capability in the feature and the catalogue had no action to check an administrator against, so src/repo/two_factor.ts refuses to write anyone else's enrolment at all. That is the same answer updatePasswordHash gave before RL-M1-034 catalogued member.reset_password, and it wants the same treatment.
+- id: RL-M1-039
+  title: Collapse the three copies of organizationScopeNode
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: S
+  depends_on: []
+  blocks: []
+  risk: low
+  acceptance:
+    - One implementation of organizationScopeNode, reachable by every repository that needs it
+    - No repository holds a private copy
+  artifacts: []
+  decisions: []
+  notes: |
+    2026-08-02 — Found while merging RL-M1-019: organizationScopeNode is now written out a third time (api_tokens.ts, sessions.ts, two_factor.ts), each noting the previous copies. Three copies of a scope lookup is three chances for one of them to resolve the wrong node, and a wrong scope node fails OPEN when it resolves higher up the tree.
+- id: RL-M1-040
+  title: Add the reserved production hue to the design tokens
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: S
+  depends_on: []
+  blocks: [RL-M1-028]
+  risk: low
+  acceptance:
+    - One reserved production hue exists in the token registry, with its contrast measured in both modes
+    - A test asserts the hue is used nowhere but the environment chip
+    - A test asserts it is not confusable with any status hue
+  artifacts: []
+  decisions: []
+  notes: |
+    2026-08-02 — Required by the 2026-08-02 ruling on DESIGN.md §10.1: production is distinguished by form AND a single reserved hue. §1 was amended from 'colour means status' to 'colour means status or production' rather than carrying this as an exception, because an exception list grows and a rule argues back. The amendment is only safe if requirement 1 — the hue appears nowhere else — is enforced by a test rather than by discipline; that is what this task is for.
