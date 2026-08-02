@@ -8,7 +8,7 @@ Generated 2026-08-02.
 | Milestone | Progress | Done | Total | Open high-risk |
 | --- | --- | ---: | ---: | ---: |
 | **M0** Plan | `########################` 100% | 26 | 26 | 0 |
-| **M1** Control plane skeleton | `##################------` 75% | 27 | 36 | 2 |
+| **M1** Control plane skeleton | `##################------` 76% | 28 | 37 | 3 |
 | **M2** Agent and first host | `------------------------` 0% | 0 | 29 | 20 |
 | **M3** Static sites end to end | `------------------------` 0% | 0 | 27 | 18 |
 | **M4** Node and Bun apps | `------------------------` 0% | 0 | 15 | 10 |
@@ -62,6 +62,7 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 - `RL-M7-013` (M7, todo) — Connect a database to a site and prove the credential path end to end
 - `RL-M7-015` (M7, todo) — Implement MongoDB support
 - `RL-M7-016` (M7, todo) — Decide how major-version upgrades are handled, or that they are not
+- `RL-M1-037` (M1, todo) — Require re-authentication for the highest-risk actions
 
 ## Test health
 
@@ -111,5 +112,5 @@ CI: _no status recorded yet._
 | todo | 107 |
 | in-progress | 1 |
 | review | 2 |
-| done | 53 |
-| **all** | **163** |
+| done | 54 |
+| **all** | **164** |

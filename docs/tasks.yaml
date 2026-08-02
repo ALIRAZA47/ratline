@@ -3329,16 +3329,28 @@
 - id: RL-M1-035
   title: Decide whether sessions need an idle timeout
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: S
   depends_on: []
   blocks: []
   risk: medium
+  started_at: 2026-08-02
+  done_at: 2026-08-02
   acceptance:
-    - TODO define acceptance before this task can start
-  artifacts: []
-  decisions: []
+    - The decision is recorded as an ADR with the options considered and the reason each was rejected
+    - The residual risk of whichever way it goes is recorded in the threat model
+    - Whatever replaces or supplements it exists as a task rather than as a sentence in the ADR
+  artifacts:
+    - docs/decisions/0017-session-idle-timeout.md
+  decisions: [17]
+  notes: |
+    2026-08-02 — Decided: no idle timeout in v1. ADR 0017 proposed. The scenario an idle timeout is bought for is narrow and specific — an operator walks away from an unlocked workstation — and it is the only one, because a stolen token is what revocation, rotation on privilege change and the absolute eight-hour lifetime already answer.
+    2026-08-02 — The decisive point is that last_seen_at records the last REQUEST, not the last human. A dashboard that polls for deploy status or host health writes it on a timer, so an idle timeout built on it would expire a session only when the tab is CLOSED — which the absolute lifetime already covers — and never for the abandoned-but-open tab, which is the entire scenario. A control whose measurement is produced by the thing it is meant to constrain is not a control, and shipping one is worse than shipping nothing, because an operator who believes the console signs itself out locks their screen less often.
+    2026-08-02 — Instead: the absolute lifetime becomes configurable through the security policy that organization.manage_security_policy and PUT /organization/security-policy already exist for — the honest version of 'sign me out sooner', because it is measured on something the server actually knows. And RL-M1-037 proposes re-authentication for the highest-risk actions, which is not defeated by polling and binds the check to the moment of danger.
+    2026-08-02 — Two-factor authentication does not help the walked-away case — it has already passed both factors — which is worth stating so RL-M1-019 is not mistaken for a mitigation of this.
+    2026-08-02 — closed without CI verification: A decision task: the artifact is ADR 0017, proposed and awaiting the human owner (§2.6). No code, so nothing for CI to run.
+  acceptance_met: [1, 2, 3]
 - id: RL-M1-036
   title: Close the audit event namespace so a typo cannot vanish
   milestone: M1
@@ -3358,3 +3370,21 @@
     2026-08-02 — Found while reviewing RL-M1-021. guardCsrf audits with action 'session.csrf_rejected' and resourceType 'session', neither of which the permission catalogue declares — and neither the type system nor the database objects, because AuditRecord types both as string and audit_entries has no check constraint. That is correct as a decision (a CSRF rejection is an event, not a permission) and unpoliced as a mechanism: a typo like 'sesion.csrf_rejected' writes cleanly and the entry disappears from every filter that looks for the real name.
 
     2026-08-02 — Adding 'session' to RESOURCE_TYPES is NOT the fix — catalogue_completeness rejects a resource type no action touches, which is the right rule. The audit namespace needs to be its own closed set, related to the catalogue but not identical to it.
+- id: RL-M1-037
+  title: Require re-authentication for the highest-risk actions
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: []
+  blocks: []
+  risk: high
+  acceptance:
+    - A named set of actions requires the password again when the session is older than a short threshold
+    - The set and the threshold are part of the organization security policy, not hardcoded
+    - A re-authentication, and a failed one, are both audited
+    - The check lives with the action, not in a route handler, so a second caller cannot skip it
+  artifacts: []
+  decisions: []
+  notes: |
+    2026-08-02 — Proposed by ADR 0017 as the control an idle timeout was reaching for. Targets the moment of danger rather than a clock, and unlike an idle timeout it is not defeated by the dashboard's own polling. Candidate actions: secret.read_value, terminal.open, grant.create, role.update, host.create.
