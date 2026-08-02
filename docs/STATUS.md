@@ -29,9 +29,7 @@ Auth, org/team/project model, the can() function with 100% branch coverage, hash
 
 ## In progress
 
-| Task | Age | Owner | Risk | Acceptance | Title |
-| --- | ---: | --- | --- | ---: | --- |
-| `RL-M1-020` | 0d | agent | **high** | 0/3 | Rate limit every authentication path |
+_None._
 
 ## Blocked
 
@@ -42,6 +40,7 @@ _None._
 | Task | Age | Owner | Risk | Acceptance | Title |
 | --- | ---: | --- | --- | ---: | --- |
 | `RL-M1-002` | 1d | agent | low | 1/3 | Build the CI pipeline and wire the tracker into it |
+| `RL-M1-020` | 0d | agent | **high** | 2/3 | Rate limit every authentication path |
 
 ## Open high-risk tasks without security-test coverage
 
@@ -66,13 +65,13 @@ These cannot be marked `done` until they name a security-suite artifact (brief Â
 
 | Suite | Passing | Rate |
 | --- | ---: | ---: |
-| Unit | 209 / 209 | 100% |
+| Unit | 230 / 230 | 100% |
 | Integration | not measured | â€” |
 | Authorization matrix | 135 / 135 | 100% |
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | 100% | must be 100% |
 
-Measured 2026-08-02T00:12:05.136Z.
+Measured 2026-08-02T00:34:54.642Z.
 
 ## Security findings
 
@@ -93,7 +92,6 @@ CI: _no status recorded yet._
 | Status | Count |
 | --- | ---: |
 | todo | 112 |
-| in-progress | 1 |
-| review | 1 |
+| review | 2 |
 | done | 48 |
 | **all** | **162** |

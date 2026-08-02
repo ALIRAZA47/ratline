@@ -1100,7 +1100,7 @@
 - id: RL-M1-020
   title: Rate limit every authentication path
   milestone: M1
-  status: in-progress
+  status: review
   owner: agent
   estimate: M
   depends_on: [RL-M1-017]
@@ -1112,9 +1112,17 @@
     - Limits apply per account and per source address independently
     - A test drives each endpoint past its limit and confirms rejection
   artifacts:
+    - src/db/migrations/20260801000011_rate_limits.sql
+    - src/auth/rate_limit.ts
+    - src/repo/rate_limits.ts
     - test/security/rate_limit_auth.test.ts
-  decisions: []
+  decisions: [15]
+  notes: |
+    2026-08-02 — Fail-closed is the load-bearing decision. A rate limiter that fails open is an availability feature wearing a security feature's clothes, and its failure mode is exactly the flood it exists to stop. Refusal is returned rather than thrown so a caller must handle it as a value.
 
+    2026-08-02 — The window is fixed rather than sliding, deliberately. A sliding window is the more accurate limiter and the wrong one here: it would let an attacker hold any named account locked out indefinitely by attempting once per window.
+    2026-08-02 — The bucket key is a digest computed before any lookup. Counting only real accounts would tell an attacker which accounts exist by which ones get limited — and since unauthenticated callers cause writes here, raw identifiers would make the table an attacker-populated harvest of every address ever tried.
+  acceptance_met: [2, 3]
 - id: RL-M1-021
   title: Implement cross-site request forgery protection
   milestone: M1

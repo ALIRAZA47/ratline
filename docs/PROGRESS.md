@@ -14,6 +14,38 @@ and which task IDs.
 
 ---
 
+## 2026-08-02 — Session 12 (continued) — M1
+
+**Completed:** RL-M1-020 reached `review`, not done.
+
+**Surprises / what I learned:**
+
+- **The agent reported the limit of its own work without being asked**, and it
+  was the right call: acceptance 1 is met at the function level and cannot be
+  met at the endpoint level, because there is no HTTP layer, no two-factor
+  verification and no password reset to wire it into. I verified by grep that
+  nothing in production code calls the limiter. Marking that `done` would have
+  been the kind of claim that reads fine in a gate report and is false in the
+  product.
+- The design decision I would not have reached alone: the window is FIXED rather
+  than sliding, because a sliding window lets an attacker hold any named account
+  locked out indefinitely by attempting once per window. The more accurate
+  limiter is the wrong one here.
+- Digesting the bucket key was chosen for existence-leak reasons and turns out
+  to matter more for a second one — unauthenticated callers cause writes to that
+  table, so raw identifiers would make it an attacker-populated harvest of every
+  address ever tried, in the database and in every backup.
+- **An existing test caught the agent rather than the reverse.** RL-M1-007's
+  "every exported repository function takes an AuthzContext first" flagged two
+  pure type guards it had exported from `src/repo/`. It removed them and
+  recorded why, rather than weakening the rule. That structural rule has now
+  paid for itself twice.
+
+**Next session should start with:** RL-M1-019 (two-factor) and RL-M1-021 (CSRF),
+which finish authentication hardening. RL-M1-024 still owes the pre-authentication
+context decision ADR 0014 named — it blocks sign-in audit entries and the
+rate-limiter's own refusal entries.
+
 ## 2026-08-02 — Session 12 — M1
 
 **Goal:** RL-M1-018 — role changes reaching active sessions — with rate limiting
