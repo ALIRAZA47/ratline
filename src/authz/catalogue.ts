@@ -206,6 +206,15 @@ const ACTIONS = {
     scope: "organization",
     description: "Remove a person from the organization, ending their access immediately.",
   },
+  // Separate from member.remove because the two answer different needs. Ending
+  // a compromised person's sessions must not require removing them from the
+  // organization — that is a destructive answer to a containment question, and
+  // during an incident the destructive answer is the one people avoid taking.
+  "member.revoke_sessions": {
+    resource: "member",
+    scope: "organization",
+    description: "Sign another member out everywhere, immediately, without removing them.",
+  },
 
   // --- role ---------------------------------------------------------------
   // Roles are editable and custom roles compose the raw permission set (§6.3),
@@ -787,8 +796,7 @@ export const ACTION_CATALOGUE: Readonly<Record<Action, ActionDefinition>> = ACTI
  *     (brief §6.5). Arrives with RL-M3-025.
  *   - Audit log export, and running chain verification on demand
  *     (brief §6.3). Arrives with RL-M1-015.
- *   - Revoking another member's active sessions (brief §6.3, "role changes take
- *     effect immediately"). Arrives with RL-M1-018.
+ *   - (CLOSED by RL-M1-018: `member.revoke_sessions`.)
  *   - Preview environments, if RL-M3-027 decides they make v1.
  */
 

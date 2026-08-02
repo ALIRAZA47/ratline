@@ -204,6 +204,7 @@ const OWNER_ACTIONS: readonly Action[] = [
   "member.read",
   "member.invite",
   "member.remove",
+  "member.revoke_sessions",
 
   // role
   "role.read",
@@ -366,6 +367,7 @@ const ADMIN_ACTIONS: readonly Action[] = [
   "member.read",
   "member.invite",
   "member.remove",
+  "member.revoke_sessions",
 
   // role
   "role.read",
@@ -526,6 +528,11 @@ const INFRASTRUCTURE_ACTIONS: readonly Action[] = [
 
   // member — SSH grants are made to people; an opaque id is not a person
   "member.read",
+  // Containment without escalation. Infrastructure already holds break-glass
+  // and terminal.open, so this grants nothing new in reach — it means an
+  // incident can be contained without first elevating to Admin, which is less
+  // privilege and less audit noise for the commonest emergency action.
+  "member.revoke_sessions",
 
   // role — §6.4 derives SSH principals from roles (D5)
   "role.read",

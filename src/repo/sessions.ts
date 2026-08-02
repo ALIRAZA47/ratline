@@ -436,7 +436,15 @@ export async function revokeSessionById(
   const holder = await holderOf(ctx, sessionId);
   if (holder === null) return false;
   if (!isSelf(ctx, holder)) {
-    await requirePermission(ctx, "member.remove", organizationScope(await organizationScopeNode(ctx)));
+    // RL-M1-018 replaced the member.remove stand-in with the real action.
+    // Containment must not require the destructive answer: during an incident
+    // "remove them from the organization" is the option people hesitate over,
+    // and hesitation is what an attacker is counting on.
+    await requirePermission(
+      ctx,
+      "member.revoke_sessions",
+      organizationScope(await organizationScopeNode(ctx)),
+    );
   }
   return scoped(ctx, async (query) => {
     const rows = await query<{ id: string }>(`${END_SESSION} and sessions.id = $2 returning id`, [
@@ -466,7 +474,15 @@ export async function revokeSessionsOfUser(
   reason: SessionEndReason,
 ): Promise<number> {
   if (!isSelf(ctx, userId)) {
-    await requirePermission(ctx, "member.remove", organizationScope(await organizationScopeNode(ctx)));
+    // RL-M1-018 replaced the member.remove stand-in with the real action.
+    // Containment must not require the destructive answer: during an incident
+    // "remove them from the organization" is the option people hesitate over,
+    // and hesitation is what an attacker is counting on.
+    await requirePermission(
+      ctx,
+      "member.revoke_sessions",
+      organizationScope(await organizationScopeNode(ctx)),
+    );
   }
   return scoped(ctx, async (query) => {
     const rows = await query<{ id: string }>(`${END_SESSION} and sessions.user_id = $2 returning id`, [
