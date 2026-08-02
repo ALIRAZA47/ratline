@@ -797,6 +797,12 @@ export const ACTION_CATALOGUE: Readonly<Record<Action, ActionDefinition>> = ACTI
  *   - Audit log export, and running chain verification on demand
  *     (brief §6.3). Arrives with RL-M1-015.
  *   - (CLOSED by RL-M1-018: `member.revoke_sessions`.)
+ *   - Resetting another member's two-factor enrolment (RL-M1-019, threat model
+ *     R-23). Whoever holds it can turn off anybody's second factor, so it is
+ *     the most dangerous action the feature could have, and it needs a role
+ *     decision rather than a default. `src/repo/two_factor.ts` refuses to write
+ *     anyone else's enrolment at all until it exists — the answer
+ *     `updatePasswordHash` gives to the same question.
  *   - Preview environments, if RL-M3-027 decides they make v1.
  */
 

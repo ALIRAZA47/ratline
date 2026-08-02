@@ -19,3 +19,4 @@ export * from "./api_tokens.ts";
 export * from "./sessions.ts";
 export * from "./audit_verification.ts";
 export * from "./rate_limits.ts";
+export * from "./two_factor.ts";
