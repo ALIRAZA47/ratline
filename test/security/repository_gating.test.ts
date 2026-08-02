@@ -66,6 +66,26 @@ const EXEMPT: Readonly<Record<string, string>> = {
     "depend on grants they may have just lost. Non-self writes DO resolve " +
     "member.reset_password inside the function (RL-M1-034).",
 
+  // --- the permission mechanism itself --------------------------------------
+  //
+  // These three cannot resolve a permission because they are what resolving a
+  // permission is made of. `require()` calls checkFreshness on every gated
+  // action (RL-M1-037), so a permission check inside them would be infinitely
+  // recursive — not merely awkward, impossible.
+  readReauthPolicy:
+    "Reads the organization's own re-authentication policy, and is called BY " +
+    "require() on every gated action. Gating it would be circular. It reads no " +
+    "tenant data beyond the policy row, which row-level security already confines.",
+  checkFreshness:
+    "The freshness half of require() itself. Same circularity, and it reads only " +
+    "the acting session's own timestamp.",
+  markAuthenticated:
+    "Moves the timestamp that grants privilege, so it is the one here that needed " +
+    "real defending. There is no permission that should let one person refresh " +
+    "another's authentication — proving a password is something only its owner can " +
+    "do — so the UPDATE is scoped to ctx.actor.id in the statement. The predicate " +
+    "IS the check, and unlike a caller-side one it cannot be skipped.",
+
   // --- reads of your own credentials ----------------------------------------
   listOwnSessions:
     "Your own sessions, and only ever your own — the function takes no subject. " +

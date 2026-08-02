@@ -8,7 +8,7 @@ Generated 2026-08-02.
 | Milestone | Progress | Done | Total | Open high-risk |
 | --- | --- | ---: | ---: | ---: |
 | **M0** Plan | `########################` 100% | 26 | 26 | 0 |
-| **M1** Control plane skeleton | `#####################---` 89% | 40 | 45 | 3 |
+| **M1** Control plane skeleton | `######################--` 91% | 41 | 45 | 2 |
 | **M2** Agent and first host | `------------------------` 0% | 0 | 29 | 20 |
 | **M3** Static sites end to end | `------------------------` 0% | 0 | 27 | 18 |
 | **M4** Node and Bun apps | `------------------------` 0% | 0 | 15 | 10 |
@@ -60,20 +60,19 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 - `RL-M7-013` (M7, todo) — Connect a database to a site and prove the credential path end to end
 - `RL-M7-015` (M7, todo) — Implement MongoDB support
 - `RL-M7-016` (M7, todo) — Decide how major-version upgrades are handled, or that they are not
-- `RL-M1-037` (M1, todo) — Require re-authentication for the highest-risk actions
 - `RL-M1-045` (M1, todo) — Chase the intermittent failure in the API token ceiling suite
 
 ## Test health
 
 | Suite | Passing | Rate |
 | --- | ---: | ---: |
-| Unit | 376 / 377 | 100% |
+| Unit | 390 / 390 | 100% |
 | Integration | not measured | — |
 | Authorization matrix | 191 / 191 | 100% |
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | 100% | must be 100% |
 
-Measured 2026-08-02T15:45:34.669Z.
+Measured 2026-08-02T16:21:59.739Z.
 
 ### Authorization matrix (role × endpoint × subject)
 
@@ -95,10 +94,10 @@ Measured 2026-08-02T15:45:34.669Z.
 | Severity | Open |
 | --- | ---: |
 | Critical | 0 |
-| High | 1 |
+| High | 0 |
 | Medium | 0 |
 
-Gate check (critical + high must be zero): **FAIL — gate blocked**
+Gate check (critical + high must be zero): PASS
 
 ## Build
 
@@ -108,7 +107,7 @@ CI: _no status recorded yet._
 
 | Status | Count |
 | --- | ---: |
-| todo | 104 |
+| todo | 103 |
 | review | 2 |
-| done | 66 |
+| done | 67 |
 | **all** | **172** |

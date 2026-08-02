@@ -46,6 +46,7 @@ import {
   scopeNodeExists,
   type ScopeRef,
 } from "../repo/authorization.ts";
+import { checkFreshness } from "../repo/reauthentication.ts";
 
 /**
  * Why a decision came out the way it did.
@@ -287,7 +288,42 @@ export async function require(
 ): Promise<AuthorizationDecision> {
   const decision = await can(ctx, action, scope, resolveRoles);
   if (!decision.allowed) throw new NotPermittedError(decision);
+
+  // Freshness, AFTER permission (RL-M1-037). The order is the whole of it: an
+  // actor who does not hold the action must be refused as not holding it, never
+  // asked to prove a password they would then have proved for nothing. Asking
+  // first would also turn this into an oracle — "you were asked to
+  // re-authenticate" would mean "you hold this permission".
+  //
+  // It lives here rather than at each call site because a guard the caller has
+  // to remember is a guard the second caller forgets. Every repository function
+  // that gates on a permission already comes through this line.
+  const freshness = await checkFreshness(ctx, action);
+  if (!freshness.fresh) throw new StaleAuthenticationError(action, freshness.reason);
+
   return decision;
+}
+
+/**
+ * Thrown when the permission holds and the authentication is too old.
+ *
+ * NOT a `NotPermittedError`, and the distinction is deliberate in both
+ * directions. It must not be rendered as RL-M1-026's refusal, because an
+ * operator who is silently 404'd cannot know to re-enter their password and the
+ * control becomes an outage. And it does tell the caller they hold the
+ * permission — which is information about themselves, on a session they already
+ * hold, and is the minimum the control needs to be usable.
+ */
+export class StaleAuthenticationError extends Error {
+  readonly action: string;
+  readonly reason: "stale" | "no-session";
+
+  constructor(action: string, reason: "stale" | "no-session") {
+    super(`${action} requires a recent password (${reason})`);
+    this.name = "StaleAuthenticationError";
+    this.action = action;
+    this.reason = reason;
+  }
 }
 
 /** The catalogue entry for an action, for interfaces that explain a decision. */

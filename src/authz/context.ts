@@ -40,6 +40,20 @@ export type AuthzContext = {
   readonly requestId: string;
   /** Recorded on audit entries. Null for work with no inbound request. */
   readonly ip: string | null;
+  /**
+   * The session this request arrived on, when it arrived on one (RL-M1-037).
+   *
+   * Null means "no session", which is the honest answer for a job, a migration
+   * or a service identity — and it must FAIL CLOSED for any action the
+   * organization has put behind re-authentication, because "we cannot tell how
+   * recently a password was proved" is not a reason to assume it was recent.
+   *
+   * Optional at every constructor so existing callers are unchanged. That is
+   * deliberate rather than lazy: the alternative was threading a session
+   * through several hundred call sites, most of which are tests that have no
+   * session and should not pretend to.
+   */
+  readonly sessionId: string | null;
 };
 
 type ContextInput = {
@@ -47,6 +61,7 @@ type ContextInput = {
   readonly actor: Actor;
   readonly requestId: string;
   readonly ip?: string | null;
+  readonly sessionId?: string | null;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -70,6 +85,7 @@ function build(input: ContextInput): AuthzContext {
     actor: input.actor,
     requestId: input.requestId,
     ip: input.ip ?? null,
+    sessionId: input.sessionId ?? null,
   }) as AuthzContext;
 }
 
@@ -82,12 +98,15 @@ export function contextForRequest(input: {
   readonly userId: string;
   readonly requestId: string;
   readonly ip?: string | null;
+  /** Omit only where there genuinely is no session — see the type's note. */
+  readonly sessionId?: string | null;
 }): AuthzContext {
   return build({
     orgId: input.orgId,
     actor: { kind: "user", id: input.userId },
     requestId: input.requestId,
     ...(input.ip === undefined ? {} : { ip: input.ip }),
+    ...(input.sessionId === undefined ? {} : { sessionId: input.sessionId }),
   });
 }
 

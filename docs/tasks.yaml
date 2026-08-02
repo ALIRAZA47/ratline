@@ -3439,21 +3439,34 @@
 - id: RL-M1-037
   title: Require re-authentication for the highest-risk actions
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: M
   depends_on: []
   blocks: []
   risk: high
+  started_at: 2026-08-02
+  done_at: 2026-08-02
   acceptance:
     - A named set of actions requires the password again when the session is older than a short threshold
     - The set and the threshold are part of the organization security policy, not hardcoded
     - A re-authentication, and a failed one, are both audited
     - The check lives with the action, not in a route handler, so a second caller cannot skip it
-  artifacts: []
-  decisions: []
+  artifacts:
+    - src/repo/reauthentication.ts
+    - test/security/reauthentication.test.ts
+  decisions: [17]
   notes: |
     2026-08-02 — Proposed by ADR 0017 as the control an idle timeout was reaching for. Targets the moment of danger rather than a clock, and unlike an idle timeout it is not defeated by the dashboard's own polling. Candidate actions: secret.read_value, terminal.open, grant.create, role.update, host.create.
+    2026-08-02 — The check lives in require(), which is acceptance 4 taken literally. Every repository function that gates on a permission already comes through that line, so a sensitive action cannot be reached without passing the freshness check — including by a caller written next year who has never heard of this feature. A guard the caller has to remember is a guard the second caller forgets, which is §9's argument about handlers applied one layer along.
+    2026-08-02 — can() deliberately does NOT check freshness. It answers 'may this actor do this', which is what the role editor's live preview and the navigation rail ask; neither should demand a password, and a check inside can() would make the whole interface unusable the moment an organization turned this on. require() answers 'may they, right now, on this session'.
+    2026-08-02 — Permission is resolved BEFORE freshness, and the ordering is not cosmetic. An actor who does not hold the action must be refused as not holding it, never asked to prove a password they would then have proved for nothing — and asking first would make the prompt an oracle, because 'you were asked to re-authenticate' would mean 'you hold this permission'.
+    2026-08-02 — Fails closed on an unknown session. A job, a migration or a service identity cannot prove freshness, and 'we cannot tell' is not a reason to assume recent. The remedy for a job that legitimately needs a listed action is a policy that does not list it, never a hole here.
+    2026-08-02 — Off by default — the opposite of most security defaults, and deliberate. Re-authentication nobody configured would lock operators out of a fresh installation, which is a worse first run than a control not yet switched on. The interface recommends the set; the database does not presume it.
+    2026-08-02 — Two findings from my own tests. repository_gating (RL-M1-043) caught markAuthenticated taking ANY session id — it moves the timestamp that grants privilege, so unscoped it would let anyone reachable hand a stale session its privileges back. Scoped to ctx.actor.id in the statement, because there is no permission that should allow it: proving a password is something only its owner can do. And migration 10 note 3 warned that reading the sessions TABLE rather than live_sessions is 'the single mistake that would honour a revoked session' — I made it anyway, in a function about privilege.
+    2026-08-02 — Mutation-tested five ways. Four caught immediately; the fifth escaped and the escape was the useful one. Reading the table instead of the view passed, because the revoked session in that test was ALSO stale by age — the test asserted the right thing for the wrong reason. Rewritten to revoke a session that is fresh by age and dead by revocation, which is the only combination that can tell the two apart, then re-ran the mutation.
+    2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 581 tests green locally; five mutations, four caught and the fifth exposed a test that could not fail.
+  acceptance_met: [1, 2, 3, 4]
 - id: RL-M1-038
   title: Catalogue an administrative reset of a second factor
   milestone: M1
