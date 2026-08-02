@@ -183,7 +183,7 @@ over. Tracked as R-06.
 
 | Surface | Exposure | Pre-auth reachable | Primary control |
 | --- | --- | --- | --- |
-| Dashboard listener | Loopback by default | No | C5, session auth, rate limits |
+| Dashboard listener | Loopback by default | No | C5, session auth, rate limits, CSRF token on every unsafe method (ADR 0016) |
 | Agent endpoint | May be public | TLS handshake only | Client certificate required before application code runs |
 | Webhook receiver | Public | Signature check | Constant-time verify before parse; replay rejection |
 | Published sites | Public | Yes | Not Ratline's code; isolation is per-site users |
@@ -215,6 +215,8 @@ Carried into `RISKS.md` with owners. Listed here rather than hidden.
 | R-16 | The constant-time password comparison is enforced structurally, not behaviourally | No functional test can distinguish `secretEquals` from `===` or `Buffer.equals`: all three accept the same passwords and differ only in rejection timing. A source-level assertion catches the mutation someone actually makes; it does not catch every possible one, and says so (ADR 0014) |
 | R-17 | There is no administrative password reset, and administrative session revocation is gated on `member.remove` as a stand-in | `updatePasswordHash` refuses non-self writes rather than shipping an ungated reset. The stand-in gate can only be too strict, never too permissive. Both close with RL-M1-018 |
 | R-13 | A disabled user's grants still resolve to allow | "May this actor act at all" is one question per request, not one per hierarchy node, so `users.disabled_at` belongs in `can()` (RL-M1-012) rather than in the grant resolution functions. Recorded so the omission does not read as an oversight |
+| R-22 | The CSRF token is derived from the session id, so it is **constant for the life of a session**. A token that escapes — into an access log, a `Referer`, a crash report — stays valid until the session ends | Per-request tokens need server state whose only purpose is to be kept in step with the session, which is the synchronisation nobody maintains (ADR 0016). Mitigated by keeping the token out of cookies and URLs entirely, refusing one presented in a query string rather than ignoring it, and by session lifetime being absolute and short (8 hours, ADR 0014). Not eliminated |
+| R-23 | **Nothing calls the CSRF guard.** There is no HTTP layer, so no cookie carries these attributes and no request is refused in production | Identical in shape to R-15's note on the rate limiter, and owed by the same work: `src/api/server.ts` does not exist and RL-M1-021 must not create it. The module and its policy are exercised end to end by `test/security/csrf.test.ts`, and the wiring is enumerated at the bottom of `src/api/csrf.ts`. Until it lands this is a mechanism, not a protection |
 
 ---
 
