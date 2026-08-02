@@ -16,6 +16,8 @@
 
 import { scoped } from "../db/internal/handle.ts";
 import type { AuthzContext } from "../authz/context.ts";
+import { require as requirePermission } from "../authz/can.ts";
+import { organizationScopeRef } from "./scope.ts";
 
 export type Organization = {
   readonly id: string;
@@ -49,6 +51,7 @@ const toOrganization = (row: OrganizationRow): Organization => ({
  * organization-by-id lookup would be the unscoped read C3 forbids.
  */
 export async function currentOrganization(ctx: AuthzContext): Promise<Organization | null> {
+  await requirePermission(ctx, "organization.read", await organizationScopeRef(ctx));
   return scoped(ctx, async (query) => {
     const rows = await query<OrganizationRow>("select id, slug, name, created_at from organizations");
     const row = rows[0];
@@ -58,6 +61,7 @@ export async function currentOrganization(ctx: AuthzContext): Promise<Organizati
 
 /** Members of the current tenant. */
 export async function listMembers(ctx: AuthzContext): Promise<Member[]> {
+  await requirePermission(ctx, "member.read", await organizationScopeRef(ctx));
   return scoped(ctx, async (query) => {
     const rows = await query<MemberRow>(
       `select m.user_id, u.email::text as email, u.name, m.created_at as joined_at
@@ -84,6 +88,7 @@ export async function listMembers(ctx: AuthzContext): Promise<Member[]> {
  * that by running the query with the predicate removed.
  */
 export async function findMember(ctx: AuthzContext, userId: string): Promise<Member | null> {
+  await requirePermission(ctx, "member.read", await organizationScopeRef(ctx));
   return scoped(ctx, async (query) => {
     const rows = await query<MemberRow>(
       `select m.user_id, u.email::text as email, u.name, m.created_at as joined_at
@@ -103,6 +108,7 @@ export async function findMember(ctx: AuthzContext, userId: string): Promise<Mem
 export async function listProjects(
   ctx: AuthzContext,
 ): Promise<{ id: string; slug: string; name: string }[]> {
+  await requirePermission(ctx, "project.read", await organizationScopeRef(ctx));
   return scoped(ctx, async (query) => {
     const rows = await query<{ id: string; slug: string; name: string }>(
       "select id, slug::text as slug, name from projects order by created_at desc",
@@ -119,11 +125,62 @@ export async function findProject(
   ctx: AuthzContext,
   projectId: string,
 ): Promise<{ id: string; slug: string; name: string } | null> {
+  // Resolved at ORGANIZATION scope rather than at the project's own node, which
+  // is wider than it needs to be and is the safe direction: a grant made at the
+  // project would also satisfy an organization-scoped check by inheritance, so
+  // narrowing this later can only refuse more. Narrowing it properly means
+  // resolving the project's scope node first, which is a read this function is
+  // about to perform — the ordering is RL-M1-042's business, not this fix's.
+  await requirePermission(ctx, "project.read", await organizationScopeRef(ctx));
   return scoped(ctx, async (query) => {
     const rows = await query<{ id: string; slug: string; name: string }>(
       "select id, slug::text as slug, name from projects where id = $1",
       [projectId],
     );
     return rows[0] ?? null;
+  });
+}
+
+/**
+ * The organization's name and one member's email, for the label an
+ * authenticator application shows (RL-M1-019, exempted by RL-M1-043).
+ *
+ * ## Why this is not gated, argued rather than assumed
+ *
+ * Enrolling a second factor happens at the WORST moment to require a
+ * permission: a person forced into enrolment at their first sign-in may hold no
+ * grants at all, and a member who has just had their factor reset is in the
+ * same position. Gating the label behind `organization.read` and `member.read`
+ * made exactly those people unable to enrol — which the two-factor suite caught
+ * the moment those reads were gated.
+ *
+ * What it returns is not privileged either way. Every member of a tenant knows
+ * which organization they are in; the email belongs to the person being
+ * enrolled. The caller has already proven the right to enrol them —
+ * `startEnrolment` resolved the subject and refused if it could not — so this
+ * runs after the decision rather than instead of it.
+ *
+ * It is deliberately narrow: two fields, no list, no lookup by anything but the
+ * id the enrolment already returned. A wider read here would be the exemption
+ * quietly becoming a bypass.
+ */
+export async function enrolmentLabel(
+  ctx: AuthzContext,
+  userId: string,
+): Promise<{ organizationName: string; email: string }> {
+  return scoped(ctx, async (query) => {
+    const rows = await query<{ name: string; email: string }>(
+      `select o.name, u.email::text as email
+       from organizations o
+       join memberships m on m.org_id = o.id
+       join users u on u.id = m.user_id
+       where m.user_id = $1`,
+      [userId],
+    );
+    const row = rows[0];
+    return {
+      organizationName: row?.name ?? "Ratline",
+      email: row?.email ?? userId,
+    };
   });
 }

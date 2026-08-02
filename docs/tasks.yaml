@@ -3558,7 +3558,7 @@
   status: todo
   owner: agent
   estimate: L
-  depends_on: []
+  depends_on: [RL-M1-043]
   blocks: [RL-M1-030]
   risk: high
   acceptance:
@@ -3577,3 +3577,48 @@
     2026-08-02 — OPEN QUESTION THIS TASK MUST ANSWER FIRST, and it is a §9 question rather than a plumbing one. Every route declares the action it requires, which invites a middleware that calls can() before the handler. §9 rejects 'permission checks in route handlers instead of, OR IN ADDITION TO, the data layer' — and 'in addition to' is explicit. src/auth/privilege_changes.ts already states the reason: a second check is the shape that eventually disagrees with the first.
     2026-08-02 — The three readings, so whoever starts does not rediscover them. (a) The guard DECIDES by calling can(), and repositories keep their own checks — duplication, rejected by §9 as written. (b) The guard RESOLVES the context and scope and decides nothing; the repository is the only decision. Honest, and it means an unimplemented route performs no check at all, so transport coverage cannot rise until handlers exist — acceptance 5 would be unmeetable in this task alone. (c) The guard is defence in depth, like RLS is for C3, argued as a generated-from-data outer layer that cannot be forgotten and cannot vary per handler. Consistent with how C3 is already built and in tension with §9's wording.
     2026-08-02 — My reading is (b), because §9's 'in addition to' is not ambiguous and the codebase already pays for that discipline elsewhere — but it changes what this task can deliver, so it wants an ADR proposed and a human ruling before the code, not after. Deliberately NOT started on a guess: picking (a) or (c) quietly would put a second authorization decision in the system, which is the one thing C3 is built to prevent.
+- id: RL-M1-043
+  title: Gate the repository reads that never checked
+  milestone: M1
+  status: done
+  owner: agent
+  estimate: M
+  depends_on: []
+  blocks: [RL-M1-042]
+  risk: high
+  started_at: 2026-08-02
+  done_at: 2026-08-02
+  acceptance:
+    - Every exported repository read resolves a permission, or is on a written exemption list saying why not
+    - A new exported read that does neither fails a test
+    - The roles that may read the audit log are the roles that can read it
+  artifacts:
+    - test/security/repository_gating.test.ts
+  decisions: []
+  notes: |
+    2026-08-02 — SECURITY ISSUE IN ALREADY-MERGED WORK (§2.10). listAudit performs no permission check, and audit_log.read is held by Owner and Admin only — so every authenticated member of a tenant, including Viewer and Billing, can read the entire audit log. listMembers, findMember, listProjects, findProject and the two audit-verification reads are ungated the same way. Row-level security still confines all of them to one tenant, so this is a within-tenant privilege gap rather than a cross-tenant one.
+
+    2026-08-02 — Not exploitable today, and that is the only good news: nothing calls these over HTTP because there is no server. Building one on top would make every one of them live, which is why RL-M1-042 now depends on this.
+    2026-08-02 — Found as a direct consequence of the 2026-08-02 ruling on RL-M1-042. Under reading (b) the repository is the ONLY authorization decision, so a repository that does not check is genuinely unguarded — and that is what made the gap visible. A route-table middleware would have covered every one of these and left the repositories exactly as wrong, which is the strongest argument for the ruling that has come up so far.
+    2026-08-02 — The durable fix is not the six checks, it is the test: every exported repository read either resolves a permission or appears on a written exemption list with its reason. Some exemptions are legitimate — findPasswordCredential runs before an actor exists, recordAudit is called after a decision has already been made — and a list that has to be argued into is different from a rule nobody applies.
+    2026-08-02 — Six reads gated: listAudit, verifyAuditChain, listAuditVerifications, runAuditVerification, currentOrganization, listMembers, findMember, listProjects, findProject. Fifty-one tests broke, which is the gap being real — every one of them was an actor reading something they had no grant for.
+    2026-08-02 — The test fixtures that broke are as informative as the code. Most were a REFUSED actor reading listAudit to check their own denial was recorded — only ever possible because the audit log was ungated, and wrong on its own terms: the person reviewing an incident is not the person who was refused. They read as an owner now.
+    2026-08-02 — scoped_repository.test.ts was building contexts with a random uuid as the userId. That worked while the reads were ungated; now it is refused as actor-not-in-tenant — a correct refusal for the wrong reason, which would have made C3's cross-tenant tests pass without exercising row-level security at all. They use the seeded member now.
+    2026-08-02 — Gating exposed a real design fault in the two-factor path: enrolment read the organization and the member to build the authenticator label, so requiring organization.read made exactly the people who MUST enrol unable to — somebody forced into enrolment at first sign-in holds no grants, and somebody whose factor was just reset holds no more than they did. Replaced with enrolmentLabel, a two-field read argued as an exemption rather than a widening.
+    2026-08-02 — I invented audit_log.verify while writing the fix and can() denied it as unknown-action. Fail-closed, so nothing leaked — but nothing CAUGHT it either, because require() takes a plain string while can() deliberately takes one so untrusted input can be checked. Opened RL-M1-044.
+    2026-08-02 — The durable artifact is the rule, not the nine checks: every exported repository function resolves a permission or appears on a written exemption list. Thirty-one exemptions, each carrying an argument the test enforces a minimum length on — which caught my own one-line hand-waves. Mutation-tested three ways: listAudit losing its check again, a new ungated read appearing, and an exemption added with 'it is only called from safe places'.
+    2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 551 tests green locally; three mutations all caught.
+  acceptance_met: [1, 2, 3]
+- id: RL-M1-044
+  title: Type the permission passed to require(), not just to can()
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: S
+  depends_on: []
+  blocks: []
+  risk: medium
+  acceptance:
+    - TODO define acceptance before this task can start
+  artifacts: []
+  decisions: []

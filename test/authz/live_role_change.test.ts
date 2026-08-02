@@ -290,7 +290,10 @@ test("a refused containment attempt is audited as a denial", { skip }, async () 
         applyPrivilegeChange(attacker, { subjectUserId: world.ownerId, reason: "containment" }),
       );
 
-      const denials = await listAudit(attacker, { decision: "deny" });
+      // Read as the OWNER. The attacker is a plain member and cannot read the
+      // audit log — RL-M1-043 gated it, and the ability to review your own
+      // refused attempt is not one an attacker should have.
+      const denials = await listAudit(ctxFor(world, world.ownerId), { decision: "deny" });
       assert.equal(denials.length, 1);
       assert.equal(denials[0]?.action, "member.revoke_sessions");
       assert.equal(denials[0]?.resourceId, world.ownerId);

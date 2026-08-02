@@ -614,7 +614,12 @@ test("a refused request is audited, with the actor and without the token", { ski
         "unauthenticated",
       );
 
-      const entries = await listAudit(ctx, { action: CSRF_AUDIT_ACTION });
+      // Read as the tenant's OWNER rather than as Alice. RL-M1-043 gated
+      // listAudit, and a plain member reading the audit log was only ever
+      // possible because it was ungated.
+      const entries = await listAudit(requestCtx(acme.orgId, acme.ownerId), {
+        action: CSRF_AUDIT_ACTION,
+      });
       assert.equal(entries.length, 1, "exactly one refusal should have been recorded");
       const entry = entries[0];
       assert.equal(entry?.decision, "deny");

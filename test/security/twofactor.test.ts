@@ -892,7 +892,12 @@ test("spending a recovery code is audited, and no entry holds the code", { skip 
       });
       assert.ok(used.ok);
 
-      const entries = await listAudit(ctx, { action: "two_factor.recovery_code_used" });
+      // Read as the tenant's OWNER. `ctx` here is the sign-in service identity,
+      // which holds no grants at all and must not — RL-M1-043 gated the audit
+      // log, and a pre-authentication context reading it would be a hole rather
+      // than a convenience.
+      const review = requestCtx(acme.orgId, acme.ownerId);
+      const entries = await listAudit(review, { action: "two_factor.recovery_code_used" });
       assert.equal(entries.length, 1, "spending a recovery code must be recorded");
       const entry = entries[0];
       assert.equal(entry?.decision, "allow");
@@ -906,8 +911,8 @@ test("spending a recovery code is audited, and no entry holds the code", { skip 
 
       // A verification is recorded too, so an operator can see the shape of an
       // attack and not only its successes.
-      assert.equal((await listAudit(ctx, { action: "two_factor.verify" })).length, 1);
-      assert.equal((await listAudit(ctx, { action: "two_factor.enrol" })).length, 1);
+      assert.equal((await listAudit(review, { action: "two_factor.verify" })).length, 1);
+      assert.equal((await listAudit(review, { action: "two_factor.enrol" })).length, 1);
     });
 
     const flattened = await asApplicationRole(database, async (app) => {

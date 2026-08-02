@@ -74,7 +74,7 @@ import type { AuthzContext } from "../authz/context.ts";
 import { recordAudit } from "../repo/audit.ts";
 import { NotPermittedError } from "../authz/can.ts";
 import { revokeSessionsOfUser } from "../repo/sessions.ts";
-import { currentOrganization, findMember } from "../repo/organizations.ts";
+import { enrolmentLabel } from "../repo/organizations.ts";
 import { startSession } from "../repo/sessions.ts";
 import {
   confirmEnrolment as writeConfirmation,
@@ -275,14 +275,19 @@ export async function beginEnrolment(
   // The label an authenticator application shows. Both halves are looked up
   // rather than taken from the caller: a caller-supplied issuer would let one
   // enrolment masquerade as another organization's inside somebody's phone.
-  const organization = await currentOrganization(ctx);
-  const member = await findMember(ctx, written.userId);
+  //
+  // Through `enrolmentLabel` rather than the permissioned reads, and the reason
+  // is the moment this runs: somebody forced into enrolment at first sign-in
+  // holds no grants, and somebody whose factor was just reset holds no more
+  // than they did. Requiring `organization.read` here would make exactly the
+  // people who must enrol unable to. See the exemption argued in that function.
+  const label = await enrolmentLabel(ctx, written.userId);
   return {
     ok: true,
     secret: base32Encode(secret),
     uri: otpauthUri({
-      issuer: organization?.name ?? "Ratline",
-      account: member?.email ?? written.userId,
+      issuer: label.organizationName,
+      account: label.email,
       secret,
       parameters,
     }),

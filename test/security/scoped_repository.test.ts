@@ -184,8 +184,17 @@ async function usingScratch(database: string, fn: () => Promise<void>): Promise<
   }
 }
 
-const ctxFor = (orgId: string): AuthzContext =>
-  contextForRequest({ orgId, userId: randomUUID(), requestId: `test-${randomUUID()}` });
+/**
+ * A context for a REAL member of the tenant.
+ *
+ * The userId used to be a random uuid, which worked only while the repository
+ * reads were ungated (RL-M1-043). Now they resolve a permission, and a
+ * non-member is refused as `actor-not-in-tenant` — a correct refusal that
+ * happens for the wrong reason here, and would have made these tests pass
+ * without exercising row-level security at all.
+ */
+const ctxFor = (orgId: string, userId: string): AuthzContext =>
+  contextForRequest({ orgId, userId, requestId: `test-${randomUUID()}` });
 
 test("a repository sees its own tenant and no other", { skip }, async () => {
   await withMigratedDatabase(async (client, database) => {
@@ -193,14 +202,14 @@ test("a repository sees its own tenant and no other", { skip }, async () => {
     const globex = await seedOrganization(client, "globex");
 
     await usingScratch(database, async () => {
-      const mine = await currentOrganization(ctxFor(acme.orgId));
+      const mine = await currentOrganization(ctxFor(acme.orgId, acme.userId));
       assert.equal(mine?.slug, "acme");
 
-      const members = await listMembers(ctxFor(acme.orgId));
+      const members = await listMembers(ctxFor(acme.orgId, acme.userId));
       assert.deepEqual(members.map((m) => m.email), ["owner@acme.example"]);
 
       // Symmetric, so the test cannot pass by seeing nothing at all.
-      const theirs = await currentOrganization(ctxFor(globex.orgId));
+      const theirs = await currentOrganization(ctxFor(globex.orgId, globex.userId));
       assert.equal(theirs?.slug, "globex");
     });
   });
@@ -213,13 +222,13 @@ test("findMember returns null for a real user in another tenant", { skip }, asyn
     const globex = await seedOrganization(client, "globex");
 
     await usingScratch(database, async () => {
-      assert.notEqual(await findMember(ctxFor(acme.orgId), acme.userId), null, "own member should be found");
+      assert.notEqual(await findMember(ctxFor(acme.orgId, acme.userId), acme.userId), null, "own member should be found");
       assert.equal(
-        await findMember(ctxFor(acme.orgId), globex.userId),
+        await findMember(ctxFor(acme.orgId, acme.userId), globex.userId),
         null,
         "a member of another tenant must be indistinguishable from one that does not exist",
       );
-      assert.equal(await findMember(ctxFor(acme.orgId), randomUUID()), null);
+      assert.equal(await findMember(ctxFor(acme.orgId, acme.userId), randomUUID()), null);
     });
   });
 });
@@ -233,8 +242,8 @@ test("absent and forbidden are the same answer", { skip }, async () => {
     const foreign = await client.query<{ id: string }>("select id from organizations where id = $1", [globex.orgId]);
 
     await usingScratch(database, async () => {
-      const forbidden = await findProject(ctxFor(acme.orgId), foreign.rows[0]?.id ?? randomUUID());
-      const absent = await findProject(ctxFor(acme.orgId), randomUUID());
+      const forbidden = await findProject(ctxFor(acme.orgId, acme.userId), foreign.rows[0]?.id ?? randomUUID());
+      const absent = await findProject(ctxFor(acme.orgId, acme.userId), randomUUID());
       assert.equal(forbidden, absent, "both must be exactly null");
     });
   });
@@ -249,7 +258,7 @@ test("a repository query with its WHERE clause deleted still returns nothing for
     await seedOrganization(client, "globex");
 
     await usingScratch(database, async () => {
-      const rows = await scoped(ctxFor(acme.orgId), async (query) =>
+      const rows = await scoped(ctxFor(acme.orgId, acme.userId), async (query) =>
         // No predicate whatsoever.
         query<{ org_id: string }>("select org_id from memberships"),
       );
@@ -271,7 +280,7 @@ test("the tenant does not leak between transactions on a pooled connection", { s
       // Force reuse of a single connection.
       connect({ max: 1 });
       for (const org of [acme, globex, acme]) {
-        const seen = await scoped(ctxFor(org.orgId), async (query) =>
+        const seen = await scoped(ctxFor(org.orgId, org.userId), async (query) =>
           query<{ id: string }>("select id from organizations"),
         );
         assert.deepEqual(seen.map((r) => r.id), [org.orgId], "each transaction must see only its own tenant");
@@ -298,7 +307,7 @@ test("a query outside scoped() sees nothing, not the previous tenant", { skip },
     await usingScratch(database, async () => {
       const pool = connect({ max: 1 });
 
-      const inside = await scoped(ctxFor(acme.orgId), async (query) =>
+      const inside = await scoped(ctxFor(acme.orgId, acme.userId), async (query) =>
         query<{ id: string }>("select id from organizations"),
       );
       assert.deepEqual(inside.map((r) => r.id), [acme.orgId], "inside the primitive, the tenant applies");

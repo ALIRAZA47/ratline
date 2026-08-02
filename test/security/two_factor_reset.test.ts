@@ -84,6 +84,8 @@ test("it moves with the password reset, never apart from it", () => {
 
 type World = {
   readonly orgId: string;
+  /** Someone who may read the audit log — RL-M1-043 made that a permission. */
+  readonly ownerId: string;
   readonly actorId: string;
   readonly subjectId: string;
   readonly subjectEmail: string;
@@ -112,7 +114,7 @@ async function seedWorld(client: Client, roleKey: string, requireTwoFactor = fal
     return id;
   };
 
-  await mk("owner@acme.example", "owner");
+  const ownerId = await mk("owner@acme.example", "owner");
   const actorId = await mk("actor@acme.example", roleKey);
   const subjectEmail = "subject@acme.example";
   const subjectId = await mk(subjectEmail, "viewer");
@@ -146,7 +148,7 @@ async function seedWorld(client: Client, roleKey: string, requireTwoFactor = fal
     );
   }
 
-  return { orgId, actorId, subjectId, subjectEmail };
+  return { orgId, ownerId, actorId, subjectId, subjectEmail };
 }
 
 async function usingScratch(database: string, fn: () => Promise<void>): Promise<void> {
@@ -334,7 +336,12 @@ for (const roleKey of ["developer", "viewer", "infrastructure", "release_manager
           "a refused reset ended the member's session anyway",
         );
 
-        const denials = await listAudit(actor, { action: "member.reset_two_factor", decision: "deny" });
+        // Read as the OWNER: the refused actor cannot read the audit log, and
+        // should not be able to (RL-M1-043).
+        const denials = await listAudit(ctxFor(world, world.ownerId), {
+          action: "member.reset_two_factor",
+          decision: "deny",
+        });
         assert.equal(denials.length, 1);
         assert.equal(denials[0]?.actorId, world.actorId);
       });

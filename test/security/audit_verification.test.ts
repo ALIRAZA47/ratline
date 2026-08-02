@@ -260,6 +260,14 @@ test("the job alerts and raises on a broken chain", { skip }, async () => {
       "insert into service_identities (org_id, name) values ($1, 'audit-verifier') returning id",
       [orgId],
     );
+    // RL-M1-043 gated the verification reads, so the verifier now needs the
+    // permission its own module says the deployment must grant it. A named
+    // service identity that bypassed permissions would be named in name only.
+    await client.query(
+      `insert into grants (org_id, subject_type, subject_id, role_key, scope_type)
+       values ($1, 'service_identity', $2, 'admin', 'organization')`,
+      [orgId, identity.rows[0]?.id ?? ""],
+    );
 
     await usingScratch(database, async () => {
       await appendSome(ctxOf(orgId, userId), 3);
@@ -299,6 +307,14 @@ test("the job records every run, including clean ones", { skip }, async () => {
       "insert into service_identities (org_id, name) values ($1, 'audit-verifier') returning id",
       [orgId],
     );
+    // RL-M1-043 gated the verification reads, so the verifier now needs the
+    // permission its own module says the deployment must grant it. A named
+    // service identity that bypassed permissions would be named in name only.
+    await client.query(
+      `insert into grants (org_id, subject_type, subject_id, role_key, scope_type)
+       values ($1, 'service_identity', $2, 'admin', 'organization')`,
+      [orgId, identity.rows[0]?.id ?? ""],
+    );
 
     await usingScratch(database, async () => {
       await appendSome(ctxOf(orgId, userId), 2);
@@ -328,6 +344,14 @@ test("the verifier is attributed to a named service identity", { skip }, async (
     const identity = await client.query<{ id: string }>(
       "insert into service_identities (org_id, name) values ($1, 'audit-verifier') returning id",
       [orgId],
+    );
+    // RL-M1-043 gated the verification reads, so the verifier now needs the
+    // permission its own module says the deployment must grant it. A named
+    // service identity that bypassed permissions would be named in name only.
+    await client.query(
+      `insert into grants (org_id, subject_type, subject_id, role_key, scope_type)
+       values ($1, 'service_identity', $2, 'admin', 'organization')`,
+      [orgId, identity.rows[0]?.id ?? ""],
     );
     const identityId = identity.rows[0]?.id ?? "";
 

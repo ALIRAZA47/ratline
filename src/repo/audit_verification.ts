@@ -12,6 +12,8 @@
 
 import { scoped } from "../db/internal/handle.ts";
 import type { AuthzContext } from "../authz/context.ts";
+import { require as requirePermission } from "../authz/can.ts";
+import { organizationScopeRef } from "./scope.ts";
 
 /**
  * `truncated` is the outcome this whole mechanism exists for: the chain
@@ -51,6 +53,23 @@ function asOutcome(value: string): VerificationOutcome {
  * truncation becomes invisible again.
  */
 export async function runAuditVerification(ctx: AuthzContext): Promise<VerificationResult> {
+  // Gated even though the only caller today is the background job, because the
+  // job runs as a NAMED service identity (`contextForSystem`) rather than as an
+  // anonymous task — which was the whole point of building it that way. A named
+  // actor that bypasses permissions is a named actor in name only, so the
+  // deployment must grant its identity the permission below.
+  //
+  // `audit_log.read` rather than a verify action of its own. Writing
+  // "audit_log.verify" was the first attempt and there is no such action: the
+  // catalogue has exactly one audit permission. `can()` denied it as
+  // `unknown-action`, which is the right failure and is why nothing leaked —
+  // but nothing CAUGHT it either, because `require()` takes a plain string.
+  // Recorded as RL-M1-044.
+  //
+  // Splitting verification into its own action is defensible and is not this
+  // fix's call to make: it would change who can trip an integrity check, which
+  // is a permission-model decision.
+  await requirePermission(ctx, "audit_log.read", await organizationScopeRef(ctx));
   return scoped(ctx, async (query) => {
     const rows = await query<{ outcome: string; detail: string; head_seq: string }>(
       "select outcome, detail, head_seq from run_audit_verification($1)",
@@ -67,6 +86,7 @@ export async function listAuditVerifications(
   ctx: AuthzContext,
   limit = 20,
 ): Promise<VerificationRun[]> {
+  await requirePermission(ctx, "audit_log.read", await organizationScopeRef(ctx));
   return scoped(ctx, async (query) => {
     const rows = await query<{
       outcome: string;

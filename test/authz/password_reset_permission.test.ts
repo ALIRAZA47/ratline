@@ -114,6 +114,8 @@ test("nothing weaker than member.remove carries it", () => {
 
 type World = {
   readonly orgId: string;
+  /** Someone who may read the audit log — RL-M1-043 made that a permission. */
+  readonly ownerId: string;
   readonly resetterId: string;
   readonly subjectId: string;
   readonly subjectEmail: string;
@@ -146,7 +148,7 @@ async function seedWorld(client: Client, roleKey: string, slug = "acme"): Promis
 
   // The organization always keeps a real owner, so the last-owner floor is
   // satisfied whatever role the resetter holds.
-  await mk(`owner@${slug}.example`, "owner");
+  const ownerId = await mk(`owner@${slug}.example`, "owner");
   const resetterId = roleKey === "owner" ? await mk(`resetter@${slug}.example`, "owner") : await mk(`resetter@${slug}.example`, roleKey);
   const subjectEmail = `subject@${slug}.example`;
   const subjectId = await mk(subjectEmail, "viewer");
@@ -156,7 +158,7 @@ async function seedWorld(client: Client, roleKey: string, slug = "acme"): Promis
     subjectId,
   ]);
 
-  return { orgId, resetterId, subjectId, subjectEmail };
+  return { orgId, ownerId, resetterId, subjectId, subjectEmail };
 }
 
 async function usingScratch(database: string, fn: () => Promise<void>): Promise<void> {
@@ -302,7 +304,14 @@ for (const roleKey of ["developer", "viewer", "billing", "infrastructure", "rele
         // revoked the sessions would be a denial-of-service anyone could run.
         assert.notEqual(await validateSession(ctxFor(world, world.subjectId), token), null);
 
-        const denials = await listAudit(actor, { action: "member.reset_password", decision: "deny" });
+        // Read as the OWNER, not as the refused actor. RL-M1-043 gated
+        // listAudit, and a Viewer reading their own denial was only ever
+        // possible because the audit log was ungated — the person reviewing an
+        // incident is not the person who was refused.
+        const denials = await listAudit(ctxFor(world, world.ownerId), {
+          action: "member.reset_password",
+          decision: "deny",
+        });
         assert.equal(denials.length, 1, "a refused reset is exactly what an incident review looks for");
         assert.equal(denials[0]?.actorId, world.resetterId);
       });

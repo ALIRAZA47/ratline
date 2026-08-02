@@ -17,6 +17,8 @@
 import { scoped } from "../db/internal/handle.ts";
 import type { AuthzContext } from "../authz/context.ts";
 import type { AuditAction, AuditResourceType } from "../authz/audit_events.ts";
+import { require as requirePermission } from "../authz/can.ts";
+import { organizationScopeRef } from "./scope.ts";
 
 export type AuditRecord = {
   /**
@@ -153,6 +155,7 @@ export type AuditQuery = {
 
 /** Recent entries for the current tenant, newest first. */
 export async function listAudit(ctx: AuthzContext, filter: AuditQuery = {}): Promise<AuditEntry[]> {
+  await requirePermission(ctx, "audit_log.read", await organizationScopeRef(ctx));
   return scoped(ctx, async (query) => {
     const rows = await query<EntryRow>(
       `select * from audit_entries
@@ -184,6 +187,9 @@ export type ChainBreak = { readonly seq: string; readonly problem: string };
  * still caught. RL-M1-015 runs this on a schedule.
  */
 export async function verifyAuditChain(ctx: AuthzContext): Promise<ChainBreak | null> {
+  // `audit_log.read`, not a verify action: the catalogue has exactly one audit
+  // permission, and inventing a second one here denied silently (RL-M1-044).
+  await requirePermission(ctx, "audit_log.read", await organizationScopeRef(ctx));
   return scoped(ctx, async (query) => {
     const rows = await query<{ broken_seq: string; problem: string }>(
       "select broken_seq, problem from verify_audit_chain($1)",
