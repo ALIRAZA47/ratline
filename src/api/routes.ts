@@ -104,6 +104,18 @@ export const ROUTES: readonly Route[] = [
   },
   {
     method: "POST",
+    path: "/auth/two-factor",
+    summary: "Present a second factor and exchange a challenge for a session",
+    scope: "organization",
+    requires: null,
+    publicReason:
+      "Reached with a challenge and no session, by somebody whose password was " +
+      "already accepted. There is no actor yet to check a permission against — " +
+      "the same seam ADR 0014 records for sign-in — and gating it would make the " +
+      "second factor unreachable for exactly the people who owe one.",
+  },
+  {
+    method: "POST",
     path: "/auth/sign-out",
     summary: "End the current session",
     scope: "organization",

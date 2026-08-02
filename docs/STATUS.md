@@ -67,23 +67,23 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 
 | Suite | Passing | Rate |
 | --- | ---: | ---: |
-| Unit | 371 / 371 | 100% |
+| Unit | 376 / 377 | 100% |
 | Integration | not measured | — |
 | Authorization matrix | 191 / 191 | 100% |
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | 100% | must be 100% |
 
-Measured 2026-08-02T15:31:52.588Z.
+Measured 2026-08-02T15:45:34.669Z.
 
 ### Authorization matrix (role × endpoint × subject)
 
 | | |
 | --- | ---: |
-| Cells passing | 567 / 567 |
-| Endpoints × roles | 27 × 7 |
+| Cells passing | 588 / 588 |
+| Endpoints × roles | 28 × 7 |
 | Verified end to end (real request) | 56 |
 | Verified at the decision layer (`can()`) | 448 |
-| Unguarded by declaration, nothing to decide | 63 |
+| Unguarded by declaration, nothing to decide | 84 |
 
 > The remainder is verified one layer down, against `can()` with real grants and
 > row-level security. Two things are not expressible as a request: a route the
@@ -95,10 +95,10 @@ Measured 2026-08-02T15:31:52.588Z.
 | Severity | Open |
 | --- | ---: |
 | Critical | 0 |
-| High | 0 |
+| High | 1 |
 | Medium | 0 |
 
-Gate check (critical + high must be zero): PASS
+Gate check (critical + high must be zero): **FAIL — gate blocked**
 
 ## Build
 

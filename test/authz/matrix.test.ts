@@ -95,6 +95,7 @@ const SERVER_DEPS: ServerDeps = {
   cookieSecret: new Uint8Array(32).fill(7),
   resolveTenant: () => Promise.resolve(null),
   signInIdentityId: "00000000-0000-4000-8000-000000000000",
+  sealingKey: Buffer.alloc(32, 9),
   trustedOrigins: ["http://127.0.0.1:7712"],
 };
 

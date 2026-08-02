@@ -80,6 +80,7 @@ import { contextForRequest, contextForServiceIdentity, type AuthzContext } from 
 import type { AuditAction } from "../authz/audit_events.ts";
 import { recordAudit } from "../repo/audit.ts";
 import { recordAuthAttempt } from "../auth/rate_limit.ts";
+import { verifySecondFactor } from "../auth/two_factor.ts";
 import { signIn, validateSession } from "../auth/sessions.ts";
 import { revokeSessionByToken } from "../repo/sessions.ts";
 import { applyPrivilegeChange, NotPermittedToRevokeSessions } from "../auth/privilege_changes.ts";
@@ -111,6 +112,8 @@ export type ServerDeps = {
    * audit entries written before an actor exists (ADR 0014's seam).
    */
   readonly signInIdentityId: string;
+  /** Unseals a stored TOTP secret (ADR 0006). Required, never a lazy load. */
+  readonly sealingKey: Buffer;
   readonly trustedOrigins?: readonly string[];
 };
 
@@ -309,6 +312,74 @@ export function createServer(deps: ServerDeps): Hono {
     return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
   });
 
+  /**
+   * Present a second factor (R-28).
+   *
+   * This endpoint is why R-28 existed. `AUTH_RATE_LIMITS["two-factor"]`
+   * published a budget and nothing spent it, because the limiter has to run
+   * before the work and there was no route to run it in. A six-digit code is a
+   * million possibilities; an unlimited verifier finds one inside a day.
+   *
+   * ## What the limiter keys on, which is the part worth getting right
+   *
+   * The CHALLENGE TOKEN, not the account. `rate_limit.ts` is explicit that
+   * `account` must never be a resolved user id — on the sign-in path, looking
+   * one up before limiting would be both an existence oracle and a query on the
+   * flooded path. The same reasoning applies here, and the challenge token is
+   * available without any lookup at all.
+   *
+   * Passed RAW. `bucketsFor` digests every dimension itself, so hashing here
+   * first was redundant — and worse than redundant, because it implied the
+   * caller owns that protection and would invite the next path to skip it. The
+   * limiter owns the digest; callers hand it the value.
+   *
+   * The obvious objection is that a fresh challenge resets the bucket, so an
+   * attacker could re-run sign-in between batches of guesses. That is answered
+   * by composition rather than ignored: minting a challenge REQUIRES a
+   * successful sign-in, and sign-in is limited on the account and the address.
+   * The two budgets multiply — you cannot buy more code attempts without
+   * spending sign-in attempts, and those are counted against a key an attacker
+   * cannot vary.
+   */
+  app.post("/auth/two-factor", async (c) => {
+    const orgId = await deps.resolveTenant(c.req.raw);
+    if (orgId === null) return send(unauthenticated());
+
+    const ctx = contextForServiceIdentity({
+      orgId,
+      serviceIdentityId: deps.signInIdentityId,
+      name: "sign-in",
+      requestId: crypto.randomUUID(),
+    });
+
+    const body = (await c.req.json().catch(() => ({}))) as { challenge?: string; code?: string };
+    const challenge = body.challenge ?? "";
+
+    const limit = await recordAuthAttempt(ctx, {
+      path: "two-factor",
+      account: challenge,
+      address: c.req.header("x-forwarded-for") ?? "",
+    });
+    if (!limit.allowed) return send(unauthenticated());
+
+    const result = await verifySecondFactor(ctx, deps.sealingKey, {
+      challengeToken: challenge,
+      presented: body.code ?? "",
+      ip: c.req.header("x-forwarded-for") ?? null,
+    });
+    // Every refusal renders identically. `result.refusal` tells apart
+    // "no live challenge" from "not enrolled" from "wrong code", and that
+    // distinction is for the audit log — the second of those is a statement
+    // about whether an account has a factor.
+    if (!result.ok) return send(unauthenticated());
+
+    const policy = cookiePolicy(trusted, insecureCookiesAcknowledged());
+    const headers = new Headers({ "content-type": "application/json; charset=utf-8" });
+    headers.append("set-cookie", `${policy.name}=${result.token}; ${cookieAttributes(policy)}`);
+    headers.append(CSRF_HEADER, csrfTokenForSessionId(deps.cookieSecret, result.session.id));
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
+  });
+
   app.post("/auth/sign-out", async (c) => {
     const orgId = await deps.resolveTenant(c.req.raw);
     const token = readCookie(c.req.header("cookie"), cookieName);
@@ -417,7 +488,9 @@ export function createServer(deps: ServerDeps): Hono {
 export function boundRouteKeys(deps: ServerDeps): Set<string> {
   const keys = new Set(handlers(deps).keys());
   // The public routes are bound directly rather than through the table loop.
-  for (const key of ["GET /health", "POST /auth/sign-in", "POST /auth/sign-out"]) keys.add(key);
+  for (const key of ["GET /health", "POST /auth/sign-in", "POST /auth/two-factor", "POST /auth/sign-out"]) {
+    keys.add(key);
+  }
   return keys;
 }
 
