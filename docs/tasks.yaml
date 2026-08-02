@@ -1362,20 +1362,32 @@
 - id: RL-M1-029
   title: Build the command palette covering every available action
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M1-028]
   blocks: []
   risk: medium
+  started_at: 2026-08-02
+  done_at: 2026-08-02
   acceptance:
     - The palette is generated from the same action catalogue the permission system uses
     - It shows only actions the current actor is permitted to take
     - A test confirms a restricted role cannot see a privileged action in the palette
   artifacts:
     - test/authz/palette_filtering.test.ts
+    - src/web/lib/shell/palette.ts
   decisions: []
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-02 — There is no command list. Every command IS an Action from the catalogue and its required permission is itself, which is what makes the filter checkable rather than merely tested: visibleCommands cannot offer a command whose permission the actor lacks, because the command is the permission. A hand-written list is a second enumeration of what the product can do, and it drifts in both directions — a missing entry makes a capability unreachable by keyboard, and an entry carrying the WRONG permission offers a privileged command to somebody who cannot run it, which is exactly acceptance 3's failure.
 
+    2026-08-02 — Not an authorization check, and the module says so in the same words as the navigation rail because it is the same mistake. can() at the data layer is the only thing that refuses anything (C3, §9); the palette hiding a command is a courtesy to the operator. The test file states what it can and cannot prove — it cannot prove a Developer cannot read a secret value, only that the interface does not advertise the permission model to somebody probing it.
+    2026-08-02 — A test of mine failed and the code was right. I assumed Developer lacks grant.break_glass; Developer holds it deliberately — D3 in roles.ts argues break-glass defeats every restriction by design, so its control is detection rather than prevention, and the pinned holder list includes every role that could plausibly need to trip the alarm. Rewrote the test to DERIVE the non-holders instead of listing them: a hand-listed expectation there would have been a second opinion about the permission model, which is the thing the whole file is written against.
+    2026-08-02 — Search runs over the filter's output and never over the catalogue. If it reached past the filter, typing would reveal exactly the commands the filter had just hidden — the sharpest available leak here, and the one mutation testing confirmed is caught.
+    2026-08-02 — Mutation-tested four ways, all caught: the filter inverted to hide-what-is-denied (5 tests — it offers the whole catalogue to somebody with no grants), search reaching past the filter (1), an empty query returning nothing (1), and a command carrying a hand-written label instead of the catalogue's (1).
+    2026-08-02 — Not built: the palette's React component. §8 calls it the keyboard route to every action, and a control that opens a dialog which cannot yet DO anything is worse than a control that is visibly not wired — the ⌘K button in the shell is present and inert on purpose. The data layer, the filter and the search are complete and tested; the dialog is owed alongside real routing (RL-M1-030).
+    2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 509 tests green locally; four mutations all caught.
 - id: RL-M1-030
   title: Build onboarding, login and organization bootstrap screens
   milestone: M1

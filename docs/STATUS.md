@@ -8,7 +8,7 @@ Generated 2026-08-02.
 | Milestone | Progress | Done | Total | Open high-risk |
 | --- | --- | ---: | ---: | ---: |
 | **M0** Plan | `########################` 100% | 26 | 26 | 0 |
-| **M1** Control plane skeleton | `###################-----` 80% | 32 | 40 | 3 |
+| **M1** Control plane skeleton | `####################----` 83% | 33 | 40 | 3 |
 | **M2** Agent and first host | `------------------------` 0% | 0 | 29 | 20 |
 | **M3** Static sites end to end | `------------------------` 0% | 0 | 27 | 18 |
 | **M4** Node and Bun apps | `------------------------` 0% | 0 | 15 | 10 |
@@ -69,11 +69,11 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 | --- | ---: | ---: |
 | Unit | 320 / 320 | 100% |
 | Integration | not measured | — |
-| Authorization matrix | 176 / 176 | 100% |
+| Authorization matrix | 189 / 189 | 100% |
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | 100% | must be 100% |
 
-Measured 2026-08-02T09:37:40.539Z.
+Measured 2026-08-02T09:43:02.471Z.
 
 ### Authorization matrix (role × endpoint × subject)
 
@@ -108,7 +108,7 @@ CI: _no status recorded yet._
 
 | Status | Count |
 | --- | ---: |
-| todo | 107 |
+| todo | 106 |
 | review | 2 |
-| done | 58 |
+| done | 59 |
 | **all** | **167** |
