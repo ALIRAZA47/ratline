@@ -144,7 +144,9 @@ export async function recordAudit(ctx: AuthzContext, record: AuditRecord): Promi
 
 export type AuditQuery = {
   readonly actorId?: string;
-  readonly action?: string;
+  readonly action?: AuditAction;
+  /** RL-M1-031: an operator asking "what happened to secrets" filters by this. */
+  readonly resourceType?: AuditResourceType;
   readonly decision?: "allow" | "deny";
   readonly limit?: number;
 };
@@ -157,9 +159,16 @@ export async function listAudit(ctx: AuthzContext, filter: AuditQuery = {}): Pro
        where ($1::uuid is null or actor_id = $1)
          and ($2::text is null or action = $2)
          and ($3::text is null or decision = $3)
+         and ($4::text is null or resource_type = $4)
        order by seq desc
-       limit $4`,
-      [filter.actorId ?? null, filter.action ?? null, filter.decision ?? null, filter.limit ?? 100],
+       limit $5`,
+      [
+        filter.actorId ?? null,
+        filter.action ?? null,
+        filter.decision ?? null,
+        filter.resourceType ?? null,
+        filter.limit ?? 100,
+      ],
     );
     return rows.map(toEntry);
   });

@@ -1407,21 +1407,34 @@
 - id: RL-M1-031
   title: Build the audit log viewer
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M1-014, RL-M1-028]
   blocks: []
   risk: medium
+  started_at: 2026-08-02
+  done_at: 2026-08-02
   acceptance:
     - Entries are filterable by actor, action, resource and outcome
     - Chain verification status is shown alongside the entries
     - Denied decisions are as visible as allowed ones
-  artifacts: []
+  artifacts:
+    - src/web/lib/shell/audit_view.ts
+    - test/security/audit_viewer.test.ts
   decisions: []
   notes: |
     2026-08-01 — RL-M1-010 found there is no read-own-audit-trail action, so every role below Admin is opaque to itself and cannot see why it was denied. Worth deciding here rather than leaving audit visibility all-or-nothing.
 
+    2026-08-02 — Acceptance 3 — 'denied decisions are as visible as allowed ones' — is a security property wearing a styling note's clothes, which is why the suite lives in test/security. An audit log answers one question after an incident, what was ATTEMPTED, and the refused attempts are the most interesting rows in it. Every ordinary way of building this screen buries them: defaulting the filter to successful actions because that is what 'recent activity' means, rendering a denial dimmed because it did not happen, or offering a hide-denied switch that somebody leaves on. Each is asserted against as a property rather than as a comparison with today's values.
+    2026-08-02 — The decision filter is one control with three symmetric positions and 'all' first — deliberately not a checkbox, because a checkbox has a default and somebody leaves it on. Hiding refusals is possible and it hides allows just as readily.
+    2026-08-02 — A refusal is drawn as attention, not fail. A refused attempt is the permission model working, not a system fault, and painting every denial red would train operators to ignore red — which is the one colour §1 spends its entire budget on. An unrecognised decision value reads as a refusal rather than an allow: the column is plain text, so fail closed, the same rule can() applies to an unknown reason.
+    2026-08-02 — Never verified is UNKNOWN, not clean. The whole point of the hash chain is that its absence proves nothing, so a green tick before any verification has run would assert exactly what cannot be known. A broken or truncated chain is not dismissable — a tampered log that renders normally is worse than no log, because it is believed.
+    2026-08-02 — Rows read back from the database are typed as string, not AuditAction, on purpose: entries written before RL-M1-036 closed the vocabulary must still render. A viewer that threw on one would make the oldest part of the log unreadable, which is the part an investigation reaches for.
+    2026-08-02 — Mutation-tested five ways, all caught: the default view hiding refusals (2 tests), a refusal drawn in the secondary text colour (1), an unknown decision reading as an allow (1), a never-verified chain reporting clean (2), and a broken chain becoming dismissable (1). RL-M1-036's cast scan also caught two avoidable type assertions in this file's first draft; isAuditAction is already a type guard, so the branch narrows and neither was needed.
+    2026-08-02 — Not built: the React component. Same position as RL-M1-029 — the model, the filters and the presentation are complete and tested; rendering them needs routing and a real listAudit call, which is RL-M1-030's work.
+    2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 534 tests green locally; five mutations all caught.
+  acceptance_met: [1, 2, 3]
 - id: RL-M1-032
   title: Implement scoped API tokens
   milestone: M1
@@ -3509,3 +3522,22 @@
     2026-08-02 — Mutation-tested five ways, all caught: the hue drifting toward amber (1 test), the hue escaping into another module (2), the token filed under status instead of environment (1), the label no longer inverting so one mode is unreadable (2), and a second environment hue added (1).
     2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 472 tests green locally; five mutations all caught.
   acceptance_met: [1, 2, 3]
+- id: RL-M1-041
+  title: Make the source scanners agree about comments
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: S
+  depends_on: []
+  blocks: []
+  risk: low
+  acceptance:
+    - Every source-scanning test uses one shared helper with one rule about comments
+    - The helper is itself tested against a fixture containing the pattern in prose and in code
+    - Whichever rule is chosen is written down once, with the reason
+  artifacts: []
+  decisions: []
+  notes: |
+    2026-08-02 — The repo has two conventions and neither was chosen deliberately. indistinguishable_404.test.ts strips comments before scanning (codeOf). scoped_repository.test.ts, design_tokens.test.ts and audit_namespace.test.ts do not, and all three have now caught prose that merely NAMED the pattern they forbid — three times in one session, in comments I was writing to explain why the pattern was being avoided.
+
+    2026-08-02 — The argument for not stripping is real and should be weighed rather than assumed away: a scanner that tries to tell comments from code is a second parser to get wrong, and it would get it wrong in the direction of missing a violation hidden in something that looks like a comment. The argument against is the observed tax — the rule silently forbids explaining itself, which pushes authors toward vaguer comments in exactly the files that most need precise ones.
