@@ -222,8 +222,69 @@ export function renderBaseCss(): string {
  * `FONT_CSS_IMPORTS`, which keeps the `.woff2` URLs relative to their own
  * package and therefore local. See `fonts.ts`.
  */
+/**
+ * The tension line's travel, DESIGN.md §5 (RL-M1-028).
+ *
+ * "a slow travelling highlight along its length. The line reads as a rope under
+ * strain."
+ *
+ * Emitted here rather than as an inline style on the component, and the reason
+ * is the reduced-motion half of §5. An inline `animation` cannot be overridden
+ * by a media query, so a component that animated inline would depend entirely
+ * on its own JavaScript noticing the preference — one mechanism, and the wrong
+ * one, because it does not apply until React has mounted. As a class it is off
+ * in the stylesheet before the first frame AND off in the hook, and the two
+ * agree because the hook only ever removes the class.
+ *
+ * The highlight is a moving gradient over the line's own colour, so removing
+ * the animation leaves the line SOLID in that colour rather than blank — §5's
+ * "no information is carried by motion alone", enforced by the shape of the
+ * rule rather than by remembering.
+ */
+export function renderTensionCss(): string {
+  return [
+    "@keyframes ratline-tension-travel {",
+    `${INDENT}from { background-position: -100% 0; }`,
+    `${INDENT}to { background-position: 200% 0; }`,
+    "}",
+    "",
+    ".rl-tension {",
+    `${INDENT}height: var(--tension-line-height);`,
+    `${INDENT}background: var(--tension-color, var(--tension-rest));`,
+    "}",
+    "",
+    ".rl-tension[data-travelling=\"true\"] {",
+    `${INDENT}background-image: linear-gradient(`,
+    `${INDENT}${INDENT}90deg,`,
+    `${INDENT}${INDENT}transparent 0%,`,
+    `${INDENT}${INDENT}var(--chalk) 45%,`,
+    `${INDENT}${INDENT}transparent 60%`,
+    `${INDENT});`,
+    `${INDENT}background-size: 50% 100%;`,
+    `${INDENT}background-repeat: no-repeat;`,
+    `${INDENT}animation: ratline-tension-travel var(--duration-tension-travel) var(--easing-standard) infinite;`,
+    "}",
+    "",
+    "@media (prefers-reduced-motion: reduce) {",
+    `${INDENT}/* §5: "the travel and pulse stop; the line stays solid in the status`,
+    `${INDENT}   colour". The gradient goes with the animation, so what remains is the`,
+    `${INDENT}   flat background above — the state survives, the movement does not. */`,
+    `${INDENT}.rl-tension[data-travelling=\"true\"] {`,
+    `${INDENT}${INDENT}background-image: none;`,
+    `${INDENT}${INDENT}animation: none;`,
+    `${INDENT}}`,
+    "}",
+  ].join("\n");
+}
+
 export function renderDesignStylesheet(): string {
-  return [renderTokensCss(), renderStatusCss(), renderBaseCss(), renderReducedMotionCss()].join("\n\n");
+  return [
+    renderTokensCss(),
+    renderStatusCss(),
+    renderBaseCss(),
+    renderTensionCss(),
+    renderReducedMotionCss(),
+  ].join("\n\n");
 }
 
 /** Every mode the stylesheet emits a complete set of colour tokens for. */

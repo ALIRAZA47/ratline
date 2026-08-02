@@ -1329,19 +1329,36 @@
 - id: RL-M1-028
   title: Build the application shell with the navigation rail and tension line
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: L
   depends_on: [RL-M1-027, RL-M1-040]
   blocks: [RL-M1-029, RL-M1-030, RL-M1-031, RL-M2-014, RL-M3-020]
   risk: low
+  started_at: 2026-08-02
+  done_at: 2026-08-02
   acceptance:
     - Rail, top bar, breadcrumb and environment chip are implemented per the design plan
     - The tension line reflects live operation state and reduces to a static form under reduced motion
     - Focus states are visible and the whole shell is reachable by keyboard
-  artifacts: []
+  artifacts:
+    - src/web/lib/shell/navigation.ts
+    - src/web/app/Shell.tsx
+    - test/toolchain/shell_structure.test.ts
   decisions: []
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-02 — The React ruling has a consequence ADR 0001 did not anticipate, and it is not a bundle-size one. JSX is NOT erasable syntax: node --experimental-strip-types refuses a .tsx file outright, and --experimental-transform-types refuses it too. Probed both rather than assumed. So the test runner cannot import a component at all, and Vite becomes the project's first and only build step.
 
+    2026-08-02 — The bill is paid by keeping everything decidable out of the compiled layer. src/web/lib/shell/navigation.ts holds the rail, the breadcrumb derivation, the chip style and the tension-state reduction as plain TypeScript — same shape as src/api/routes.ts and for the same reason — and src/web/app/**.tsx only arranges what those return. 20 tests run against the structure with no bundler in the loop.
+    2026-08-02 — Every rail item names a catalogue Action, so an invented permission does not compile. visibleNavigation() is NOT an authorization check and the module says so twice: can() at the data layer is the only thing that refuses anything (C3, §9). Hiding a link somebody could still reach by typing the URL is a courtesy; the refusal underneath it is the security.
+    2026-08-02 — Acceptance 3 was verified in a REAL BROWSER, not a DOM mock — §9 rules out mocking the thing under test, and 'focus states are visible' is precisely what jsdom cannot answer. Programmatic .focus() reported outline-style: none and looked like a failure; it was not, because :focus-visible does not fire for programmatic focus. Nine real Tab presses through a focusin recorder showed all eight controls reachable with a 2px solid rgb(216,185,138) ring at 2px offset — --hemp at the offset §8 specifies.
+    2026-08-02 — Two real bugs the browser found that no unit test would have. The travel animation named @keyframes that did not exist anywhere, so it silently did nothing — now emitted by renderTensionCss(). And it was an INLINE animation, which a media query cannot override, so §5's reduced-motion half rested entirely on the component's own JavaScript and did not apply until React mounted. It is a class now: off in the stylesheet before the first frame and off in the hook, and the two cannot disagree because the hook only ever removes it.
+    2026-08-02 — Eight invented token names were written while building the shell — var(--text-body) where the token is --text-base, and so on. None of them threw: an unresolved custom property falls back to the inherited value and the page looks almost right. A test now scans src/web/app and fails on any custom property that is not in the registry.
+    2026-08-02 — The §10.1 escape test fired during this task, which is the ruling's safety mechanism working rather than a nuisance: chipStyle() names --env-production and had to be added to the allowlist. It gained exactly one entry, which is what the ruling anticipated — Shell.tsx renders whatever chipStyle returns and never spells the token out.
+    2026-08-02 — Added a skip link, which §4 does not ask for. Five rail items is a short trap to tab through, but it is still a trap and it grows every time the rail does.
+    2026-08-02 — Dependencies added, each justified: react and react-dom (the 2026-08-02 ruling), @types/react and @types/react-dom (strict mode needs them), vite (the bundler JSX now requires), @vitejs/plugin-react (JSX transform + fast refresh). No test-time DOM library, deliberately — a real browser answers the questions jsdom would only pretend to.
+    2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 496 tests green locally; the browser half verified by hand in Chrome, recorded in the notes.
 - id: RL-M1-029
   title: Build the command palette covering every available action
   milestone: M1

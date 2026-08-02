@@ -376,12 +376,17 @@ test("nothing but the environment chip may use the production hue", () => {
   // convention, because a convention is exactly what would decay into a
   // second use.
   //
-  // WHEN THE CHIP IS BUILT (RL-M1-028) this allowlist gains its component file
-  // and nothing else. It gets stricter as the interface grows, never looser.
+  // This allowlist gets stricter as the interface grows, never looser. It
+  // gained exactly one entry when the chip was built (RL-M1-028), which is what
+  // the ruling anticipated: `chipStyle()` is the single function that decides
+  // an environment is production and therefore the single place the token may
+  // be named. `Shell.tsx` renders whatever that function returns and never
+  // spells the token out, which is why it is not here.
   const ALLOWED = [
     "src/web/lib/design/palette.ts",
     "src/web/lib/design/tokens.ts",
     "src/web/lib/design/index.ts",
+    "src/web/lib/shell/navigation.ts",
   ];
 
   const needles = [

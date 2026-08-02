@@ -14,19 +14,27 @@
     "test": "node --test --experimental-strip-types --no-warnings=ExperimentalWarning 'test/**/*.test.ts'",
     "test:coverage": "node --test --experimental-strip-types --no-warnings=ExperimentalWarning --experimental-test-coverage --test-coverage-exclude=test/** --test-coverage-exclude=scripts/** 'test/**/*.test.ts'",
     "tasks": "./scripts/tasks",
-    "check": "npm run lint && npm run typecheck && npm test && ./scripts/tasks validate"
+    "check": "npm run lint && npm run typecheck && npm test && ./scripts/tasks validate",
+    "dev": "vite",
+    "build:web": "vite build"
   },
   "devDependencies": {
     "@types/node": "^26.1.2",
     "@types/pg": "^8.20.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
     "eslint": "^10.8.0",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.65.0"
+    "typescript-eslint": "^8.65.0",
+    "vite": "^8.2.0"
   },
   "dependencies": {
     "@fontsource-variable/archivo": "5.3.0",
     "@fontsource/jetbrains-mono": "5.3.0",
     "@fontsource/public-sans": "5.3.0",
-    "pg": "^8.22.0"
+    "pg": "^8.22.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   }
 }
