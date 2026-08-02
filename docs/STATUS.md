@@ -8,7 +8,7 @@ Generated 2026-08-02.
 | Milestone | Progress | Done | Total | Open high-risk |
 | --- | --- | ---: | ---: | ---: |
 | **M0** Plan | `########################` 100% | 26 | 26 | 0 |
-| **M1** Control plane skeleton | `###############---------` 63% | 22 | 35 | 7 |
+| **M1** Control plane skeleton | `#################-------` 69% | 24 | 35 | 5 |
 | **M2** Agent and first host | `------------------------` 0% | 0 | 29 | 20 |
 | **M3** Static sites end to end | `------------------------` 0% | 0 | 27 | 18 |
 | **M4** Node and Bun apps | `------------------------` 0% | 0 | 15 | 10 |
@@ -67,11 +67,26 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 | --- | ---: | ---: |
 | Unit | 230 / 230 | 100% |
 | Integration | not measured | — |
-| Authorization matrix | 135 / 135 | 100% |
+| Authorization matrix | 161 / 161 | 100% |
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | 100% | must be 100% |
 
-Measured 2026-08-02T00:34:54.642Z.
+Measured 2026-08-02T06:09:07.119Z.
+
+### Authorization matrix (role × endpoint × subject)
+
+| | |
+| --- | ---: |
+| Cells passing | 567 / 567 |
+| Endpoints × roles | 27 × 7 |
+| Verified end to end (real request) | 0 |
+| Verified at the decision layer (`can()`) | 504 |
+| Unguarded by declaration, nothing to decide | 63 |
+
+> No cell is verified end to end yet: there is no HTTP server, so nothing can be
+> asked of a real route. A route that forgets to consult `can()` would not be caught
+> by this suite today. `test/authz/matrix.test.ts` fails the moment `src/api/server.ts`
+> appears, so the harness cannot be left pointed at the wrong layer.
 
 ## Security findings
 
@@ -91,7 +106,7 @@ CI: _no status recorded yet._
 
 | Status | Count |
 | --- | ---: |
-| todo | 112 |
+| todo | 110 |
 | review | 2 |
-| done | 48 |
+| done | 50 |
 | **all** | **162** |

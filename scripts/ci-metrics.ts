@@ -22,12 +22,14 @@
  */
 
 import { run } from "node:test";
-import { globSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, globSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = join(ROOT, ".ratline");
+/** Written by test/authz/matrix.test.ts. See readMatrixReport below. */
+const MATRIX_REPORT = join(OUT_DIR, "authz-matrix.json");
 
 type Counts = { tests: number; passed: number; failed: number };
 type Suite = { passed: number; total: number };
@@ -97,6 +99,31 @@ function suiteOf(counts: Counts): Suite {
   return { passed: counts.passed, total: counts.tests };
 }
 
+/**
+ * The authorization matrix's own result (RL-M1-025).
+ *
+ * `authz_matrix` counts TEST CASES in test/authz/, which is a dozen-ish. The
+ * matrix is 567 cells, and the pass rate STATUS should report is that one.
+ *
+ * Staleness is handled by deletion rather than by a timestamp: main() removes
+ * the file before the suite runs, so a report present afterwards was written by
+ * this run and a missing one means the matrix did not execute. There is no
+ * arrangement under which yesterday's green matrix is reported as today's —
+ * which matters more here than the number itself, because a stale security
+ * signal is believed.
+ */
+function readMatrixReport(): Record<string, unknown> {
+  if (!existsSync(MATRIX_REPORT)) {
+    return {
+      executed: false,
+      note:
+        "the authorization matrix did not run — most likely no database. " +
+        "It is NOT green; it is unknown. Run ./scripts/pg start.",
+    };
+  }
+  return JSON.parse(readFileSync(MATRIX_REPORT, "utf8")) as Record<string, unknown>;
+}
+
 async function main(): Promise<void> {
   const includeIntegration = process.argv.includes("--integration");
 
@@ -107,6 +134,9 @@ async function main(): Promise<void> {
   const unitFiles = all.filter((p) => !isAuthz(p) && !isIntegration(p));
   const authzFiles = all.filter(isAuthz);
   const integrationFiles = includeIntegration ? all.filter(isIntegration) : [];
+
+  // Cleared before the run so its presence afterwards proves this run wrote it.
+  rmSync(MATRIX_REPORT, { force: true });
 
   // Coverage comes from the combined unit + authz run: the authorization module
   // is exercised by both, and measuring them separately would understate it.
@@ -129,6 +159,7 @@ async function main(): Promise<void> {
     measured_at: new Date().toISOString(),
   };
   if (authz) metrics["authz_matrix"] = suiteOf(authz.counts);
+  metrics["authz_matrix_cells"] = readMatrixReport();
   if (integration) metrics["integration"] = suiteOf(integration.counts);
   else metrics["integration_note"] = "not run — needs a real host, see RISKS.md R-01";
   if (authzCoverage) metrics["authz_coverage_pct"] = authzCoverage.lines;
@@ -209,6 +240,13 @@ async function main(): Promise<void> {
       (main.totals ? `, lines ${main.totals.coveredLinePercent.toFixed(2)}%` : ""),
   );
   console.log(`wrote ${relative(ROOT, join(OUT_DIR, "metrics.json"))}`);
+
+  const matrix = metrics["authz_matrix_cells"] as Record<string, unknown>;
+  console.log(
+    matrix["executed"] === true
+      ? `authorization matrix: ${String(matrix["passed"])}/${String(matrix["cells"])} cells — ${String(matrix["note"])}`
+      : `authorization matrix: ${String(matrix["note"])}`,
+  );
 
   for (const gate of gates) {
     const actual = gate.actual === null ? "not measured" : `${gate.actual}%`;

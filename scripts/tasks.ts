@@ -468,6 +468,21 @@ type Metrics = {
   unit?: { passed: number; total: number };
   integration?: { passed: number; total: number };
   authz_matrix?: { passed: number; total: number };
+  /**
+   * The matrix's CELLS, which is the number §6.3 is asking about — role ×
+   * endpoint × subject. `authz_matrix` above counts test cases, of which there
+   * are a dozen; this counts the hundreds of decisions they make.
+   */
+  authz_matrix_cells?: {
+    executed: boolean;
+    cells?: number;
+    passed?: number;
+    failed?: number;
+    routes?: number;
+    roles?: number;
+    verified_by?: { transport: number; decision: number; declaration: number };
+    note?: string;
+  };
   authz_coverage_pct?: number;
   can_branch_coverage_pct?: number;
   measured_at?: string;
@@ -860,6 +875,37 @@ function cmdRender(args: Args): void {
       `Measured ${metrics.measured_at ?? "unknown"}.`,
       ``,
     );
+
+    // The matrix reports separately, because a pass rate on its own would be
+    // misleading in a specific way: it says nothing about WHICH LAYER verified
+    // the cells, and while there is no HTTP server every one of them is
+    // verified below the route. That number belongs on the page, not in a
+    // commit message nobody rereads.
+    const cells = metrics.authz_matrix_cells;
+    out.push(`### Authorization matrix (role × endpoint × subject)`, ``);
+    if (!cells || !cells.executed) {
+      out.push(`**Not executed.** ${cells?.note ?? "No result was written. It is unknown, not green."}`, ``);
+    } else {
+      const by = cells.verified_by;
+      out.push(
+        `| | |`, `| --- | ---: |`,
+        `| Cells passing | ${cells.passed ?? 0} / ${cells.cells ?? 0} |`,
+        `| Endpoints × roles | ${cells.routes ?? 0} × ${cells.roles ?? 0} |`,
+        `| Verified end to end (real request) | ${by?.transport ?? 0} |`,
+        `| Verified at the decision layer (\`can()\`) | ${by?.decision ?? 0} |`,
+        `| Unguarded by declaration, nothing to decide | ${by?.declaration ?? 0} |`,
+        ``,
+      );
+      if ((by?.transport ?? 0) === 0) {
+        out.push(
+          `> No cell is verified end to end yet: there is no HTTP server, so nothing can be`,
+          `> asked of a real route. A route that forgets to consult \`can()\` would not be caught`,
+          `> by this suite today. \`test/authz/matrix.test.ts\` fails the moment \`src/api/server.ts\``,
+          `> appears, so the harness cannot be left pointed at the wrong layer.`,
+          ``,
+        );
+      }
+    }
   }
 
   out.push(`## Security findings`, ``);

@@ -1089,6 +1089,7 @@
   depends_on: [RL-M1-017]
   blocks: [RL-M1-030]
   risk: high
+  started_at: 2026-08-02
   acceptance:
     - Time-based one-time passwords enrol, verify and produce recovery codes
     - An organization can require it, and non-compliant members are forced into enrolment at next login
@@ -1096,6 +1097,8 @@
   artifacts:
     - test/security/twofactor.test.ts
   decisions: []
+  notes: |
+    2026-08-02 — unblocked: delegated agent stalled with no output; task never started
 
 - id: RL-M1-020
   title: Rate limit every authentication path
@@ -1132,6 +1135,7 @@
   depends_on: [RL-M1-017]
   blocks: []
   risk: high
+  started_at: 2026-08-02
   acceptance:
     - Every state-changing request requires a token bound to the session
     - Cookies use SameSite and the secure attribute appropriately for the deployment model
@@ -1139,6 +1143,8 @@
   artifacts:
     - test/security/csrf.test.ts
   decisions: []
+  notes: |
+    2026-08-02 — unblocked: delegated agent stalled with no output; task never started
 
 - id: RL-M1-022
   title: Generate all secrets on first run and refuse to boot without them
@@ -1189,37 +1195,59 @@
 - id: RL-M1-024
   title: Generate the authorization matrix from the route table
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: L
   depends_on: [RL-M1-012]
   blocks: [RL-M1-025]
   risk: high
+  started_at: 2026-08-02
+  done_at: 2026-08-02
   acceptance:
     - The route table is introspectable and every route declares the action it requires
     - The matrix is generated rather than hand-maintained
     - A route with no matrix coverage fails the build
   artifacts:
+    - src/api/routes.ts
+    - src/authz/matrix.ts
     - test/authz/matrix_generator.test.ts
   decisions: []
+  notes: |
+    2026-08-02 — The route table is DATA, not framework calls. If routes were declared by calling Hono, the set of routes would be knowable only by running it and the required action only by reading each handler — so 'a new endpoint without coverage fails CI' would degrade to 'someone notices in review'. Hono binds to this table rather than defining it.
 
+    2026-08-02 — An unguarded route needs a written reason or it does not typecheck. requires: null with no publicReason is a type error, so a forgotten annotation and a deliberate decision cannot look the same.
+    2026-08-02 — Expectations are derived from the route and the role, never recorded by hand. A hand-written expectation would be a second opinion about the permission model, and a matrix that reimplements can() agrees with it by construction — including when both are wrong.
+    2026-08-02 — Still owed: the pre-authentication context seam ADR 0014 named. /auth/sign-in is declared unguarded with that reasoning written into its publicReason, but nothing resolves how a sign-in attempt gets an AuthzContext to be audited against. It blocks sign-in audit entries and the rate limiter's refusal entries.
+    2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 14 tests; the generator mutation-tested four ways.
+  acceptance_met: [1, 2, 3]
 - id: RL-M1-025
   title: Build the authorization matrix harness
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: L
   depends_on: [RL-M1-024]
   blocks: [RL-M1-026]
   risk: high
+  started_at: 2026-08-02
+  done_at: 2026-08-02
   acceptance:
     - Every role is exercised against every endpoint for own, other-team and nonexistent resources
     - Results are written to the metrics file so STATUS reports the pass rate
     - The harness runs in CI and is meaningful even while most endpoints do not yet exist
   artifacts:
     - test/authz/matrix.test.ts
+    - test/support/matrix_harness.ts
   decisions: []
+  notes: |
+    2026-08-02 — The harness is honest about its own layer. There is no HTTP server, so no cell can be verified end to end; every cell records whether it was verified by a real request (transport), a real can() call against real grants and RLS (decision), or a structural claim about an unguarded route (declaration). Reporting 567/567 without that would be true and completely misleading — every endpoint could be unguarded and the suite would still be green, because there are no endpoints.
 
+    2026-08-02 — transport: 0 is written into metrics.json and rendered in STATUS.md as a number rather than a caveat. test/authz/matrix.test.ts fails the moment src/api/server.ts appears, so the harness cannot be quietly left pointed at the wrong layer. Section 9 lists 'TODO: add auth check later' as an anti-pattern; this is that TODO written as a build failure.
+    2026-08-02 — Staleness is handled by deletion, not by a timestamp: ci-metrics removes .ratline/authz-matrix.json before the suite runs, so a report present afterwards was written by this run and a missing one reports 'not executed — unknown, not green'. Verified by stopping Postgres: the matrix flipped to executed:false and both coverage gates failed rather than reading green.
+    2026-08-02 — Mutation-tested three ways, all caught: inheritance restricted to the exact node (75 cells), rolesCarrying returning every role (93 cells), and the flagship IDOR — scope test dropped from effective_grants plus can() step 4 removed — which flipped 150 cells including every other-tenant and nonexistent row. Removing step 4 ALONE is not caught here, because effective_grants' ancestry test denies independently and both subjects still answer no-grant; can.test.ts pins that branch instead. Recorded rather than glossed: the matrix covers the composition, not every individual branch.
+    2026-08-02 — The fixture holds no resource-scoped grants, so every cell passes resourceId: null. That is safe here and would not be generally — a resource-scoped deny would make the null fail open, exactly as ScopeRef warns. A resource-scoped subject is the obvious next dimension for this matrix.
+    2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 391 tests green locally; 567/567 matrix cells; both coverage gates at 100%.
+  acceptance_met: [1, 2, 3]
 - id: RL-M1-026
   title: Make unauthorized and nonexistent indistinguishable
   milestone: M1
