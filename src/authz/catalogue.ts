@@ -215,6 +215,18 @@ const ACTIONS = {
     scope: "organization",
     description: "Sign another member out everywhere, immediately, without removing them.",
   },
+  // Separate again, and the most dangerous of the four. Revoking sessions ends
+  // someone's access; resetting their password TAKES THEIR ACCOUNT — for the
+  // window between the reset and their next sign-in, the resetting operator
+  // holds a working credential for another person, and anything done with it is
+  // attributed to them. That is a C6 problem the action cannot fix, only bound:
+  // hold it narrowly, audit it loudly, and end the sessions so the owner of the
+  // account notices. Threat model R-17.
+  "member.reset_password": {
+    resource: "member",
+    scope: "organization",
+    description: "Set another member's password when they have lost access to their account.",
+  },
 
   // --- role ---------------------------------------------------------------
   // Roles are editable and custom roles compose the raw permission set (§6.3),

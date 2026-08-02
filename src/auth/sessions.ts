@@ -76,6 +76,8 @@ import {
   type Session,
 } from "./model.ts";
 import { hashPassword, needsRehash, verifyPassword } from "./passwords.ts";
+import { NotPermittedError } from "../authz/can.ts";
+import { recordAudit } from "../repo/audit.ts";
 
 /** A session and the identifier that names it. The identifier exists only here. */
 export type IssuedSession = {
@@ -313,6 +315,132 @@ export async function listSessions(ctx: AuthzContext): Promise<Session[]> {
  *
  * Returns how many sessions were ended.
  */
+/**
+ * Thrown when the actor may not reset somebody else's password.
+ *
+ * A distinct type so the caller renders it as the same indistinguishable
+ * refusal as any other denial (RL-M1-026) while the audit log keeps the real
+ * reason. The same split `applyPrivilegeChange` makes, for the same reason.
+ */
+export class NotPermittedToResetPassword extends Error {
+  constructor(actorId: string, subjectUserId: string) {
+    super(`actor ${actorId} may not reset the password for ${subjectUserId}`);
+    this.name = "NotPermittedToResetPassword";
+  }
+}
+
+/**
+ * Set another member's password, for an operator whose colleague has lost
+ * access (RL-M1-034).
+ *
+ * ## What this costs, said plainly
+ *
+ * Between this call and that person's next sign-in, the operator holds a
+ * working credential for somebody else's account, and anything done with it is
+ * attributed to THEM. No arrangement of this function fixes that; an
+ * administrative reset is inherently a transfer of an account. What can be done
+ * is to bound it, and all three of RL-M1-034's acceptance criteria are that
+ * bounding rather than three unrelated requirements:
+ *
+ *   - the action is catalogued and held only by Owner and Admin, so the set of
+ *     people who can do it is small and visible in the role editor;
+ *   - it is audited with the actor, so the transfer is on the record before the
+ *     credential is used;
+ *   - every session the member held is revoked, so they are signed out and
+ *     notice. A reset nobody notices is the one worth worrying about.
+ *
+ * Two-factor authentication (RL-M1-019) is the real answer — a password alone
+ * stops being sufficient — which is why R-17 stays open in the threat model
+ * until that lands.
+ *
+ * ## Ordering, which is the OPPOSITE of setOwnPassword and had to be
+ *
+ * That function revokes first, because a partial failure must not leave a
+ * person who thinks they are compromised with their old sessions alive. The
+ * first version of this one copied it, and a test caught what that costs here:
+ * Infrastructure holds `member.revoke_sessions` but not `member.reset_password`,
+ * so a refused reset attempt by an Infrastructure operator ENDED the member's
+ * sessions on its way to being denied — a refusal with an effect, and an
+ * unaudited one, since the only entry written says the reset was denied.
+ *
+ * So the write goes first, because the write is where the permission is
+ * resolved. A denial then happens before anything has happened, which is what a
+ * refusal should mean. The cost is the mirror case: if the revocation fails
+ * after the write, the member keeps their live sessions and their password has
+ * changed. That is a member browsing with their own sessions, which is not a
+ * danger — where the other order's cost was somebody without the permission
+ * being able to sign a colleague out.
+ *
+ * This is why the two roles holding `member.reset_password` must also hold
+ * `member.revoke_sessions`, pinned in the test: the third acceptance criterion
+ * is unreachable otherwise, and the failure would be silent.
+ *
+ * The new value is never audited, never logged and never returned. It reaches
+ * `hashPassword` and nothing else.
+ *
+ * Returns how many sessions were ended.
+ */
+export async function resetMemberPassword(
+  ctx: AuthzContext,
+  subjectUserId: string,
+  password: string,
+): Promise<number> {
+  if (ctx.actor.kind === "user" && ctx.actor.id === subjectUserId) {
+    // Not a refusal about permissions — a refusal about meaning. Changing your
+    // own password must go through setOwnPassword, which requires the current
+    // one; routing it through here would let anyone holding a live session
+    // replace their password without proving they know it.
+    throw new Error(
+      "resetMemberPassword is for somebody else's account. Use setOwnPassword, which " +
+        "requires the current password.",
+    );
+  }
+
+  const stored = await hashPassword(password);
+
+  let ended: number;
+  try {
+    // `updatePasswordHash` resolves `member.reset_password` for a non-self
+    // write. That single check is the gate on this whole function, which is why
+    // it must run before anything with an effect — and why there is no second
+    // check here. §9 rejects a permission check outside the data layer, and a
+    // duplicate is the shape that eventually disagrees with the original.
+    const written = await updatePasswordHash(ctx, subjectUserId, stored);
+    if (!written) {
+      throw new Error("the password was not written: that account is not a member of this organization.");
+    }
+    ended = await revokeSessionsOfUser(ctx, subjectUserId, "revoked");
+  } catch (error: unknown) {
+    if (error instanceof NotPermittedError) {
+      // A refused reset attempt is what an incident review looks for, so it is
+      // recorded before the error travels on.
+      await recordAudit(ctx, {
+        action: "member.reset_password",
+        resourceType: "member",
+        resourceId: subjectUserId,
+        decision: "deny",
+        reason: error.decision.reason,
+      });
+      throw new NotPermittedToResetPassword(ctx.actor.id, subjectUserId);
+    }
+    throw error;
+  }
+
+  await recordAudit(ctx, {
+    action: "member.reset_password",
+    resourceType: "member",
+    resourceId: subjectUserId,
+    decision: "allow",
+    reason: "administrative-reset",
+    // Counts and flags only. The metadata column is handed to people during
+    // incidents (ADR 0006), so it carries nothing that could reconstruct the
+    // credential — not the value, not the hash, not its length.
+    metadata: { sessions_revoked: ended, administrative: true },
+  });
+
+  return ended;
+}
+
 export async function setOwnPassword(ctx: AuthzContext, password: string): Promise<number> {
   if (ctx.actor.kind !== "user") {
     throw new Error(

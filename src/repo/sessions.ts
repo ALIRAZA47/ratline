@@ -196,14 +196,25 @@ export async function findPasswordCredential(
 }
 
 /**
- * Replace a person's own stored hash.
+ * Replace a stored hash — your own without asking, anyone else's with
+ * `member.reset_password` (RL-M1-034).
  *
- * Refuses to write anyone else's. An administrative password reset is a
- * different action with different consequences — it takes an account away from
- * the person holding it — and `src/authz/catalogue.ts` has no action for it, so
- * there is nothing to check an administrator against. Refusing is the honest
- * answer; adding an ungated one here and a check in a route handler later is the
- * shape brief §9 rejects outright.
+ * ONE writer, deliberately. RL-M1-017 shipped this refusing every non-self
+ * write, which was the right refusal while the catalogue had no action to check
+ * an administrator against, and left a real gap: an operator whose colleague has
+ * lost access had no route (threat model R-17). The fix is the action, not a
+ * second function — two paths writing the same column is how one of them ends up
+ * without the check.
+ *
+ * The permission is resolved here rather than by the caller. §9 lists
+ * "permission checks in route handlers instead of, or in addition to, the data
+ * layer" as an anti-pattern, and the reason bites hardest on a pair like this:
+ * a check in the handler agrees with the one here right up until somebody adds
+ * a second handler.
+ *
+ * Self-writes need no permission. A person changing their own password is not
+ * exercising authority over anyone, and gating it would mean an account whose
+ * grants had been stripped could not be secured by the person holding it.
  */
 export async function updatePasswordHash(
   ctx: AuthzContext,
@@ -211,9 +222,10 @@ export async function updatePasswordHash(
   storedHash: string,
 ): Promise<boolean> {
   if (!isSelf(ctx, userId)) {
-    throw new Error(
-      "a password can only be replaced by the person it belongs to. An administrative reset " +
-        "needs a catalogued action to check anyone against, and there is not one yet.",
+    await requirePermission(
+      ctx,
+      "member.reset_password",
+      organizationScope(await organizationScopeNode(ctx)),
     );
   }
   return scoped(ctx, async (query) => {

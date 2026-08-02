@@ -3286,12 +3286,14 @@
 - id: RL-M1-034
   title: Add an administrative password reset action to the catalogue
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M1-017]
   blocks: []
   risk: high
+  started_at: 2026-08-02
+  done_at: 2026-08-02
   acceptance:
     - Resetting another member's password is a catalogued action that only Owner and Admin hold
     - The reset is audited with the actor, and never records the new value
@@ -3304,6 +3306,14 @@
     rather than an ungated administrative reset, which is the right refusal but
     leaves a real gap: an operator whose colleague has lost access has no route.
     Recorded as threat-model R-17.
+    2026-08-02 — A password reset is not an access grant, it is an ACCOUNT TRANSFER. Between the reset and the member's next sign-in the operator holds a working credential for somebody else, and every audit entry written with it names that person. No arrangement of the function fixes that — the three acceptance criteria are the bounding of it, not three unrelated requirements: hold the action narrowly, put the transfer on the record before the credential can be used, and sign the member out so they notice. Two-factor (RL-M1-019) is the real mitigation; R-17 stays open until it lands.
+    2026-08-02 — One writer, not two. RL-M1-017's updatePasswordHash gained the permission check rather than growing an administrative sibling — two paths writing the same column is how one of them ends up without the check. Self-writes stay ungated: a person changing their own password exercises authority over nobody, and gating it would mean an account whose grants were stripped could not be secured by the person holding it.
+    2026-08-02 — The ordering is the OPPOSITE of setOwnPassword, and a test found out why. Copying its revoke-first order meant an Infrastructure operator — who holds member.revoke_sessions but not member.reset_password — ENDED a member's sessions on the way to being refused: a refusal with an effect, and an unaudited one, since the only entry written said the reset was denied. The write goes first because the write is where the permission is resolved, so a denial happens before anything has happened.
+    2026-08-02 — Because the write now precedes the revocation, the third acceptance criterion depends on the resetter also holding member.revoke_sessions. That implication is pinned by a test rather than left to the role lists agreeing by luck — a role with one and not the other would reset passwords, leave sessions alive, and still report success.
+    2026-08-02 — Mutation-tested six ways, all caught: Developer gaining the action (3 tests), non-self writes ungated again (1), sessions not revoked (2), the new password reaching the audit metadata (1), the refusal not being audited (5), and the revoke-first ordering restored (1).
+    2026-08-02 — Not asserted: that the password's LENGTH is absent from the audit row. A row carrying timestamps, a sequence number and two base64url digests contains almost every small integer, so the check would pass or fail by coincidence — worse than no check, because it reads like one.
+    2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 414 tests green locally; six mutations all caught.
+  acceptance_met: [1, 2, 3]
 - id: RL-M1-035
   title: Decide whether sessions need an idle timeout
   milestone: M1

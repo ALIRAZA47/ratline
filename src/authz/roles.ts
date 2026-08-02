@@ -205,6 +205,7 @@ const OWNER_ACTIONS: readonly Action[] = [
   "member.invite",
   "member.remove",
   "member.revoke_sessions",
+  "member.reset_password",
 
   // role
   "role.read",
@@ -368,6 +369,7 @@ const ADMIN_ACTIONS: readonly Action[] = [
   "member.invite",
   "member.remove",
   "member.revoke_sessions",
+  "member.reset_password",
 
   // role
   "role.read",
