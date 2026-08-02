@@ -59,7 +59,7 @@ import { require as requirePermission } from "../authz/can.ts";
 import type { AuthzContext } from "../authz/context.ts";
 import { challengeTokenDigest } from "../auth/model.ts";
 import { isTotpAlgorithm, type TotpAlgorithm } from "../auth/totp.ts";
-import type { ScopeRef } from "./authorization.ts";
+import { organizationScopeRef } from "./scope.ts";
 
 // ---------------------------------------------------------------------------
 // Who is acting, and how they proved it
@@ -98,20 +98,6 @@ function actingUser(ctx: AuthzContext, what: string): string {
  * this note. Recorded rather than fixed for the same reason: it belongs in one
  * place, and moving it means editing two modules this task does not own.
  */
-async function organizationScopeNode(ctx: AuthzContext): Promise<string> {
-  return scoped(ctx, async (query) => {
-    // No tenant predicate: row-level security confines this to one
-    // organization, which has exactly one root node.
-    const rows = await query<{ id: string }>("select id from scope_nodes where kind = 'organization'");
-    const row = rows[0];
-    if (row === undefined) {
-      throw new Error("this organization has no root scope node; the tenant is not usable");
-    }
-    return row.id;
-  });
-}
-
-const organizationScope = (scopeNodeId: string): ScopeRef => ({ scopeNodeId, resourceId: null });
 
 // ---------------------------------------------------------------------------
 // The organization policy
@@ -180,7 +166,7 @@ export async function writeSecurityPolicy(
   await requirePermission(
     ctx,
     "organization.manage_security_policy",
-    organizationScope(await organizationScopeNode(ctx)),
+    await organizationScopeRef(ctx),
   );
   const setBy = ctx.actor.kind === "user" ? ctx.actor.id : null;
 

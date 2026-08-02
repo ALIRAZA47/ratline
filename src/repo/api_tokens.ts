@@ -39,6 +39,7 @@ import { ALL_DEFAULT_ROLES } from "../authz/roles.ts";
 import type { Action } from "../authz/catalogue.ts";
 import type { AuthzContext } from "../authz/context.ts";
 import type { ScopeRef } from "./authorization.ts";
+import { organizationScopeRef } from "./scope.ts";
 
 /**
  * One thing a token is allowed to do: a role, at a place in the hierarchy.
@@ -162,20 +163,6 @@ function actionsCarriedBy(roleKey: string): readonly Action[] {
 }
 
 /** The tenant's root hierarchy node, which organization-scope questions ask about. */
-async function organizationScopeNode(ctx: AuthzContext): Promise<string> {
-  return scoped(ctx, async (query) => {
-    // No tenant predicate: row-level security confines this to one organization,
-    // which has exactly one root node.
-    const rows = await query<{ id: string }>("select id from scope_nodes where kind = 'organization'");
-    const row = rows[0];
-    if (row === undefined) {
-      throw new Error("this organization has no root scope node; the tenant is not usable");
-    }
-    return row.id;
-  });
-}
-
-const organizationScope = (scopeNodeId: string): ScopeRef => ({ scopeNodeId, resourceId: null });
 
 /**
  * Map a {@link ScopeRef} onto the `(scope_type, scope_id)` pair the table stores.
@@ -272,7 +259,7 @@ export async function issueApiToken(
 
   // Issuing is itself an action, checked in the data layer rather than left to a
   // route handler (brief §9).
-  await requirePermission(ctx, "api_token.manage_own", organizationScope(await organizationScopeNode(ctx)));
+  await requirePermission(ctx, "api_token.manage_own", await organizationScopeRef(ctx));
 
   // THE CEILING, AT ISSUE TIME.
   //
@@ -375,7 +362,7 @@ export async function listApiTokensIssuedBy(ctx: AuthzContext, userId: string): 
   await requirePermission(
     ctx,
     isSelf(ctx, userId) ? "api_token.manage_own" : "api_token.read_any",
-    organizationScope(await organizationScopeNode(ctx)),
+    await organizationScopeRef(ctx),
   );
   return scoped(ctx, async (query) => {
     const rows = await query<TokenRow>(
@@ -428,7 +415,7 @@ export async function revokeApiToken(ctx: AuthzContext, tokenId: string): Promis
   await requirePermission(
     ctx,
     isSelf(ctx, issuer) ? "api_token.manage_own" : "api_token.revoke_any",
-    organizationScope(await organizationScopeNode(ctx)),
+    await organizationScopeRef(ctx),
   );
 
   return scoped(ctx, async (query) => {
@@ -455,7 +442,7 @@ export async function revokeApiTokensIssuedBy(ctx: AuthzContext, userId: string)
   await requirePermission(
     ctx,
     isSelf(ctx, userId) ? "api_token.manage_own" : "api_token.revoke_any",
-    organizationScope(await organizationScopeNode(ctx)),
+    await organizationScopeRef(ctx),
   );
 
   return scoped(ctx, async (query) => {

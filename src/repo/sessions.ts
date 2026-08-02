@@ -39,7 +39,7 @@ import { scoped, type ScopedQuery } from "../db/internal/handle.ts";
 import { require as requirePermission } from "../authz/can.ts";
 import type { AuthzContext } from "../authz/context.ts";
 import { isSessionEndReason, sessionTokenDigest, type Session, type SessionEndReason } from "../auth/model.ts";
-import type { ScopeRef } from "./authorization.ts";
+import { organizationScopeRef } from "./scope.ts";
 
 // ---------------------------------------------------------------------------
 // Rows
@@ -102,20 +102,6 @@ function toSession(row: SessionRow): Session {
  * Noted rather than fixed: it belongs in one place, and moving it means editing
  * that module, which this task does not own.
  */
-async function organizationScopeNode(ctx: AuthzContext): Promise<string> {
-  return scoped(ctx, async (query) => {
-    // No tenant predicate: row-level security confines this to one
-    // organization, which has exactly one root node.
-    const rows = await query<{ id: string }>("select id from scope_nodes where kind = 'organization'");
-    const row = rows[0];
-    if (row === undefined) {
-      throw new Error("this organization has no root scope node; the tenant is not usable");
-    }
-    return row.id;
-  });
-}
-
-const organizationScope = (scopeNodeId: string): ScopeRef => ({ scopeNodeId, resourceId: null });
 
 /**
  * Is this row the acting user's own?
@@ -225,7 +211,7 @@ export async function updatePasswordHash(
     await requirePermission(
       ctx,
       "member.reset_password",
-      organizationScope(await organizationScopeNode(ctx)),
+      await organizationScopeRef(ctx),
     );
   }
   return scoped(ctx, async (query) => {
@@ -455,7 +441,7 @@ export async function revokeSessionById(
     await requirePermission(
       ctx,
       "member.revoke_sessions",
-      organizationScope(await organizationScopeNode(ctx)),
+      await organizationScopeRef(ctx),
     );
   }
   return scoped(ctx, async (query) => {
@@ -493,7 +479,7 @@ export async function revokeSessionsOfUser(
     await requirePermission(
       ctx,
       "member.revoke_sessions",
-      organizationScope(await organizationScopeNode(ctx)),
+      await organizationScopeRef(ctx),
     );
   }
   return scoped(ctx, async (query) => {

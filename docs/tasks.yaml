@@ -3417,19 +3417,29 @@
 - id: RL-M1-039
   title: Collapse the three copies of organizationScopeNode
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: S
   depends_on: []
   blocks: []
   risk: low
+  started_at: 2026-08-02
+  done_at: 2026-08-02
   acceptance:
     - One implementation of organizationScopeNode, reachable by every repository that needs it
     - No repository holds a private copy
-  artifacts: []
+  artifacts:
+    - src/repo/scope.ts
+    - test/security/organization_scope.test.ts
   decisions: []
   notes: |
     2026-08-02 — Found while merging RL-M1-019: organizationScopeNode is now written out a third time (api_tokens.ts, sessions.ts, two_factor.ts), each noting the previous copies. Three copies of a scope lookup is three chances for one of them to resolve the wrong node, and a wrong scope node fails OPEN when it resolves higher up the tree.
+    2026-08-02 — Collapsed to src/repo/scope.ts. The three copies did not arrive by carelessness — each author reasonably judged a ten-line helper not worth a shared module, and each left a comment saying the others existed. A comment does not stop the fourth, so the fourth test scans for one.
+    2026-08-02 — The call sites all wrote organizationScope(await organizationScopeNode(ctx)), which duplicated a SECOND thing: the ScopeRef construction, and with it three more places for a resourceId to be filled in wrongly. organizationScopeRef(ctx) collapses both. ScopeRef's own documentation is explicit that a resource id supplied when the question is not about a resource silently WIDENS the answer.
+    2026-08-02 — Mutation-tested four ways. Three caught by the existing suite or the new one: resolving a project node instead of the root (22 tests), a missing root returning empty rather than throwing, and a fourth private copy appearing. The fourth — a resourceId leaking into the organization-wide ref — was NOT caught by anything, because it is inert on the current fixtures: an extra resourceId only widens the answer when a resource-scoped grant matches that id, and none exists. Pinned directly instead, since 'resourceId cannot be anything else' is the entire reason the function exists.
+    2026-08-02 — One self-inflicted find: my own module comment quoted the tenant predicate it was explaining why NOT to write, and scoped_repository.test.ts scans source text without reading comments differently from code. That is the right trade — a scanner that tried to tell them apart would be a second parser to get wrong — so the prose was rephrased rather than the scanner weakened. Noted in the file so the next person does not re-add the quote.
+    2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 476 tests green locally; four mutations run, three caught by existing tests and the fourth pinned by a new one.
+  acceptance_met: [1, 2]
 - id: RL-M1-040
   title: Add the reserved production hue to the design tokens
   milestone: M1
