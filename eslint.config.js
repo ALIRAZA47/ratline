@@ -88,6 +88,12 @@ export default tseslint.config(
 			".ratline/**",
 			"agent/**",
 
+			// Scratch git worktrees for delegated agents. They contain complete
+			// checkouts, so without this the sweep lints another branch's
+			// work-in-progress and `npm run lint` fails on code that is not in
+			// this tree at all.
+			".claude/**",
+
 			// Purpose-built violations. `npm run lint` must not fail on files
 			// whose entire job is to fail lint. test/security/lint_rules.test.ts
 			// lints them explicitly through the ESLint Node API with

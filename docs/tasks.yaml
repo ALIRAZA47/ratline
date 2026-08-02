@@ -1129,23 +1129,35 @@
 - id: RL-M1-021
   title: Implement cross-site request forgery protection
   milestone: M1
-  status: in-progress
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M1-017]
   blocks: []
   risk: high
   started_at: 2026-08-02
+  done_at: 2026-08-02
   acceptance:
     - Every state-changing request requires a token bound to the session
     - Cookies use SameSite and the secure attribute appropriately for the deployment model
     - A test issues a forged cross-origin request and confirms rejection
   artifacts:
     - test/security/csrf.test.ts
+    - src/api/csrf.ts
   decisions: []
   notes: |
     2026-08-02 — unblocked: delegated agent stalled with no output; task never started
 
+    2026-08-02 — Delegated to a subagent in an isolated worktree and reviewed before merging. The design holds up: the token is derived — HMAC-SHA256 over the session id under an HKDF subkey of the cookie secret — so session rotation invalidates it for free rather than by remembering to rotate it, and there is no stored lifetime to keep in step with the session's.
+    2026-08-02 — Two decisions I checked rather than took on trust and agree with. isSafeMethod is CONSULTED from the route table, not copied — a duplicated method list disagrees eventually, and it disagrees in the direction of exempting something that changes state. And a token in the query string is REFUSED rather than ignored: a URL reaches access logs and Referer headers, so accepting the request because a valid token was also in the header would leave the leak permanent.
+    2026-08-02 — The unauthenticated refusal is deliberately NOT audited — there is no session to attribute it to, and writing an entry would let an unauthenticated caller append to the audit log at will. That is a sharper catch than the acceptance asked for.
+    2026-08-02 — Cookie policy is derived from the declared origins, never from the bind address, and the reasoning is R-11: a control plane on 127.0.0.1 behind a TLS-terminating proxy is the ordinary production shape and network.ts reports it contained, so 'loopback, therefore drop Secure' would hand the most exposed deployment the weakest cookie. Secure stays on unless RATLINE_ALLOW_INSECURE_COOKIES is set, mirroring RATLINE_ALLOW_PUBLIC_BIND.
+    2026-08-02 — ADR 0016 proposed, not accepted (§2.6). It names two operator-facing trades a human owns: whether Secure works on http://127.0.0.1 in practice — unverifiable here because there is no server to verify it against, and the riskiest assumption in the design — and SameSite Strict versus Lax, where Strict costs a deep link from a 2am alert landing on the sign-in page.
+    2026-08-02 — 15 mutations reported, all caught. The honest gap the agent flagged and I agree with: constant-time comparison is pinned at source level, not behaviourally — no functional test distinguishes secretEquals from === because both accept the same tokens and differ only in rejection timing. Same limitation as R-16, applied to a second secret.
+    2026-08-02 — Reviewer's corrections: the agent reported lint clean and it was not — eslint was sweeping the delegated agents' worktrees under .claude/, so npm run lint failed on another branch's work in progress. Fixed by adding .claude/** to the eslint ignores and .claude/worktrees/ to .gitignore. Also opened RL-M1-036: guardCsrf audits under an action and resource type the catalogue does not declare, which is a correct decision on an unpoliced mechanism.
+    2026-08-02 — Nothing calls any of it. src/api/server.ts does not exist — this task must not create it — so no cookie carries these attributes and no request is refused yet. Recorded as R-23 with a seven-item wiring list at the foot of src/api/csrf.ts, the same honest position ADR 0015 takes for the rate limiter.
+    2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 432 tests green locally after merge; lint and typecheck clean once the agent worktrees were excluded.
+  acceptance_met: [1, 2, 3]
 - id: RL-M1-022
   title: Generate all secrets on first run and refuse to boot without them
   milestone: M1
@@ -3327,3 +3339,22 @@
     - TODO define acceptance before this task can start
   artifacts: []
   decisions: []
+- id: RL-M1-036
+  title: Close the audit event namespace so a typo cannot vanish
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: S
+  depends_on: []
+  blocks: []
+  risk: medium
+  acceptance:
+    - Audit entries name their action and resource type from a closed set, the way the permission catalogue is closed
+    - An event outside that set fails a test rather than being written
+    - Permission actions and non-permission events are distinguishable, so the audit viewer can enumerate both
+  artifacts: []
+  decisions: []
+  notes: |
+    2026-08-02 — Found while reviewing RL-M1-021. guardCsrf audits with action 'session.csrf_rejected' and resourceType 'session', neither of which the permission catalogue declares — and neither the type system nor the database objects, because AuditRecord types both as string and audit_entries has no check constraint. That is correct as a decision (a CSRF rejection is an event, not a permission) and unpoliced as a mechanism: a typo like 'sesion.csrf_rejected' writes cleanly and the entry disappears from every filter that looks for the real name.
+
+    2026-08-02 — Adding 'session' to RESOURCE_TYPES is NOT the fix — catalogue_completeness rejects a resource type no action touches, which is the right rule. The audit namespace needs to be its own closed set, related to the catalogue but not identical to it.

@@ -8,7 +8,7 @@ Generated 2026-08-02.
 | Milestone | Progress | Done | Total | Open high-risk |
 | --- | --- | ---: | ---: | ---: |
 | **M0** Plan | `########################` 100% | 26 | 26 | 0 |
-| **M1** Control plane skeleton | `##################------` 74% | 26 | 35 | 3 |
+| **M1** Control plane skeleton | `##################------` 75% | 27 | 36 | 2 |
 | **M2** Agent and first host | `------------------------` 0% | 0 | 29 | 20 |
 | **M3** Static sites end to end | `------------------------` 0% | 0 | 27 | 18 |
 | **M4** Node and Bun apps | `------------------------` 0% | 0 | 15 | 10 |
@@ -32,7 +32,6 @@ Auth, org/team/project model, the can() function with 100% branch coverage, hash
 | Task | Age | Owner | Risk | Acceptance | Title |
 | --- | ---: | --- | --- | ---: | --- |
 | `RL-M1-019` | 0d | agent | **high** | 0/3 | Add two-factor authentication with an organization-level policy |
-| `RL-M1-021` | 0d | agent | **high** | 0/3 | Implement cross-site request forgery protection |
 
 ## Blocked
 
@@ -68,13 +67,13 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 
 | Suite | Passing | Rate |
 | --- | ---: | ---: |
-| Unit | 238 / 238 | 100% |
+| Unit | 256 / 256 | 100% |
 | Integration | not measured | — |
 | Authorization matrix | 176 / 176 | 100% |
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | 100% | must be 100% |
 
-Measured 2026-08-02T06:28:38.371Z.
+Measured 2026-08-02T06:35:50.416Z.
 
 ### Authorization matrix (role × endpoint × subject)
 
@@ -109,8 +108,8 @@ CI: _no status recorded yet._
 
 | Status | Count |
 | --- | ---: |
-| todo | 106 |
-| in-progress | 2 |
+| todo | 107 |
+| in-progress | 1 |
 | review | 2 |
-| done | 52 |
-| **all** | **162** |
+| done | 53 |
+| **all** | **163** |
