@@ -1134,6 +1134,7 @@
 
     2026-08-02 — The window is fixed rather than sliding, deliberately. A sliding window is the more accurate limiter and the wrong one here: it would let an attacker hold any named account locked out indefinitely by attempting once per window.
     2026-08-02 — The bucket key is a digest computed before any lookup. Counting only real accounts would tell an attacker which accounts exist by which ones get limited — and since unauthenticated callers cause writes here, raw identifiers would make the table an attacker-populated harvest of every address ever tried.
+    2026-08-02 — 2026-08-02 — partially unblocked by RL-M1-042. POST /auth/sign-in now spends the budget, before the scrypt derivation rather than after, which was the ordering R-15 said belonged to a route handler. Still in review, and honestly so: two-factor verification and password reset have no endpoints yet, so AUTH_RATE_LIMITS['two-factor'] still publishes a budget nothing spends (R-28) — a six-digit code with an unlimited verifier is found inside a day. Acceptance 3 wants every authentication path, and one of three is not every.
   acceptance_met: [2, 3]
 - id: RL-M1-021
   title: Implement cross-site request forgery protection

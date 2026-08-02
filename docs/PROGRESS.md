@@ -14,6 +14,61 @@ and which task IDs.
 
 ---
 
+## 2026-08-02 — Session 15 — M1
+
+**Completed:** RL-M1-043 and RL-M1-042. M1 is 40/44. 551 tests, both coverage
+gates at 100%, and the authorization matrix now verifies **56 cells end to end
+through real requests** — the number that was zero for two sessions.
+
+**The human ruled reading (b) on RL-M1-042, and it found a live defect before a
+line of the server was written.** Under that reading the repository is the only
+authorization decision, so a repository that does not check is genuinely
+unguarded. Nine of them did not: `listAudit` above all, where `audit_log.read`
+is Owner and Admin only and every member of a tenant could read the whole log.
+A route-table middleware would have covered all nine and left the repositories
+exactly as wrong. That is the strongest argument for the ruling and the codebase
+made it, not me.
+
+**Surprises / what I learned:**
+
+- **C3's three layers all HELD and the gap was still there.** An unreachable
+  handle, a branded context and forced RLS — none of them has an opinion about
+  WHICH member of a tenant is asking. That is `can()`'s question, and those
+  functions never asked it.
+- **Fifty-one tests broke and the fixtures were as informative as the code.**
+  Most were a *refused* actor reading the audit log to check their own denial;
+  `scoped_repository.test.ts` used a random uuid as its user, which now fails as
+  `actor-not-in-tenant` — a correct refusal for the wrong reason that would have
+  let C3's cross-tenant tests pass without exercising RLS at all.
+- **Gating broke two-factor enrolment**, correctly and usefully: the label
+  lookup needed `organization.read`, so the people who MUST enrol — forced at
+  first sign-in, or just reset — could not. Replaced by a two-field read argued
+  as an exemption rather than a widening.
+- **The transport layer forced out three bugs no unit test would have.** A
+  lookup returning null answered `200 null`, making absent distinguishable from
+  refused at the HTTP layer and reintroducing the oracle the data layer had
+  closed. The matrix drove POSTs with no CSRF token and three cells failed —
+  the guard is live. And a path parameter went unsubstituted on
+  organization-scoped routes, recording three roles as refused a permission they
+  hold.
+- **The matrix mutates the world it measures.** `revoke-sessions` is a real
+  request, so aiming it at the Viewer really signed the Viewer out and the
+  Viewer's later cells answered 401. There is a bystander member now.
+- **My own scans caught me three more times** — an invented `audit_log.verify`
+  that `can()` denied as unknown-action (fail-closed, but nothing *caught* it,
+  because `require()` takes a plain string: RL-M1-044); two avoidable type
+  assertions; and the server hand-rolling its own 401.
+- **RL-M1-025's tripwire fired on the first compile of the server**, exactly as
+  it was written to, and has been replaced by the assertion it demanded.
+
+**Still owed / next session should start with:** RL-M1-030 (onboarding and
+login, now unblocked), then RL-M1-037, RL-M1-041 and RL-M1-044. R-28 remains
+the sharpest open item — two-factor verification still has no endpoint and
+therefore no rate limit in effect. RL-M1-002 and RL-M1-020 cannot leave `review`
+until there is a remote and CI has actually run (R-10).
+
+---
+
 ## 2026-08-02 — Session 14 — M1
 
 **Completed:** RL-M1-040, RL-M1-039, RL-M1-028, RL-M1-029, RL-M1-036, RL-M1-031,
