@@ -1083,7 +1083,7 @@
 - id: RL-M1-019
   title: Add two-factor authentication with an organization-level policy
   milestone: M1
-  status: todo
+  status: in-progress
   owner: agent
   estimate: L
   depends_on: [RL-M1-017]
@@ -1129,7 +1129,7 @@
 - id: RL-M1-021
   title: Implement cross-site request forgery protection
   milestone: M1
-  status: todo
+  status: in-progress
   owner: agent
   estimate: M
   depends_on: [RL-M1-017]
@@ -1251,20 +1251,32 @@
 - id: RL-M1-026
   title: Make unauthorized and nonexistent indistinguishable
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M1-025]
   blocks: []
   risk: high
+  started_at: 2026-08-02
+  done_at: 2026-08-02
   acceptance:
     - Both cases return an identical status code and body
     - Error text and headers reveal nothing about existence
     - A test compares responses byte for byte across every resource type
   artifacts:
     - test/security/indistinguishable_404.test.ts
+    - src/api/refusal.ts
   decisions: [3]
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-02 — The requirement is not that the two responses match, it is that there is only ONE response. Two code paths producing identical bytes today are still two code paths, and one of them grows a helpful message. So the wire response is a single frozen constant, Refusal is branded like AuthzContext so no other module can construct one, and refuse() returns the response AND the audit record together — you cannot obtain the refusal without producing the entry that says what really happened.
 
+    2026-08-02 — 404 not 403: a 403 asserts the resource exists, which turns an identifier into a membership test. 401 stays distinct and is safe to distinguish because unauthenticated() takes no arguments — it is decided before any identifier is read, so it cannot report on one. There is no path from a decision to it.
+    2026-08-02 — Deliberately absent: no correlation id in the body. It is the obvious kindness and the exact place a leak gets reintroduced; the audit log correlates by requestId server-side, where the operator is and the prober is not. Timing is not equalised — THREAT-MODEL R-04 already records that as accepted, and the mitigation is rate limiting bounding the sample count (RL-M1-020) rather than a fixed delay on every refusal.
+    2026-08-02 — AuditEntry now reads metadata back. It was written but not returned, so the truth the response withholds was reaching the database and no further — which makes the trade unfair rather than merely incomplete, since the whole argument for telling the caller nothing is that the operator is told everything.
+    2026-08-02 — Mutation-tested five ways, all caught: 403 for denied and 404 for absent (3 tests), the resource id leaking into the body (3), denials routed to 401 (3), the cause no longer reaching the audit log (1), and a second module building its own 404 (1). That last one is the assertion that survives the next handler — the others only ever look at this module.
+    2026-08-02 — Verified at the value refuse() hands the adapter, not over a socket: there is no HTTP server yet. Stated in the suite header rather than implied. It is a mild limit here because the response is a frozen constant, and the structural test is what notices if something downstream constructs its own.
+    2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 399 tests green locally; five mutations all caught.
 - id: RL-M1-027
   title: Implement the design tokens from the design plan
   milestone: M1

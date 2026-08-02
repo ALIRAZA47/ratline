@@ -8,6 +8,9 @@ build/
 /bin/
 *.test
 
+# Scratch git worktrees created for delegated agents. Never part of the repo.
+.claude/worktrees/
+
 # Machine-written signals consumed by `scripts/tasks render`.
 # These are produced by CI, never committed — STATUS.md is the committed view.
 .ratline/

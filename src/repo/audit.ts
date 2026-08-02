@@ -43,6 +43,13 @@ export type AuditEntry = {
   readonly ip: string | null;
   readonly requestId: string;
   readonly occurredAt: Date;
+  /**
+   * Read back, not just written. An entry whose structured detail is
+   * write-only is an entry an operator cannot act on — and RL-M1-026 trades
+   * telling the caller nothing for telling the operator everything, which is
+   * only a fair trade if the second half is reachable.
+   */
+  readonly metadata: Readonly<Record<string, string | number | boolean | null>>;
 };
 
 type EntryRow = {
@@ -61,6 +68,7 @@ type EntryRow = {
   ip: string | null;
   request_id: string;
   occurred_at: Date;
+  metadata: Record<string, string | number | boolean | null> | null;
 };
 
 const toEntry = (row: EntryRow): AuditEntry => ({
@@ -79,6 +87,9 @@ const toEntry = (row: EntryRow): AuditEntry => ({
   ip: row.ip,
   requestId: row.request_id,
   occurredAt: row.occurred_at,
+  // `jsonb` comes back parsed. Null becomes {} so every reader can index it
+  // without a guard that would otherwise be forgotten at one call site.
+  metadata: row.metadata ?? {},
 });
 
 /** A human-readable label for the actor, so a reader need not resolve an id. */
