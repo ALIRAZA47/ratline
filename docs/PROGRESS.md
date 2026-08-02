@@ -14,6 +14,73 @@ and which task IDs.
 
 ---
 
+## 2026-08-02 — Session 14 — M1
+
+**Completed:** RL-M1-040, RL-M1-039, RL-M1-028, RL-M1-029, RL-M1-036, RL-M1-031,
+RL-M1-038. M1 is 38/42. Opened RL-M1-041 and RL-M1-042 for gaps found on the
+way. 547 tests, both coverage gates at 100%.
+
+**The React ruling cost more than a bundle.** JSX is not erasable syntax — I
+probed `--experimental-strip-types` and `--experimental-transform-types` and
+Node refuses a `.tsx` file outright — so the test runner cannot import a
+component at all, and Vite became this project's first build step. The bill is
+paid by keeping everything decidable in `.ts`: the rail, breadcrumb, chip style,
+tension states, palette and audit view model are all data, and the `.tsx` files
+only arrange what they return.
+
+**The biggest finding is a hole in the plan, not in the code.** Nothing in the
+tracker ever built the control plane's own HTTP server. Every "web server" task
+is about the managed nginx/caddy on hosts. Four risks are each worded "owed by
+whoever builds `src/api/`" — the CSRF guard, the rate limiter, two-factor rate
+limiting, and the matrix's `transport: 0` — and nobody was. RL-M1-042 now exists
+and is the critical path.
+
+**I did not start it, deliberately.** It contains a §9 question that must be
+answered first: every route declares the action it requires, which invites a
+middleware calling `can()` — and §9 rejects permission checks in handlers
+"instead of, OR IN ADDITION TO, the data layer". The three readings are written
+into the task. Picking one quietly would put a second authorization decision in
+the system, which is the one thing C3 exists to prevent.
+
+**Surprises / what I learned:**
+
+- **A real browser found two bugs no unit test would have.** The tension line's
+  travel named `@keyframes` that existed nowhere, so it silently did nothing;
+  and it was an *inline* animation, which a media query cannot override, so
+  §5's reduced-motion half rested entirely on JavaScript that does not apply
+  until React mounts.
+- **Programmatic `.focus()` reports `outline-style: none` and it means nothing** —
+  `:focus-visible` does not fire for programmatic focus. Nine real Tab presses
+  through a `focusin` recorder is what actually answers "are focus states
+  visible".
+- **Eight invented token names**, none of which threw. An unresolved custom
+  property falls back to the inherited value and the page looks almost right.
+- **Typing `AuditRecord.action` caught a fake name in my own RL-M1-026 test** —
+  it built `${resourceType}.read`, and `secret.read` does not exist.
+- **My own cast scan caught me twice**, and one mutation was caught by the
+  *wrong* test — a misspelled event smuggled in by a cast failed the
+  declared-and-used check rather than the cast scan, which was luck. The scan
+  looked for casts at an `action:` property; the real case is a named constant.
+- **A test of mine failed and the code was right.** I assumed Developer lacks
+  `grant.break_glass`; it holds it deliberately, because break-glass defeats
+  every restriction by design and its control is detection, not prevention.
+  Rewrote the test to derive non-holders rather than list them.
+- **Three times a source-scanning test caught prose that merely NAMED the
+  pattern it forbids** — in comments explaining why the pattern was avoided. The
+  repo has two conventions about comments in these scanners and neither was
+  chosen. RL-M1-041.
+- **A fixture could not sign a 2FA-enrolled member in**, which is RL-M1-019
+  working: a confirmed factor means a password alone yields a challenge, not a
+  session.
+
+**Still owed / next session should start with:** RL-M1-042's ADR and human
+ruling, then the server itself — it unblocks RL-M1-030 and converts four risks
+from mechanism into protection. RL-M1-037 (re-authentication) and RL-M1-041
+remain. RL-M1-002 and RL-M1-020 still cannot leave `review` until there is a
+remote and CI has actually run (R-10).
+
+---
+
 ## 2026-08-02 — Session 13 — M1
 
 **Completed:** RL-M1-024 (closed at the top of the session), RL-M1-025,
