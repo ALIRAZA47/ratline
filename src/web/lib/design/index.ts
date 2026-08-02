@@ -35,10 +35,21 @@
  */
 
 export type { Hex, Mode, Rgb, Themed } from "./color.ts";
-export { MODES, contrastRatio, flatten, parseHex, relativeLuminance, toHex, withAlpha } from "./color.ts";
+export {
+  MODES,
+  contrastRatio,
+  flatten,
+  hueAngle,
+  hueDistance,
+  parseHex,
+  relativeLuminance,
+  saturation,
+  toHex,
+  withAlpha,
+} from "./color.ts";
 
 export type { SurfaceName } from "./palette.ts";
-export { ALPHA, STATUS_FILL, STATUS_HUE, SURFACE } from "./palette.ts";
+export { ALPHA, ENVIRONMENT, STATUS_FILL, STATUS_HUE, SURFACE } from "./palette.ts";
 
 export type { StatusId, StatusToken } from "./status.ts";
 export { STATUS, STATUS_ORDER, statusDescription, statusToken } from "./status.ts";

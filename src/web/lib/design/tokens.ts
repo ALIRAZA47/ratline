@@ -20,7 +20,7 @@
 
 import type { Hex, Mode, Themed } from "./color.ts";
 import { withAlpha } from "./color.ts";
-import { ALPHA, STATUS_FILL, STATUS_HUE, SURFACE } from "./palette.ts";
+import { ALPHA, ENVIRONMENT, STATUS_FILL, STATUS_HUE, SURFACE } from "./palette.ts";
 import { STATUS, STATUS_ORDER } from "./status.ts";
 import {
   DISPLAY_STRETCH,
@@ -31,7 +31,14 @@ import {
 import { LAYOUT, RADIUS, SPACE, px } from "./space.ts";
 import { DURATION, EASING, REDUCED_MOTION_MAX, ms, survivesReducedMotion } from "./motion.ts";
 
-export type TokenGroup = "surface" | "status" | "type" | "space" | "layout" | "motion";
+export type TokenGroup =
+  | "surface"
+  | "status"
+  | "environment"
+  | "type"
+  | "space"
+  | "layout"
+  | "motion";
 
 /** WCAG thresholds, straight from DESIGN.md §8. */
 export const CONTRAST_TARGET = {
@@ -187,6 +194,40 @@ const statusTokens: readonly Token[] = [
   ),
 ];
 
+// --- environment, DESIGN.md §10.1 as ruled 2026-08-02 ------------------------
+
+/**
+ * Text on the filled production chip.
+ *
+ * Derived, like `--st-fail-on` and for the same reason. It resolves to `--tar`
+ * in each mode because the two production values invert — light violet in dark
+ * mode wants dark text, dark violet in light mode wants light text — and both
+ * directions land on that mode's canvas colour. That is a coincidence the
+ * contrast rule below measures rather than trusts, so retuning the hue breaks a
+ * test instead of quietly producing an unreadable chip.
+ */
+const productionOn: Themed<Hex> = { dark: SURFACE.tar.dark, light: SURFACE.tar.light };
+
+const environmentTokens: readonly Token[] = [
+  opaque(
+    "--env-production",
+    "environment",
+    ENVIRONMENT.production,
+    // A fill, so the 3:1 non-text floor is what applies to it against the
+    // surfaces. It clears far more than that, because the same value also has
+    // to carry the label — see below.
+    { kind: "mark", on: SURFACES },
+    "The one reserved production hue — the filled environment chip, and nothing else",
+  ),
+  opaque(
+    "--env-production-on",
+    "environment",
+    productionOn,
+    { kind: "text", on: ["--env-production"] },
+    "Label on the filled production chip",
+  ),
+];
+
 // --- type, DESIGN.md §3 -----------------------------------------------------
 
 const typeTokens: readonly Token[] = [
@@ -251,6 +292,7 @@ export const REDUCED_MOTION_OVERRIDES: readonly { readonly name: string; readonl
 export const TOKENS: readonly Token[] = [
   ...surfaceTokens,
   ...statusTokens,
+  ...environmentTokens,
   ...typeTokens,
   ...spaceTokens,
   ...layoutTokens,

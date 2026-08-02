@@ -3433,17 +3433,29 @@
 - id: RL-M1-040
   title: Add the reserved production hue to the design tokens
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: S
   depends_on: []
   blocks: [RL-M1-028]
   risk: low
+  started_at: 2026-08-02
+  done_at: 2026-08-02
   acceptance:
     - One reserved production hue exists in the token registry, with its contrast measured in both modes
     - A test asserts the hue is used nowhere but the environment chip
     - A test asserts it is not confusable with any status hue
-  artifacts: []
+  artifacts:
+    - src/web/lib/design/palette.ts
+    - test/toolchain/design_tokens.test.ts
   decisions: []
   notes: |
     2026-08-02 — Required by the 2026-08-02 ruling on DESIGN.md §10.1: production is distinguished by form AND a single reserved hue. §1 was amended from 'colour means status' to 'colour means status or production' rather than carrying this as an exception, because an exception list grows and a rule argues back. The amendment is only safe if requirement 1 — the hue appears nowhere else — is enforced by a test rather than by discipline; that is what this task is for.
+
+    2026-08-02 — The hue was chosen by search over the violet band against all four constraints at once, not by eye: at least 3:1 against both surfaces, at least 4.5:1 for the label on top of it, at least 60 degrees from every saturated status hue, and saturated enough not to be read as idle. It landed at 286 degrees — 72 from fail, 82 from working — because violet is the one region of the wheel the status language does not use.
+    2026-08-02 — The two modes invert exactly as --st-fail does: light violet in dark mode taking dark text, dark violet in light mode taking light text, both landing on that mode's canvas colour. That is a coincidence the contrast rule MEASURES rather than trusts, so retuning the hue breaks a test instead of quietly producing an unreadable chip.
+    2026-08-02 — idle is excluded from the hue-distance rule and that is not a loophole. It is a warm grey at 6% saturation, where a hue angle is an artefact of rounding, so comparing angles with it would pass for the wrong reason. What separates production from idle is saturation, and the test asserts that instead.
+    2026-08-02 — The escape test is the one the §1 amendment actually rests on. Colour was allowed a second meaning ONLY on the condition that the hue has exactly one use, so that condition is scanned for rather than trusted. The allowlist is three design modules today and gains the chip component with RL-M1-028 — it gets stricter as the interface grows, never looser.
+    2026-08-02 — Mutation-tested five ways, all caught: the hue drifting toward amber (1 test), the hue escaping into another module (2), the token filed under status instead of environment (1), the label no longer inverting so one mode is unreadable (2), and a second environment hue added (1).
+    2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 472 tests green locally; five mutations all caught.
+  acceptance_met: [1, 2, 3]

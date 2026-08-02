@@ -9,10 +9,16 @@
  *
  * The organising rule from DESIGN.md §1 governs every addition here:
  *
- *   > Colour means status. Nothing else is allowed to be saturated.
+ *   > Colour means status or production. Nothing else is allowed to be
+ *   > saturated.
  *
  * There is no brand accent. If a new saturated value is proposed and it does
  * not carry operational meaning, the answer is no.
+ *
+ * The rule read "colour means status" until the 2026-08-02 ruling on §10.1
+ * added the second meaning. It admits exactly one more value — {@link ENVIRONMENT} —
+ * and the amendment is only safe while that value appears nowhere else, which
+ * `test/toolchain/design_tokens.test.ts` enforces rather than trusts.
  */
 
 import type { Hex, Themed } from "./color.ts";
@@ -80,6 +86,41 @@ export const STATUS_HUE = {
  */
 export const STATUS_FILL = {
   failMark: { dark: "#E5484D", light: "#E5484D" },
+} as const satisfies Record<string, Themed<Hex>>;
+
+/**
+ * The one reserved production hue (RL-M1-040).
+ *
+ * DESIGN.md §10.1 was ruled on 2026-08-02: production is distinguished by form
+ * AND by a single reserved hue. This is that hue, and the constraints on it are
+ * not aesthetic:
+ *
+ *   1. **It appears nowhere else in the interface.** A hue used in one place has
+ *      one meaning. The confusion §1 exists to prevent — reading a chip as a
+ *      status — needs the two vocabularies to overlap, so they must not.
+ *   2. **It is not confusable with a status hue.** Every status sits between
+ *      357° (fail) and 204° (working) going through red, amber and green. This
+ *      is at 286°, which is 72° from the nearest of them and 82° from working.
+ *      Violet is the one region of the wheel the status language does not use.
+ *   3. **Form still carries the distinction alone.** The production chip is
+ *      filled and non-production chips are outlined, which survives a
+ *      monochrome display, a colour-deficient reader and a photograph of a
+ *      screen — the same reasoning as §1's "status is never colour alone".
+ *
+ * The two modes invert, exactly as `--st-fail` does: the dark mode value is
+ * light enough to take dark text, the light mode value dark enough to take
+ * light text. Both land on that mode's canvas colour, which is what
+ * `--env-production-on` resolves to. Contrast is 7.79:1 dark and 8.74:1 light,
+ * and the test measures it rather than repeating those numbers.
+ *
+ * Chosen by search over the violet band rather than by eye, against all of the
+ * above at once. `idle` is excluded from the hue-distance rule because it is a
+ * near-grey at 6% saturation, where a hue angle means nothing; what separates
+ * this from idle is saturation, and the test says so.
+ */
+export const ENVIRONMENT = {
+  /** Production. Filled chip. Used for nothing else, ever. */
+  production: { dark: "#D28DE7", light: "#741197" },
 } as const satisfies Record<string, Themed<Hex>>;
 
 /**

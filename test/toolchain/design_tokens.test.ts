@@ -30,6 +30,7 @@ import {
   AUDIT_EXEMPTIONS,
   CONTRAST_TARGET,
   DURATION,
+  ENVIRONMENT,
   FONT_ASSETS,
   FONT_PACKAGES,
   FONT_STACK,
@@ -49,7 +50,10 @@ import {
   findToken,
   flatten,
   formatFindings,
+  hueAngle,
+  hueDistance,
   parseHex,
+  saturation,
   renderBaseCss,
   renderDesignStylesheet,
   renderReducedMotionCss,
@@ -294,6 +298,136 @@ test("the four operational statuses clear body-text contrast in both modes", () 
     const ratio = contrastRatio(STATUS_HUE.idle[mode], SURFACE.tar[mode]);
     assert.ok(ratio >= CONTRAST_TARGET.mark, `idle in ${mode} falls below the 3:1 mark floor`);
     assert.ok(ratio < CONTRAST_TARGET.text, `idle in ${mode} now clears 4.5:1 — update the mark-only rule`);
+  }
+});
+
+// --- the reserved production hue, DESIGN.md §10.1 as ruled 2026-08-02 -------
+//
+// §1 was amended from "colour means status" to "colour means status OR
+// production". The amendment is safe only while two things hold, and neither is
+// the kind of thing that stays true by being written down.
+
+test("the production hue is not confusable with any status hue", () => {
+  // The failure this prevents is precise: an operator glancing at a production
+  // chip and reading it as a status, or the reverse. That is a question about
+  // distance on the colour wheel, so it is measured as one.
+  const MINIMUM_SEPARATION = 60;
+
+  for (const mode of MODES) {
+    const production = ENVIRONMENT.production[mode];
+
+    for (const id of STATUS_ORDER) {
+      const status = STATUS_HUE[id][mode];
+
+      // `idle` is a warm grey at ~6% saturation, where a hue angle is an
+      // artefact of rounding — comparing angles with it would be meaningless
+      // and would pass for the wrong reason. What separates production from
+      // idle is that one is saturated and the other is not, so that is what is
+      // asserted.
+      if (saturation(status) < 0.2) {
+        assert.ok(
+          saturation(production) > saturation(status) * 3,
+          `${id} in ${mode} is a near-grey and production must not be`,
+        );
+        continue;
+      }
+
+      const distance = hueDistance(production, status);
+      assert.ok(
+        distance >= MINIMUM_SEPARATION,
+        `production (${String(Math.round(hueAngle(production)))}°) is ${String(Math.round(distance))}° ` +
+          `from ${id} (${String(Math.round(hueAngle(status)))}°) in ${mode} — under ${String(MINIMUM_SEPARATION)}°, ` +
+          `a chip and a status become confusable at a glance`,
+      );
+    }
+  }
+});
+
+test("the production chip is legible and visible in both modes", () => {
+  // Two different requirements that happen to share a number, asserted apart so
+  // that a palette change breaking one is not hidden by the other still holding.
+  const label = findToken("--env-production-on");
+  const chip = findToken("--env-production");
+  assert.ok(label?.kind === "color" && !label.translucent);
+  assert.ok(chip?.kind === "color" && !chip.translucent);
+
+  for (const mode of MODES) {
+    const fill = chip.value[mode];
+    // Visible: the chip must stand off both surfaces at the non-text floor.
+    for (const surface of [SURFACE.tar, SURFACE.pitch]) {
+      const ratio = contrastRatio(fill, surface[mode]);
+      assert.ok(
+        ratio >= CONTRAST_TARGET.mark,
+        `the production chip is ${ratio.toFixed(2)}:1 against its surface in ${mode}`,
+      );
+    }
+    // Legible: the label on it is body text and clears the body-text bar.
+    const onFill = contrastRatio(label.value[mode], fill);
+    assert.ok(
+      onFill >= CONTRAST_TARGET.text,
+      `the production label is ${onFill.toFixed(2)}:1 on the chip in ${mode}`,
+    );
+  }
+});
+
+test("nothing but the environment chip may use the production hue", () => {
+  // Requirement one of the §10.1 ruling, and the whole basis of amending §1: a
+  // hue used in one place has one meaning. Enforced by scanning rather than by
+  // convention, because a convention is exactly what would decay into a
+  // second use.
+  //
+  // WHEN THE CHIP IS BUILT (RL-M1-028) this allowlist gains its component file
+  // and nothing else. It gets stricter as the interface grows, never looser.
+  const ALLOWED = [
+    "src/web/lib/design/palette.ts",
+    "src/web/lib/design/tokens.ts",
+    "src/web/lib/design/index.ts",
+  ];
+
+  const needles = [
+    "--env-production",
+    ENVIRONMENT.production.dark,
+    ENVIRONMENT.production.light,
+    ENVIRONMENT.production.dark.toLowerCase(),
+    ENVIRONMENT.production.light.toLowerCase(),
+  ];
+
+  const offenders: string[] = [];
+  for (const file of sourceFiles(join(ROOT, "src", "web"))) {
+    const relativePath = relative(ROOT, file).replaceAll("\\", "/");
+    if (ALLOWED.includes(relativePath)) continue;
+    const source = readFileSync(file, "utf8");
+    for (const needle of needles) {
+      if (source.includes(needle)) offenders.push(`${relativePath} uses ${needle}`);
+    }
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    "the production hue has escaped the environment chip. DESIGN.md §1 admits it as a " +
+      "SECOND meaning for saturated colour on the condition that it has exactly one use; " +
+      "a second use means the amendment no longer holds and colour has stopped being " +
+      "unambiguous.",
+  );
+});
+
+test("the environment group is a group, not a colour smuggled into another one", () => {
+  // A token filed under "status" would be measured, rendered and reviewed as a
+  // status — which is the confusion §1 is about, expressed in the registry
+  // rather than on screen.
+  const environment = TOKENS.filter((token) => token.group === "environment");
+  assert.deepEqual(
+    environment.map((token) => token.name),
+    ["--env-production", "--env-production-on"],
+    "the environment group has changed — §1 admits ONE production hue and no more",
+  );
+  for (const token of TOKENS) {
+    if (token.group === "environment") continue;
+    assert.ok(
+      !token.name.startsWith("--env-"),
+      `${token.name} is named as an environment token but filed under ${token.group}`,
+    );
   }
 });
 

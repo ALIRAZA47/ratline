@@ -81,6 +81,49 @@ export function contrastRatio(a: string, b: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
+/**
+ * Hue angle in degrees, 0–360, and saturation 0–1 (HSL).
+ *
+ * Here rather than in a test because DESIGN.md §1 now turns on a distance
+ * between hues — "colour means status or production" is only safe while the
+ * production hue is nowhere near a status one — and a rule the design system
+ * depends on should be computable by the design system.
+ *
+ * Hue is undefined for a grey and is reported as 0. Callers must check
+ * saturation before believing an angle: `idle` is a warm grey at 6%
+ * saturation, and its "hue" is an artefact of rounding.
+ */
+export function hueAngle(value: string): number {
+  const { r, g, b } = parseHex(value);
+  const [rn, gn, bn] = [r / 255, g / 255, b / 255];
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const span = max - min;
+  if (span === 0) return 0;
+  let hue: number;
+  if (max === rn) hue = ((gn - bn) / span) % 6;
+  else if (max === gn) hue = (bn - rn) / span + 2;
+  else hue = (rn - gn) / span + 4;
+  return ((hue * 60) % 360 + 360) % 360;
+}
+
+export function saturation(value: string): number {
+  const { r, g, b } = parseHex(value);
+  const [rn, gn, bn] = [r / 255, g / 255, b / 255];
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const span = max - min;
+  if (span === 0) return 0;
+  const lightness = (max + min) / 2;
+  return span / (1 - Math.abs(2 * lightness - 1));
+}
+
+/** Shortest distance between two hue angles, 0–180. A wheel, not a line. */
+export function hueDistance(a: string, b: string): number {
+  const raw = Math.abs(hueAngle(a) - hueAngle(b)) % 360;
+  return Math.min(raw, 360 - raw);
+}
+
 function assertAlpha(alpha: number): void {
   if (!Number.isFinite(alpha) || alpha < 0 || alpha > 1) {
     throw new RangeError(`alpha must be between 0 and 1, received ${String(alpha)}`);
