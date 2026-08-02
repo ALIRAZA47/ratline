@@ -18,6 +18,7 @@
  * Per-database costs ~100ms and is actually isolated.
  */
 
+import { randomUUID } from "node:crypto";
 import { Client } from "pg";
 
 import { loadMigrations, migrateUp, type SqlClient } from "../../src/db/migrate.ts";
@@ -60,6 +61,34 @@ export const skipWithoutDatabase: false | string = available
 let counter = 0;
 
 /**
+ * A name no other process can generate (RL-M1-045).
+ *
+ * The first version was `rl_t_${process.hrtime.bigint().toString(36)}_${counter++}`
+ * and it produced a real, reproducible flake: roughly one full-suite run in
+ * three failed somewhere with `terminating connection due to administrator
+ * command`.
+ *
+ * `process.hrtime.bigint()` is monotonic since BOOT and shared across
+ * processes, and `counter` restarts at zero in each one — so two test files
+ * that reached this line in the same nanosecond got the same database name.
+ * `node --test` starts a batch of file processes together, which is exactly the
+ * condition that makes that collision reachable.
+ *
+ * What turned a collision into a failure is `with (force)` on the drop below.
+ * It was added so a leaked connection could not wedge the drop and leak a
+ * database into the next run — a good reason — and it means the loser of a
+ * collision does not get a harmless "already exists", it gets its connections
+ * terminated mid-test. The two decisions are individually right and were
+ * jointly a landmine.
+ *
+ * `randomUUID` rather than the pid: pids are reused, and a rerun that landed on
+ * a recycled pid at the same nanosecond would be back where it started.
+ */
+function scratchName(): string {
+  return `rl_t_${randomUUID().replaceAll("-", "").slice(0, 16)}_${counter++}`;
+}
+
+/**
  * Create a scratch database, run `fn` against it, drop it afterwards whatever
  * happens. Migrations are NOT applied — use {@link withMigratedDatabase} for
  * that; this one exists so the migration cycle itself can be tested.
@@ -67,7 +96,7 @@ let counter = 0;
 export async function withScratchDatabase(
   fn: (client: Client & SqlClient, name: string) => Promise<void>,
 ): Promise<void> {
-  const name = `rl_t_${process.hrtime.bigint().toString(36)}_${counter++}`;
+  const name = scratchName();
   const admin = new Client({ connectionString: urlFor("postgres") });
   await admin.connect();
 

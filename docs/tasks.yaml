@@ -3675,20 +3675,33 @@
 - id: RL-M1-045
   title: Chase the intermittent failure in the API token ceiling suite
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: M
   depends_on: []
   blocks: []
   risk: high
+  started_at: 2026-08-02
+  done_at: 2026-08-02
   acceptance:
     - The cause is identified rather than the test retried
     - The suite passes fifty consecutive full runs
     - If the cause is in the product rather than the fixture, it is recorded as a finding
-  artifacts: []
+  artifacts:
+    - test/security/test_isolation.test.ts
+    - test/support/db.ts
   decisions: []
   notes: |
     2026-08-02 — Observed once during RL-M1-041: 'a deny on the issuer strips the token, wherever the deny sits' (test/authz/token_subset.test.ts) failed in a full-suite run and passed in three isolated runs and two subsequent full runs. Node runs each test FILE in its own process with concurrency, so the suspect is contention between scratch databases rather than the assertion.
 
     2026-08-02 — Recorded rather than shrugged at, and marked high risk, because of what the test guards: the API token ceiling is R-12 — a token must carry a SUBSET of its issuer's current permissions and never more. A flake there is either a fixture race or a real ordering bug in grant resolution, and the two are indistinguishable from a green re-run. A test that sometimes fails is a test that eventually gets ignored, which is the worse outcome for this one specifically.
     2026-08-02 — Do NOT close this by adding a retry. The acceptance says the cause is identified, because a retry on this suite would convert a possible privilege-escalation bug into a slower green build.
+    2026-08-02 — CAUSE IDENTIFIED, not retried. The scratch database name was rl_t_<hrtime>_<counter>, and process.hrtime.bigint() is monotonic since BOOT — shared across processes — while the counter restarts at zero in each. node --test launches a batch of file processes together, which is exactly the condition that makes a same-nanosecond collision reachable. Two processes got the same database name and one dropped the other's mid-test.
+    2026-08-02 — The captured error is what settled it: 'terminating connection due to administrator command', which nothing but drop database ... with (force) produces. That force was added deliberately, so a leaked connection could not wedge the drop and leak a database into the next run — a good reason — and it is what turned a name collision into terminated connections rather than a harmless 'already exists'. Two individually correct decisions that were jointly a landmine. The name was the half that was wrong.
+    2026-08-02 — Two hypotheses killed with evidence before anything was built on them. Connection-pool exhaustion: measured the peak across a full suite run at 24 of 100. And 'it is the API token ceiling suite': the reproduction hit a DIFFERENT test in the same file, which reframed it — the failure lands wherever a collision strikes, and token_subset.test.ts is simply one of the longest-running files and therefore the widest target. R-12 was never implicated.
+    2026-08-02 — randomUUID rather than the pid: pids are reused, and a rerun landing on a recycled pid at the same nanosecond would be back where it started.
+    2026-08-02 — Verified as the acceptance asked: FIFTY consecutive full-suite runs, 50 of 50 reporting zero failures, against a measured baseline of one failure every two to three runs. Twelve would have been a 0.8% chance of luck and I ran the other thirty-eight rather than settle for it — the point of writing fifty was to not close this on a hunch.
+    2026-08-02 — Two structural tests keep it closed: the name must derive from a per-call random source and carry no process-shared clock, and 'with (force)' must remain — because removing the force is the WRONG lesson from this and would trade a loud failure for a leaked database.
+    2026-08-02 — The done gate refused this at first — high risk with no security-suite artifact — and it was right to. The fix was not to downgrade the risk to pass it: the two structural tests moved to test/security/test_isolation.test.ts, because every security test in the repository is only as meaningful as the isolation underneath it. A scratch database dropped out from under a running test does not only fail that test, it can make one PASS, with assertions running against a database that is half gone. A cross-tenant test passing because its fixture vanished is indistinguishable from a real pass.
+    2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 587 tests green across fifty consecutive full runs.
+  acceptance_met: [1, 2, 3]
