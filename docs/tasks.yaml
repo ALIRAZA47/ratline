@@ -1054,20 +1054,32 @@
 - id: RL-M1-018
   title: Make role changes take effect immediately on active sessions
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M1-017, RL-M1-012]
   blocks: []
   risk: high
+  started_at: 2026-08-02
+  done_at: 2026-08-02
   acceptance:
     - Decisions consult current grants rather than anything cached in the session
     - A test changes a role mid-session and the very next request reflects it
     - Any cache that exists is invalidated by grant change, with the test proving it
   artifacts:
+    - src/auth/privilege_changes.ts
+    - src/authz/catalogue.ts
+    - src/repo/sessions.ts
     - test/authz/live_role_change.test.ts
-  decisions: []
+  decisions: [14]
+  notes: |
+    2026-08-02 — Closes two stand-ins ADR 0014 flagged. member.revoke_sessions now exists as its own action, replacing the member.remove gate in both session-revocation paths — containment must not require the destructive answer, because during an incident the destructive answer is the one people hesitate over.
 
+    2026-08-02 — The authorization half was already true by omission: can() holds no cache. That is fragile in a specific way — a cache is the obvious optimisation and adding one would break §6.3 silently with every existing test still green. Now asserted structurally, so caching is a build failure rather than a regression nobody notices.
+    2026-08-02 — Infrastructure holds the new action. Not an escalation: it already holds break-glass and terminal.open, so this lets an incident be contained WITHOUT elevating to Admin — less privilege and less audit noise for the commonest emergency action.
+    2026-08-02 — Still open: there is no action for READING another member's sessions. Ending someone's sessions and inspecting where they log in from are different powers, and only the first is needed for containment. An ungated read would be worse than its absence.
+    2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 348 tests pass; both halves mutation-tested, including a deliberately added cache in can().
+  acceptance_met: [1, 2, 3]
 - id: RL-M1-019
   title: Add two-factor authentication with an organization-level policy
   milestone: M1
@@ -1088,12 +1100,13 @@
 - id: RL-M1-020
   title: Rate limit every authentication path
   milestone: M1
-  status: todo
+  status: in-progress
   owner: agent
   estimate: M
   depends_on: [RL-M1-017]
   blocks: []
   risk: high
+  started_at: 2026-08-02
   acceptance:
     - Login, two-factor verification, password reset and token exchange are all limited
     - Limits apply per account and per source address independently

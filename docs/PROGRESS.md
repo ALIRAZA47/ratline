@@ -14,6 +14,54 @@ and which task IDs.
 
 ---
 
+## 2026-08-02 — Session 12 — M1
+
+**Goal:** RL-M1-018 — role changes reaching active sessions — with rate limiting
+delegated.
+
+**Completed:** RL-M1-018.
+
+**In progress:** RL-M1-020 (delegated, still running at the time of writing).
+
+**In review:** RL-M1-002, unchanged — still needs a first real CI run.
+
+**Blocked:** none.
+
+**Decisions made:** none new. ADRs 0001–0014 remain `proposed`.
+
+**Surprises / what I learned:**
+
+- **The authorization half of §6.3 was already satisfied by an absence**, and
+  that is a fragile way to satisfy anything. `can()` holds no cache, so a role
+  change is felt on the next request — but a cache is the obvious optimisation,
+  and adding one would break the requirement silently with every existing test
+  still green. Asserting the absence structurally turns it from a property we
+  happen to have into one the build enforces.
+- Splitting `member.revoke_sessions` from `member.remove` matters for a human
+  reason rather than a technical one: containment must not require the
+  destructive answer, because during an incident the destructive answer is the
+  one people hesitate over, and hesitation is what an attacker counts on.
+- Giving Infrastructure the new action LOOKED like an escalation and is not —
+  they already hold break-glass and terminal.open. It means containing an
+  incident no longer requires elevating to Admin first, which is less privilege
+  and less audit noise for the commonest emergency action. Worth checking what a
+  role can already reach before deciding a grant widens anything.
+- I nearly put the permission check in the new module as well as the repository.
+  §9 names that as an anti-pattern, and the reason is worth restating: a second
+  check is the shape that eventually disagrees with the first. Catching the
+  repository's refusal in order to audit it does the same job without the
+  duplication.
+- My first two attempts at the test used the repository's low-level session
+  functions rather than the real sign-in path. Reaching past the authentication
+  layer would have tested a shape the product never takes.
+
+**Deviations from brief:** none.
+
+**Next session should start with:** whatever RL-M1-020 reports, then RL-M1-019
+(two-factor) and RL-M1-021 (CSRF), which together finish the authentication
+hardening. RL-M1-024 still owes the pre-auth context decision ADR 0014 named,
+and it blocks the sign-in audit entries.
+
 ## 2026-08-02 — Session 11 — M1
 
 **Goal:** Close the audit truncation gap (RL-M1-015), prove attribution
