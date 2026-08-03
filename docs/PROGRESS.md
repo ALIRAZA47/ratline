@@ -14,6 +14,69 @@ and which task IDs.
 
 ---
 
+## 2026-08-03 — Session 16 — M1
+
+**Completed:** RL-M1-041, RL-M1-044, RL-M1-045, RL-M1-030, RL-M1-047, and the
+two-factor endpoint that closed R-28. M1 is 44/47. 602 tests, both coverage
+gates at 100%, full suite at 75–85 seconds.
+
+**The human supplied two resources:** Go (installed 1.26.5, verified it
+cross-compiles a statically linked Linux ELF, which is what RL-M2-001 asks for)
+and Docker for M2's host. R-01 is recorded as *offered, not verified* — its real
+requirement is a host that accepts SSH as a sudo user, and a container running
+`sh` is not yet that. The systemd caveat is written down now rather than
+discovered at RL-M2-008.
+
+**RL-M1-030's design was decided by C3 taking the easy answer away.** The
+obvious gate for "create the first organization" is "allow it while the database
+is empty", and a bound context cannot see whether any *other* organization
+exists. A single-use token in the secrets directory is the better gate anyway:
+it makes the authority **host access rather than network access**.
+
+**I got a measurement badly wrong, twice, and it is the most useful thing in
+this entry.** I reported a 20x suite regression from ONE timed run. Three more
+samples contradicted it, so I called it high variance — also wrong. Four timed
+full runs are 75.8s, 75.5s, 75.3s, 84.7s: the same baseline as always. Both slow
+numbers were measured immediately after a Bash command killed by a ten-minute
+timeout — and killing `node --test` does **not** kill the per-file children it
+spawned. I was timing the suite while my own orphans hammered the same Postgres.
+
+Two corrections to arrive at "nothing is wrong". The discipline I had applied to
+every flake all session — never characterise from a single sample — I dropped
+the moment the subject was performance instead of correctness.
+
+**Surprises / what I learned:**
+
+- **Three findings this session and last were invisible while every test was
+  green.** The scratch-database collision, the secrets flake, and this
+  non-regression all appeared only because something was timed or stress-run. A
+  suite measures correctness, not its own health.
+- **RL-M1-045's cause was two correct decisions colliding.** `with (force)` on
+  the scratch drop is right; a name derived from a boot-shared clock is not; and
+  together the loser of a collision got its connections terminated mid-test.
+- **My own scanners and gates refused my work four times**, each time correctly:
+  the C3 signature rule rejected `createInstallation(input)` and had no
+  exemption to reach for; the gating test caught `markAuthenticated` accepting
+  any session id; the RL-M1-026 scan caught the server hand-rolling a 401; and
+  the done gate refused RL-M1-045 for having no security-suite artifact.
+- **Migration 10's own note warned about the mistake I then made** — reading the
+  `sessions` table rather than `live_sessions` — in a function about privilege.
+- **A mutation escaped and the escape was the useful part.** Reading the table
+  instead of the view passed, because the revoked session in that test was also
+  stale by age. The test asserted the right thing for the wrong reason.
+- **The scanner-comment tax was paid four times before I fixed it** (RL-M1-041).
+  A rule that forbids its own explanation pushes authors toward vaguer comments,
+  invisibly.
+
+**Still owed / next session should start with:** R-10, a git remote. Every task
+in M1 has closed `--no-ci`, RL-M1-002 and RL-M1-020 cannot leave `review`, and
+the M1 gate report cannot honestly be written while the pipeline meant to gate
+it has never run. Then RL-M1-046, one unreproduced secrets flake whose assertion
+now names its own cause. Then M2: fourteen tasks are startable on Go alone,
+fifteen wait on a verified host.
+
+---
+
 ## 2026-08-02 — Session 15 — M1
 
 **Completed:** RL-M1-043 and RL-M1-042. M1 is 40/44. 551 tests, both coverage
