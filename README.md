@@ -6,7 +6,13 @@ gives your team a clean interface to deploy static sites, Node.js apps and Bun
 apps from Git — with an authorization model that holds up, and managed SSH
 access to the underlying machines.
 
-**Status: M0 — planning. No application code exists yet.**
+**Status: M1 — control plane, identity and authorization. 44 of 47 tasks done;
+602 tests passing.** The permission model, audit chain, sessions, two-factor,
+CSRF, rate limiting and the HTTP surface are built and tested against a real
+Postgres. M2 — the host agent — is planned in full and waits on CI running once.
+
+See [docs/STATUS.md](docs/STATUS.md) for the generated dashboard; it is the only
+status claim in this repository that cannot go stale.
 
 ---
 
