@@ -48,6 +48,41 @@ jobs:
   code:
     name: Lint, typecheck, test
     runs-on: ubuntu-latest
+
+    # A real Postgres, for the same reason the migration job has one. Without it
+    # every database-backed suite SKIPS — and the first run of this workflow
+    # proved what that costs: 320 of 592 tests passed, the authorization matrix
+    # reported "did not run, it is NOT green, it is unknown", and both coverage
+    # gates refused at 71%. The gates were right and the workflow was wrong.
+    #
+    # Skipping is the dangerous shape here, not failing. `test/support/db.ts`
+    # skips only when DATABASE_URL is UNSET and throws when it is set and
+    # unreachable, precisely so a pipeline cannot report a green security suite
+    # that never touched a database. Setting it below turns any future
+    # connection problem into a loud failure instead of a quiet skip.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ratline
+          POSTGRES_PASSWORD: ratline
+          POSTGRES_DB: ratline_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # The suites create a scratch DATABASE per test, so this role needs
+      # CREATEDB — the postgres image makes POSTGRES_USER a superuser, which
+      # covers it and also covers the one `alter role ratline_app login` the
+      # fixtures perform. The APPLICATION still connects as the unprivileged
+      # ratline_app; a superuser bypasses row-level security unconditionally, so
+      # using it for the assertions would make every isolation test vacuous.
+      DATABASE_URL: postgres://ratline:ratline@127.0.0.1:5432/ratline_test
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
