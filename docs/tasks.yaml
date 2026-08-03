@@ -980,7 +980,7 @@
 - id: RL-M1-015
   title: Schedule audit chain verification and surface its result
   milestone: M1
-  status: done
+  status: review
   owner: agent
   estimate: M
   depends_on: [RL-M1-014]
@@ -1004,7 +1004,8 @@
     2026-08-01 — Closes the truncation gap RL-M1-014 recorded. A hash chain provably cannot detect removal of its own head — the evidence is the part that was deleted — so each run records the head it saw in a separate append-only table, and the next run refuses a head that moved backwards. That does not make truncation impossible, but it turns a silent deletion into a loud contradiction.
     2026-08-01 — The job raises rather than logs. A verification job that writes a line and exits zero is a job whose failures nobody sees, and a chain that quietly stopped verifying three weeks ago is worse than no chain — it is one someone will rely on.
     2026-08-01 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 12 tests against real Postgres; watermark and alerting mutation-tested four ways.
-  acceptance_met: [1, 2, 3]
+    2026-08-03 — 2026-08-04 — ACCEPTANCE 1 UNCHECKED and the task returned to review. It was marked done with all three met, and acceptance 1 says 'Verification runs on a schedule'. Nothing schedules it: grep for setInterval or a cron library across src/ finds nothing, and the only caller of verifyAuditChainForTenant outside its own module is a test. The job module says scheduling is the queue's job (ADR 0007) and there is no queue — no task in the tracker implements a control-plane scheduler either. Brief §6.3 says chain verification is a scheduled job. Consequence if left: lastAuditVerification() returns null forever, so the dashboard shows its permanent non-dismissable 'never verified' warning while a tampered or truncated chain goes undetected. This is the same shape of gap RL-M1-020 was honestly held in review for, given the opposite treatment. Found by the compliance reviewer; verified myself before demoting it.
+  acceptance_met: [2, 3]
 - id: RL-M1-016
   title: Ensure every privileged action carries an attributable actor
   milestone: M1
@@ -3652,7 +3653,7 @@
 - id: RL-M1-041
   title: Make the source scanners agree about comments
   milestone: M1
-  status: done
+  status: review
   owner: agent
   estimate: S
   depends_on: []
@@ -3675,7 +3676,8 @@
     2026-08-02 — The parser risk is answered rather than accepted. codeOf is tested against every construct that could fool a naive stripper: a URL with // inside a string, a comment opener inside a regex and a template, an APOSTROPHE inside a comment (the one that eats a whole file, because a naive stripper reads don't as an opening quote), an escaped quote, a multi-line template, and an unterminated block comment. Plus the strongest available statement — on a file with no comments, codeOf is the identity function byte for byte.
     2026-08-02 — Line numbers survive the removal: newlines inside a stripped comment are preserved, so a scanner reporting line 40 still points at line 40 of the original. A scanner that sent somebody to the wrong line would be worse than one that reported no line at all.
     2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 566 tests green locally.
-  acceptance_met: [1, 2, 3]
+    2026-08-03 — 2026-08-04 — ACCEPTANCE 1 UNCHECKED. It reads 'Every source-scanning test uses one shared helper with one rule about comments.' Counted: 21 test files read source with readFileSync, 8 import the shared helper. The three that matter most do not — repository_gating (the C3 permission-gating scan), scoped_repository (the ctx-first and tenant-predicate scans), and actor_attribution (a raw regex for inserts into audit_entries over src/**). The codebase documents its own gap: src/repo/scope.ts:42-45 warns that scoped_repository.test.ts does not read comments differently from code, so prose there must not spell out what it forbids — which is exactly the cost RL-M1-041 existed to remove. Shared helper written, adoption incomplete.
+  acceptance_met: [2, 3]
 - id: RL-M1-042
   title: Serve the API, and bind every guard that is waiting for it
   milestone: M1
@@ -3774,7 +3776,7 @@
 - id: RL-M1-045
   title: Chase the intermittent failure in the API token ceiling suite
   milestone: M1
-  status: done
+  status: review
   owner: agent
   estimate: M
   depends_on: []
@@ -3803,7 +3805,8 @@
     2026-08-02 — Two structural tests keep it closed: the name must derive from a per-call random source and carry no process-shared clock, and 'with (force)' must remain — because removing the force is the WRONG lesson from this and would trade a loud failure for a leaked database.
     2026-08-02 — The done gate refused this at first — high risk with no security-suite artifact — and it was right to. The fix was not to downgrade the risk to pass it: the two structural tests moved to test/security/test_isolation.test.ts, because every security test in the repository is only as meaningful as the isolation underneath it. A scratch database dropped out from under a running test does not only fail that test, it can make one PASS, with assertions running against a database that is half gone. A cross-tenant test passing because its fixture vanished is indistinguishable from a real pass.
     2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 587 tests green across fifty consecutive full runs.
-  acceptance_met: [1, 2, 3]
+    2026-08-03 — 2026-08-04 — ACCEPTANCE 2 UNCHECKED ('The suite passes fifty consecutive full runs'). It did when it was closed; it does not now. Three consecutive full runs each failed exactly one test, and THE VICTIM DIFFERS EACH TIME — organization_scope once, audit_chain_tamper the next — with the identical message 'terminating connection due to administrator command'. Each victim passes in isolation. So this is cross-test interference, not a defect in any of the named tests, and the randomUUID fix from this task did not close it. What I can rule out: name collision (names are unique per call), leftover orphan processes (pgrep found none), and the concurrent compliance reviewer sharing the cluster (the run after it finished failed the same way). What I cannot yet explain: 'drop database with (force)' terminates backends only on its own target database, and no test connects to another test's scratch database. This is a REPRODUCIBLE version of what RL-M1-046 chases as intermittent, which is progress — a bug that fails once per run is far easier to corner than one that fails once a month. Timing changed when RL-M1-048 collapsed three suite runs into one and added a test that spawns git subprocesses; that plausibly exposed a latent race rather than creating one, but I have not proved that either.
+  acceptance_met: [1, 3]
 - id: RL-M1-046
   title: Chase the intermittent failure in the no-default-secrets suite
   milestone: M1
@@ -3824,6 +3827,7 @@
 
     2026-08-03 — It is NOT the RL-M1-045 collision returning. That cause was identified and eliminated, and the suite then passed fifty consecutive full runs. This is a different test, a different assertion, and it first appeared after the RL-M1-030 bootstrap work — so the honest first question is whether I introduced it, which the acceptance names explicitly rather than leaving to a hunch.
     2026-08-03 — Diagnostic running: twenty-five isolated runs of the file plus six full-suite runs, capturing the assertion text. Isolated-clean and full-failing would point at cross-file interference; failing in isolation would point at the generator.
+    2026-08-03 — 2026-08-04 — LIKELY THE SAME BUG, now reproducible. See RL-M1-045's note of today: one test per full run dies with 'terminating connection due to administrator command', victim varying across files, each passing in isolation. If that is the same underlying race, this task's framing as 'the no-default-secrets suite' is too narrow — the secrets suite was simply the victim the first time it was seen. Chase the shared cause, not the suite.
 - id: RL-M1-047
   title: Find the lingering handle that made the suite twenty times slower
   milestone: M1
@@ -3874,3 +3878,103 @@
   decisions: []
   notes: |
     2026-08-03 — The database job's last step is ci-metrics --integration, which runs all ~600 tests plus the four integration files. The code job already ran the same 600. So every CI run executes the suite twice for one extra file's worth of signal, roughly doubling wall clock. Noticed while watching the first runs; deliberately not fixed mid-run, because changing the workflow would have cancelled the run that was about to give a verdict.
+- id: RL-M1-049
+  title: Put the CSRF guard in front of every request, not every guarded route
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: S
+  depends_on: []
+  blocks: []
+  risk: high
+  acceptance:
+    - Every unsafe-method request passes guardCsrf before dispatch, including the public routes
+    - A test asserts a cross-origin POST to /auth/sign-out with no token is refused and audited
+    - A test enumerates ROUTES and fails if any unsafe method reaches a handler without the guard, so a new route cannot repeat this
+  artifacts: []
+  decisions: []
+  notes: |
+    2026-08-03 — 2026-08-04 — Found by the compliance reviewer, DEMONSTRATED by execution against a running server, and it is a security issue in already-merged work (§2.10 stop condition). guardCsrf is called exactly once, at src/api/server.ts:537, inside the 'for (const route of guardedRoutes())' loop that starts at line 505. The four public POST routes are bound BEFORE that loop, so they never reach it. Sign-in, two-factor and bootstrap are legitimately exempt because checkCsrf refuses with 'unauthenticated' when there is no session. POST /auth/sign-out is NOT: it has a session. A cross-origin fetch with credentials:'include' from any page an operator visits ends their session, and only SameSite stands in the way — which src/api/csrf.ts:17-26 argues at length must never be the only lock. Aggravating: the forced sign-out writes zero audit entries. csrf.ts:732 already instructs the server author to call guardCsrf on every request, 'not per-route and not opt-in: the default has to be protected, or the one route somebody forgets is the one that matters'. That is the route somebody forgot, and I am the somebody.
+- id: RL-M1-050
+  title: Make the audit half of a refusal impossible to drop
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: []
+  blocks: []
+  risk: high
+  acceptance:
+    - refuse() cannot yield a wire response without its audit record being recorded
+    - The cross-tenant probe on GET /projects/:projectId writes an audit entry
+    - A test asserts every refusal path in server.ts produces an audit entry, driven from the route table rather than a list
+  artifacts: []
+  decisions: []
+  notes: |
+    2026-08-03 — 2026-08-04 — DEMONSTRATED: as an acme Owner who holds project.read, a request for another tenant's project id returned 404 (correct) and wrote ZERO audit entries (not correct). src/api/server.ts:247-258 calls refuse({...}).wire and drops the audit half. This also falsifies a claim in the M1 gate report: 'refuse() returns the response AND the audit record together, so the refusal cannot be obtained without recording what really happened.' The design intends that; six lines separate the claim from the code. refusal.ts:121 states the stakes itself — the audit entry is the only record, because the response deliberately says nothing. Net effect: cross-tenant id enumeration is correctly indistinguishable in its responses AND completely invisible to the audit log, which is the worse half of the tradeoff. Same shape at server.ts:281-289 and 549-557, but those are covered because the auth layer and guardCsrf audit before throwing.
+- id: RL-M1-051
+  title: Fail the coverage gate for an authz file no test ever loads
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: S
+  depends_on: []
+  blocks: []
+  risk: medium
+  acceptance:
+    - A file under src/authz/** that no test imports fails the coverage gate rather than being invisible
+    - A module with no branches cannot satisfy the can() branch gate by having nothing to cover
+  artifacts: []
+  decisions: []
+  notes: |
+    2026-08-03 — 2026-08-04 — DEMONSTRATED with a fixture: src/authz/never_imported.ts with three uncovered branches is ABSENT from node's coverage report entirely, and the run still printed 'src/authz/** line coverage: 100%'. coverageFor (scripts/ci-metrics.ts) sums only over files the report contains and returns null only when NOTHING matches, so one unloaded file in a directory of loaded ones is invisible rather than 'not measured'. The M1 gate report claims renaming can.ts cannot switch off its own gate; that is true, and hollowing it out is not — pct() returns 100 when total is 0, so a can.ts with no branches satisfies the branch gate. Relevant from M5 onward: an authorization file reachable only from an unbound route would ship unexercised under a green gate.
+- id: RL-M1-052
+  title: Catch a repository export that is not async
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: S
+  depends_on: []
+  blocks: []
+  risk: high
+  acceptance:
+    - The repository-gating scan matches a non-async export
+    - The scan reads code with comments stripped, via the shared helper from RL-M1-041
+    - A synthetic non-async ungated repository export makes the suite fail
+  artifacts: []
+  decisions: []
+  notes: |
+    2026-08-03 — 2026-08-04 — DEMONSTRATED against the real regexes: test/security/repository_gating.test.ts matches /export async function (\w+)\s*\(/g, so 'export function listSites(ctx: AuthzContext, ...)' is invisible to it while scoped_repository.test.ts does see it. All 45 current repository exports happen to be async, so nothing is broken today. M2 adding 'export function listHosts(ctx, id) { return scoped(ctx, ...) }' — non-async because it just returns the promise — would need no requirePermission, need no exemption entry, and leave every guard test green. That is the RL-M1-043 class of defect (nine ungated reads) reintroduced through the door the fix left open.
+- id: RL-M1-053
+  title: Give audit actor_id referential integrity
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: []
+  blocks: []
+  risk: medium
+  acceptance:
+    - An audit entry naming an actor that does not exist is refused by the database, not by convention
+    - The sign-in service identity exists as a row before it is used as an actor
+    - The existing actor-attribution test asserts existence, matching its own title
+  artifacts: []
+  decisions: []
+  notes: |
+    2026-08-03 — 2026-08-04 — DEMONSTRATED: an audit write naming a service identity with no row was accepted. The migration declares actor_id uuid not null with NO foreign key, commented 'C6: no action without an actor'. ServerDeps.signInIdentityId is an unvalidated string and nothing creates a row for it; the matrix passes a literal all-zeros UUID. So 'attributable' currently rests on a caller-supplied label, and an incident reviewer joining audit_entries to service_identities gets nothing back. The test named 'every actor kind names something that exists in the tenant' does not check existence — its own comment concedes a context can carry an id for something deleted. Deletion is defensible; never-existed is not, and the title asserts the property either way.
+- id: RL-M1-054
+  title: Check the cookie secret for entropy, not just length
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: S
+  depends_on: []
+  blocks: []
+  risk: medium
+  acceptance:
+    - A cookie secret that passes the length check but carries no entropy is refused
+    - createServer cannot be constructed with a secret that weakSecretReason rejects
+  artifacts: []
+  decisions: []
+  notes: |
+    2026-08-03 — 2026-08-04 — weakSecretReason correctly rejects an all-zero 32-byte secret, but is never called for ServerDeps.cookieSecret; csrf.ts validates length only, and csrfTokenForSessionId(new Uint8Array(32), ...) returns a token happily. csrf.ts:240-241 names the exact outcome it is trying to prevent — 'a token every installation on earth could compute' — and then guards only length. Not exploitable today because nothing calls createServer in production: there is no serve() anywhere, and @hono/node-server is declared but never imported. It becomes live the moment M2 adds an entry point, which is why it is filed now rather than when it bites.
