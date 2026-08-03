@@ -3789,3 +3789,24 @@
 
     2026-08-03 — It is NOT the RL-M1-045 collision returning. That cause was identified and eliminated, and the suite then passed fifty consecutive full runs. This is a different test, a different assertion, and it first appeared after the RL-M1-030 bootstrap work — so the honest first question is whether I introduced it, which the acceptance names explicitly rather than leaving to a hunch.
     2026-08-03 — Diagnostic running: twenty-five isolated runs of the file plus six full-suite runs, capturing the assertion text. Isolated-clean and full-failing would point at cross-file interference; failing in isolation would point at the generator.
+- id: RL-M1-047
+  title: Find the lingering handle that made the suite twenty times slower
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: []
+  blocks: []
+  risk: medium
+  acceptance:
+    - The handle keeping each process alive is identified, not worked around with a timeout
+    - A full suite run returns to roughly its previous wall clock
+    - Something fails if a repository or a test leaks a pool again
+  artifacts: []
+  decisions: []
+  notes: |
+    2026-08-03 — A full suite run went from roughly 75 seconds to 1,481,697 ms — about 25 minutes, a 20x regression — and it arrived with RL-M1-037. Introduced by me, in the same session, and recorded rather than left for somebody to discover as 'the tests are slow now'.
+
+    2026-08-03 — MEASURED, not guessed. test/security/reauthentication.test.ts reports 205,449 ms for thirteen tests, and the per-test durations add up to about five seconds — the slowest is 879 ms. So the time is not in the tests. Two hundred seconds are spent after they finish, which is the signature of a handle keeping the process alive until something times out rather than of slow work.
+    2026-08-03 — The likely mechanism, to be confirmed rather than assumed: require() now calls checkFreshness on every gated action, which opens a pooled connection through scoped(). connect() is a singleton that returns the existing pool and disconnect() clears it, so a freshness check reached after a disconnect would create a SECOND pool that nothing ever ends. token_subset.test.ts is the amplifier — it calls requirePermission once per action a role carries, which is over a hundred for Owner — and it went from fast to 14.4 seconds.
+    2026-08-03 — Do NOT close this by raising a timeout or by forcing the process to exit. A pool that outlives its test is a pool that could outlive a request, and in production that is a connection leak rather than a slow suite. The third acceptance asks for something that FAILS on a leak, because this regression was invisible until a run happened to be timed.

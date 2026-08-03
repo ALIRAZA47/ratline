@@ -98,8 +98,22 @@ test("every known-default placeholder is refused", () => {
       writeFileSync(join(dir, "cookie.key"), `${token}\n`, { mode: 0o600 });
       assert.throws(
         () => loadSecrets(dir, silent),
-        (e: unknown) => e instanceof SecretRefusal && e.problems.length === 1,
-        `"${token}" was accepted as a cookie secret`,
+        (e: unknown) => {
+          assert.ok(e instanceof SecretRefusal, `"${token}" was accepted as a cookie secret`);
+          // The problem LIST, not just its length (RL-M1-046). This assertion
+          // was seen to fail once and could not be reproduced in thirty-one
+          // runs, and the reason the sighting taught nothing is that a bare
+          // count says "2 !== 1" and stops. A second problem here would mean
+          // one of the OTHER generated secrets had failed its own validation,
+          // which is a product defect rather than a fixture one — so the next
+          // occurrence has to name it.
+          assert.deepEqual(
+            e.problems.map((problem) => problem.file.split("/").at(-1)),
+            ["cookie.key"],
+            `expected only the cookie secret to be refused, got: ${JSON.stringify(e.problems)}`,
+          );
+          return true;
+        },
       );
     });
   }
@@ -387,4 +401,34 @@ test("no secret is stored inside the repository", () => {
     `${rel} holds generated secrets and must be gitignored`,
   );
   assert.equal(secretsDir({ NODE_ENV: "production" }), "/etc/ratline/secrets");
+});
+
+// ---------------------------------------------------------------------------
+// Generation is not occasionally wrong (RL-M1-046)
+// ---------------------------------------------------------------------------
+
+test("a freshly generated set validates every time, not almost every time", () => {
+  // The hypothesis behind RL-M1-046, tested directly rather than waited for.
+  //
+  // "every known-default placeholder is refused" asserts that exactly ONE
+  // problem is reported. It was seen to fail once and did not reproduce in
+  // thirty-one runs. The only reading of that failure which is a PRODUCT defect
+  // rather than a fixture one is that generation occasionally emits a secret
+  // that fails its own validation — an ed25519 key that does not parse, or a
+  // random key that happens to trip a weak-secret rule.
+  //
+  // So: generate and validate many times. A one-in-N defect shows up here as a
+  // failure with the offending problem named, in seconds, rather than as a
+  // flake somewhere else once a fortnight.
+  const rounds = 60;
+  for (let i = 0; i < rounds; i++) {
+    withDir((dir) => {
+      loadSecrets(dir, silent);
+      // The second call validates what the first one wrote. Anything it
+      // complains about was generated wrong.
+      const loaded = loadSecrets(dir, silent);
+      assert.ok(loaded.cookie.length >= 32, `round ${String(i)}: the cookie key came back short`);
+      assert.ok(loaded.kek.length >= 32, `round ${String(i)}: the wrapping key came back short`);
+    });
+  }
 });
