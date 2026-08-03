@@ -1,0 +1,85 @@
+#!/bin/sh
+# The M2 integration host (R-01). Same shape as scripts/pg.
+#
+# §6.7 requires integration tests against a real VM or container and rules out
+# mocks for anything touching a host. This brings one up reproducibly, so a test
+# run does not depend on a pile of docker flags somebody remembered.
+#
+#   ./scripts/host start    build if needed, run, wait for sshd, print the port
+#   ./scripts/host verify   assert the three things R-01 actually requires
+#   ./scripts/host ssh      open a shell as the bootstrap account
+#   ./scripts/host stop     remove the container
+#
+# The container needs --privileged and a writable cgroup mount because it runs
+# systemd as PID 1. RL-M2-008 puts the privileged helper behind socket
+# activation and RL-M2-016 manages a web server service; neither is testable
+# against a container with no real init.
+set -eu
+
+NAME=rl-host
+IMAGE=ratline-integration-host
+PORT=2222
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+KEY="$ROOT/.ratline/host_key"
+
+start() {
+  docker build -q -t "$IMAGE" "$ROOT/tools/integration-host" >/dev/null
+  if [ ! -f "$KEY" ]; then
+    mkdir -p "$ROOT/.ratline"
+    ssh-keygen -t ed25519 -N '' -f "$KEY" -C ratline-integration >/dev/null
+  fi
+  docker rm -f "$NAME" >/dev/null 2>&1 || true
+  docker run -d --name "$NAME" --privileged --cgroupns=host \
+    -v /sys/fs/cgroup:/sys/fs/cgroup:rw -p "$PORT:22" "$IMAGE" >/dev/null
+
+  # Wait for sshd rather than sleeping a guessed number of seconds: a fixed
+  # sleep is either too short on a loaded machine or wasted on a fast one.
+  i=0
+  while [ "$i" -lt 60 ]; do
+    if docker exec "$NAME" systemctl is-active ssh >/dev/null 2>&1; then break; fi
+    i=$((i + 1)); sleep 1
+  done
+  [ "$i" -lt 60 ] || { echo "sshd did not come up; docker logs $NAME" >&2; exit 1; }
+
+  docker exec -i "$NAME" tee /home/deployer/.ssh/authorized_keys < "$KEY.pub" >/dev/null
+  docker exec "$NAME" chown deployer:deployer /home/deployer/.ssh/authorized_keys
+  docker exec "$NAME" chmod 0600 /home/deployer/.ssh/authorized_keys
+  echo "host up on 127.0.0.1:$PORT as deployer (key $KEY)"
+}
+
+run_ssh() {
+  ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+      -o LogLevel=ERROR -o BatchMode=yes -i "$KEY" -p "$PORT" "$@"
+}
+
+verify() {
+  # The deployer connection has to WORK before anything is concluded from the
+  # root one. The first version of this reported "root ssh: refused (C1 holds)"
+  # on a machine with no key file at all — a check that passed because it could
+  # not connect, which is worse than no check because it reads as evidence.
+  [ -f "$KEY" ] || { echo "no key at $KEY — run: $0 start" >&2; exit 1; }
+  run_ssh deployer@127.0.0.1 true 2>/dev/null || {
+    echo "cannot reach the host as deployer; nothing below would mean anything" >&2
+    exit 1
+  }
+
+  echo "debian:   $(run_ssh deployer@127.0.0.1 'cat /etc/debian_version')"
+  echo "user:     $(run_ssh deployer@127.0.0.1 'id -un') (uid $(run_ssh deployer@127.0.0.1 'id -u'))"
+  echo "sudo:     $(run_ssh deployer@127.0.0.1 'sudo -n id -un')"
+  echo "systemd:  $(run_ssh deployer@127.0.0.1 'systemctl is-system-running')"
+  # C1's precondition. Asserted rather than reported: a host that accepted root
+  # would let the agent be installed by a route the product forbids, and every
+  # C1 test downstream would pass vacuously.
+  if run_ssh root@127.0.0.1 'id -un' >/dev/null 2>&1; then
+    echo "root ssh: ACCEPTED — C1 cannot be asserted against this host" >&2; exit 1
+  fi
+  echo "root ssh: refused (C1 holds)"
+}
+
+case "${1:-}" in
+  start) start ;;
+  verify) verify ;;
+  ssh) shift; run_ssh deployer@127.0.0.1 "$@" ;;
+  stop) docker rm -f "$NAME" >/dev/null 2>&1 || true; echo stopped ;;
+  *) echo "usage: $0 {start|verify|ssh|stop}" >&2; exit 2 ;;
+esac

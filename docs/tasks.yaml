@@ -1654,7 +1654,7 @@
 - id: RL-M2-010
   title: Implement agent installation over SSH as the only raw SSH path
   milestone: M2
-  status: blocked
+  status: todo
   owner: agent
   estimate: L
   depends_on: [RL-M2-005]
@@ -1672,10 +1672,11 @@
   notes: |
     2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
+    2026-08-03 — unblocked: resolved
 - id: RL-M2-011
   title: Make bootstrap idempotent and resumable
   milestone: M2
-  status: blocked
+  status: todo
   owner: agent
   estimate: M
   depends_on: [RL-M2-010]
@@ -1691,10 +1692,11 @@
   notes: |
     2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
+    2026-08-03 — unblocked: resolved
 - id: RL-M2-012
   title: Collect host inventory
   milestone: M2
-  status: blocked
+  status: todo
   owner: agent
   estimate: M
   depends_on: [RL-M2-006]
@@ -1710,10 +1712,11 @@
   notes: |
     2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
+    2026-08-03 — unblocked: resolved
 - id: RL-M2-013
   title: Implement health reporting and heartbeat
   milestone: M2
-  status: blocked
+  status: todo
   owner: agent
   estimate: M
   depends_on: [RL-M2-012]
@@ -1729,6 +1732,7 @@
   notes: |
     2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
+    2026-08-03 — unblocked: resolved
 - id: RL-M2-014
   title: Build the host list and host detail screens
   milestone: M2
@@ -1748,7 +1752,7 @@
 - id: RL-M2-015
   title: Provision base packages and unattended security upgrades
   milestone: M2
-  status: blocked
+  status: todo
   owner: agent
   estimate: M
   depends_on: [RL-M2-008]
@@ -1765,10 +1769,11 @@
   notes: |
     2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
+    2026-08-03 — unblocked: resolved
 - id: RL-M2-016
   title: Install and baseline the web server
   milestone: M2
-  status: blocked
+  status: todo
   owner: agent
   estimate: M
   depends_on: [RL-M2-015]
@@ -1784,6 +1789,7 @@
   notes: |
     2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
+    2026-08-03 — unblocked: resolved
 - id: RL-M2-017
   title: Generate web server virtual host configuration from templates
   milestone: M2
@@ -1822,7 +1828,7 @@
 - id: RL-M2-019
   title: Install the runtime version manager and pin runtimes per site
   milestone: M2
-  status: blocked
+  status: todo
   owner: agent
   estimate: L
   depends_on: [RL-M2-015]
@@ -1838,10 +1844,11 @@
   notes: |
     2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
+    2026-08-03 — unblocked: resolved
 - id: RL-M2-020
   title: Create per-site Linux users and the site directory layout
   milestone: M2
-  status: blocked
+  status: todo
   owner: agent
   estimate: L
   depends_on: [RL-M2-008]
@@ -1859,10 +1866,11 @@
   notes: |
     2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
+    2026-08-03 — unblocked: resolved
 - id: RL-M2-021
   title: Manage the host firewall
   milestone: M2
-  status: blocked
+  status: todo
   owner: agent
   estimate: L
   depends_on: [RL-M2-015]
@@ -1879,10 +1887,11 @@
   notes: |
     2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
+    2026-08-03 — unblocked: resolved
 - id: RL-M2-022
   title: Apply an intrusion response policy for repeated authentication failures
   milestone: M2
-  status: blocked
+  status: todo
   owner: agent
   estimate: M
   depends_on: [RL-M2-021]
@@ -1898,10 +1907,11 @@
   notes: |
     2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
+    2026-08-03 — unblocked: resolved
 - id: RL-M2-023
   title: Implement agent self-update with rollback
   milestone: M2
-  status: blocked
+  status: todo
   owner: agent
   estimate: L
   depends_on: [RL-M2-006]
@@ -1919,10 +1929,11 @@
   notes: |
     2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
+    2026-08-03 — unblocked: resolved
 - id: RL-M2-024
   title: Build the integration test harness against real hosts
   milestone: M2
-  status: blocked
+  status: todo
   owner: human
   estimate: L
   depends_on: [RL-M2-001]
@@ -1943,10 +1954,11 @@
     RISKS.md and the M0 gate report question on test infrastructure.
 
     2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
+    2026-08-03 — unblocked: resolved
 - id: RL-M2-025
   title: Prove provisioning is idempotent end to end
   milestone: M2
-  status: blocked
+  status: todo
   owner: agent
   estimate: M
   depends_on: [RL-M2-024, RL-M2-018, RL-M2-019, RL-M2-020]
@@ -1963,10 +1975,11 @@
   notes: |
     2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
+    2026-08-03 — unblocked: resolved
 - id: RL-M2-026
   title: Chaos test the provisioning path against connection loss
   milestone: M2
-  status: blocked
+  status: todo
   owner: agent
   estimate: L
   depends_on: [RL-M2-025]
@@ -1983,6 +1996,7 @@
   notes: |
     2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
+    2026-08-03 — unblocked: resolved
 - id: RL-M2-027
   title: Fuzz every user-controllable field that reaches a host
   milestone: M2
@@ -2020,7 +2034,7 @@
 - id: RL-M2-029
   title: Verify zero root SSH remains after bootstrap
   milestone: M2
-  status: blocked
+  status: todo
   owner: agent
   estimate: M
   depends_on: [RL-M2-010, RL-M2-024]
@@ -2037,6 +2051,7 @@
   notes: |
     2026-08-02 — blocked: No integration host (R-01, owner: human). This task provisions, inspects or bootstraps a real Debian 12 machine, and §6.7 forbids mocking anything that touches a host. Nothing here can be honestly verified without one.
 
+    2026-08-03 — unblocked: resolved
 # ===========================================================================
 # M3 — Static sites end to end
 # ===========================================================================

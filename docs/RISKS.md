@@ -11,23 +11,34 @@ create. Those are repeated in the gate report under "What I need from you".
 
 ---
 
-## R-01 — No integration test host — **resource offered 2026-08-03, not yet verified**
+## R-01 — No integration test host — **CLOSED 2026-08-03**
 
-- **Status:** the human has offered Docker, and §6.7 sanctions "real VMs/containers"
-  explicitly, so a Debian 12 container is an acceptable host rather than a
-  concession. The daemon is running (28.3.3) and `debian:12` is reachable.
-- **Not yet closed, and deliberately not.** R-01's real requirement is a host
-  that can be SSH'd into as a non-root user with sudo, because that is what
-  RL-M2-010 bootstraps and what C1 is asserted against. A container that runs
-  `sh` is not yet that, and claiming the risk closed before proving it would be
-  the fabrication §2.10 forbids.
-- **The caveat to settle first:** several M2 tasks need systemd — socket
-  activation for `privd` (RL-M2-008), unattended upgrades (RL-M2-015), service
-  management (RL-M2-016). A plain Debian container has no PID 1 worth the name.
-  Either a systemd-enabled container or a VM is needed for those, and finding
-  that out at RL-M2-008 rather than now would waste the intervening work.
-- **Verified when:** a container accepts an SSH connection as a sudo user and
-  `systemctl` answers. The fifteen M2 tasks stay `blocked` until then.
+- **Owner:** human. The resource was supplied (Docker); the verification was
+  the agent's to do, and is done.
+- **Closed on evidence, not on the offer.** `./scripts/host start && verify`
+  brings up a Debian 12.15 container and asserts the three things this risk was
+  actually about:
+  - SSH accepts `deployer`, uid 1000, non-root, with working `sudo -n`. That is
+    the account RL-M2-010 bootstraps through and what C1 is asserted against.
+  - `systemctl is-system-running` returns **running**, not degraded, with
+    systemd 252 as PID 1 and five active socket units. RL-M2-008's socket
+    activation, RL-M2-015's unattended upgrades and RL-M2-016's service
+    management all have somewhere real to run.
+  - **Root SSH is refused** — `Permission denied (publickey)` — by the image's
+    default rather than by a test arranging it. RL-M2-029 asserts it stays true.
+- **The systemd caveat is answered rather than outstanding.** It needed
+  `--privileged` and a writable cgroup mount, which `scripts/host` supplies. No
+  VM is required.
+- **Two things this cost, both recorded because they are the argument for §6.7.**
+  Debian ships an `operator` GROUP at gid 37, so `useradd operator` fails with
+  exit 9 and the obvious fix would have put the bootstrap account into a system
+  group it has no business in. And `/sbin/init` belongs to `systemd-sysv`, so a
+  container with `systemd` alone cannot start it. Neither would have surfaced
+  against a mock.
+- **One vacuous pass caught in the verifier itself:** it first reported
+  "root ssh: refused (C1 holds)" on a machine with no key file — passing because
+  it could not connect. It now refuses to conclude anything until the deployer
+  connection works.
 
 ## R-01 (original entry) — No integration test host — **blocks the M2 gate**
 
