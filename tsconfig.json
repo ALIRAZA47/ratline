@@ -1,0 +1,65 @@
+// Ratline control plane — strict per brief §6.7.
+//
+// There is no build step FOR THE CONTROL PLANE. Node runs the TypeScript
+// directly via type stripping, so tsc is a checker only (noEmit), and
+// `erasableSyntaxOnly` keeps the codebase inside the subset Node can strip: no
+// enums, no namespaces, no parameter properties, no decorators with emit.
+//
+// The browser bundle is the one exception, and it is a real one. ADR 0001 chose
+// no-build-step partly on SvelteKit's behalf; the 2026-08-02 ruling chose React,
+// and JSX is not erasable — `node --experimental-strip-types` refuses a .tsx
+// file outright, as does --experimental-transform-types. Vite therefore compiles
+// src/web/app/** and nothing else.
+//
+// The consequence is drawn deliberately rather than absorbed: anything that can
+// be TESTED must be reachable without that build step, so the shell's structure
+// lives in .ts as data and the .tsx files only render it. `jsx: react-jsx` below
+// applies to the .tsx files; every other file in the project still runs unbuilt.
+{
+  "compilerOptions": {
+    "target": "es2023",
+    // DOM for the browser bundle only. Nothing under src/api, src/repo, src/auth
+    // or src/db may reference it; `test/toolchain/scaffold.test.ts` is where a
+    // rule about that would go if one is ever needed.
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "types": ["node"],
+    "jsx": "react-jsx",
+
+    // Required by RL-M1-001. `strict` alone is not enough: the two flags the
+    // acceptance names catch the mistakes that actually cause runtime faults —
+    // unchecked index access, and optional properties that can hold undefined.
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "useUnknownInCatchVariables": true,
+
+    // No-build-step constraints.
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "allowImportingTsExtensions": true,
+    "rewriteRelativeImportExtensions": true,
+
+    "noEmit": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.d.ts",
+    "test/**/*.ts",
+    "scripts/**/*.ts",
+    "vite.config.ts"
+  ],
+  "exclude": ["node_modules"]
+}
