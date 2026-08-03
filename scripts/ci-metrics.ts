@@ -57,20 +57,62 @@ function coverageFor(files: CoverageFile[], match: RegExp): { lines: number; bra
   };
 }
 
+/**
+ * A string from an untyped event payload, or undefined.
+ *
+ * The stream is typed as Record<string, unknown>, so coercing with String()
+ * would render an object as "[object Object]" — a failure named that is a
+ * failure nobody can find.
+ */
+function text(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+/** One failing test, enough to act on without re-running the suite locally. */
+export type Failure = { readonly name: string; readonly file: string; readonly message: string };
+
 async function runSuite(files: string[], coverage: boolean): Promise<{
   counts: Counts;
   files: CoverageFile[];
   totals: CoverageTotals | null;
+  failures: Failure[];
 }> {
   if (files.length === 0) {
-    return { counts: { tests: 0, passed: 0, failed: 0 }, files: [], totals: null };
+    return { counts: { tests: 0, passed: 0, failed: 0 }, files: [], totals: null, failures: [] };
   }
 
   let counts: Counts = { tests: 0, passed: 0, failed: 0 };
   let covFiles: CoverageFile[] = [];
   let totals: CoverageTotals | null = null;
+  const failures: Failure[] = [];
 
   const stream = run({ files, coverage, concurrency: true });
+  stream.on("data", (event: { type: string; data: Record<string, unknown> }) => {
+    // WHY a failing test is collected here rather than left to the reporter:
+    // this script drains the stream and prints counts, and the first time CI
+    // ever ran it reported "374/592 passed" with no indication of which 218
+    // failed or why. A count is a signal that something is wrong and no help
+    // at all in fixing it — the failure had to be reproduced locally to be
+    // read, which defeats the point of running it here.
+    if (event.type === "test:fail") {
+      const details = event.data["details"] as { error?: { message?: string; cause?: unknown } } | undefined;
+      const error = details?.error;
+      const cause = error?.cause;
+      // The ASSERTION's message when there is one, the wrapper's otherwise.
+      // node:test wraps a failed assertion in a generic "test failed" error and
+      // puts the useful text on `cause`, so reading only the outer message would
+      // print the same sentence for every failure.
+      const causeMessage =
+        typeof cause === "object" && cause !== null && "message" in cause
+          ? text(cause.message)
+          : undefined;
+      failures.push({
+        name: text(event.data["name"]) ?? "unnamed",
+        file: relative(ROOT, text(event.data["file"]) ?? "unknown"),
+        message: causeMessage ?? error?.message ?? "no message",
+      });
+    }
+  });
   stream.on("data", (event: { type: string; data: Record<string, unknown> }) => {
     if (event.type === "test:summary" && event.data["file"] === undefined) {
       const c = event.data["counts"] as Counts | undefined;
@@ -92,7 +134,7 @@ async function runSuite(files: string[], coverage: boolean): Promise<{
     stream.on("error", rej);
   });
 
-  return { counts, files: covFiles, totals };
+  return { counts, files: covFiles, totals, failures };
 }
 
 function suiteOf(counts: Counts): Suite {
@@ -258,7 +300,22 @@ async function main(): Promise<void> {
     for (const failure of gateFailures) console.error(`  ${failure}`);
   }
 
-  if (failed > 0) console.error(`${failed} test(s) failed`);
+  // Named, not counted. Capped so a wholesale breakage does not bury the gate
+  // output below it, and the cap says how much it dropped rather than trailing
+  // off silently.
+  const allFailures = [...main.failures, ...(integration?.failures ?? [])];
+  if (allFailures.length > 0) {
+    console.error(`\n${String(allFailures.length)} test(s) failed:`);
+    for (const failure of allFailures.slice(0, 25)) {
+      console.error(`  ${failure.file} — ${failure.name}`);
+      console.error(`      ${failure.message.split("\n")[0] ?? ""}`);
+    }
+    if (allFailures.length > 25) {
+      console.error(`  ... and ${String(allFailures.length - 25)} more`);
+    }
+  }
+
+  if (failed > 0) console.error(`${String(failed)} test(s) failed`);
   if (failed > 0 || gateFailures.length > 0) process.exit(1);
 }
 
