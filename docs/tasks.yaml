@@ -3878,6 +3878,8 @@
   decisions: []
   notes: |
     2026-08-03 — The database job's last step is ci-metrics --integration, which runs all ~600 tests plus the four integration files. The code job already ran the same 600. So every CI run executes the suite twice for one extra file's worth of signal, roughly doubling wall clock. Noticed while watching the first runs; deliberately not fixed mid-run, because changing the workflow would have cancelled the run that was about to give a verdict.
+    2026-08-03 — 2026-08-04 — Acceptance 1 met three times over: the authz suite no longer runs twice inside one ci-metrics invocation (the per-file test:summary events give the subtotal that the second run was paying for), --integration no longer drags the whole suite along, and push+pull_request no longer start two pipelines per push. Acceptance 2 NOT checked: 'wall clock roughly halves' needs a before-and-after on the same hardware, and I only have the after. The honest expectation is that total CI compute more than halves while a single pipeline's wall clock falls by less, because the jobs run in parallel and the code job was always the long pole — it loses the authz re-run but keeps the main suite. Compare the Tests step duration in the last green run against the next one before ticking this.
+  acceptance_met: [1]
 - id: RL-M1-049
   title: Put the CSRF guard in front of every request, not every guarded route
   milestone: M1

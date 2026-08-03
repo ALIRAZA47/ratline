@@ -73,15 +73,32 @@ export type Failure = { readonly name: string; readonly file: string; readonly m
 
 async function runSuite(files: string[], coverage: boolean): Promise<{
   counts: Counts;
+  perFile: Map<string, Counts>;
   files: CoverageFile[];
   totals: CoverageTotals | null;
   failures: Failure[];
 }> {
   if (files.length === 0) {
-    return { counts: { tests: 0, passed: 0, failed: 0 }, files: [], totals: null, failures: [] };
+    return {
+      counts: { tests: 0, passed: 0, failed: 0 },
+      perFile: new Map(),
+      files: [],
+      totals: null,
+      failures: [],
+    };
   }
 
   let counts: Counts = { tests: 0, passed: 0, failed: 0 };
+  /**
+   * Counts attributed to the file that produced them (RL-M1-048).
+   *
+   * This exists so the authorization suite can be reported separately WITHOUT
+   * being executed a second time. node:test emits one `test:summary` per file as
+   * well as one for the whole run, so the split is already in the stream and the
+   * previous version paid for it by re-running the most expensive suite in the
+   * project — the 630-cell matrix — purely to obtain a subtotal.
+   */
+  const perFile = new Map<string, Counts>();
   let covFiles: CoverageFile[] = [];
   let totals: CoverageTotals | null = null;
   const failures: Failure[] = [];
@@ -114,17 +131,33 @@ async function runSuite(files: string[], coverage: boolean): Promise<{
     }
   });
   stream.on("data", (event: { type: string; data: Record<string, unknown> }) => {
-    if (event.type === "test:summary" && event.data["file"] === undefined) {
-      const c = event.data["counts"] as Counts | undefined;
-      if (c) counts = c;
+    if (event.type !== "test:summary") return;
+    const c = event.data["counts"] as Counts | undefined;
+    if (!c) return;
+
+    // The run-level summary is the one with no file. Every other summary belongs
+    // to a file, and adding them up would double-count against this total.
+    const file = text(event.data["file"]);
+    if (file === undefined) {
+      counts = c;
+      return;
     }
-    if (event.type === "test:coverage") {
-      const summary = event.data["summary"] as
-        | { files?: CoverageFile[]; totals?: CoverageTotals }
-        | undefined;
-      covFiles = summary?.files ?? [];
-      totals = summary?.totals ?? null;
-    }
+    perFile.set(relative(ROOT, file), c);
+  });
+  // Coverage gets its own handler rather than another branch in the one above.
+  // Folding it in there is what I did first, and the early `return` for a
+  // non-summary event made this branch unreachable: coverage silently stopped
+  // being collected, both gates reported "not measured", and the build failed
+  // for a reason that had nothing to do with coverage. `tsc` caught it — the
+  // comparison narrowed to two string literals that cannot overlap — which is
+  // the argument for strict mode earning its keep on a build script.
+  stream.on("data", (event: { type: string; data: Record<string, unknown> }) => {
+    if (event.type !== "test:coverage") return;
+    const summary = event.data["summary"] as
+      | { files?: CoverageFile[]; totals?: CoverageTotals }
+      | undefined;
+    covFiles = summary?.files ?? [];
+    totals = summary?.totals ?? null;
   });
   // Drain so the stream completes; failures are reported via counts, and the
   // reporter output is not wanted here.
@@ -134,7 +167,42 @@ async function runSuite(files: string[], coverage: boolean): Promise<{
     stream.on("error", rej);
   });
 
-  return { counts, files: covFiles, totals, failures };
+  return { counts, perFile, files: covFiles, totals, failures };
+}
+
+/**
+ * Print failing tests by name, for both modes.
+ *
+ * Named, not counted. Capped so a wholesale breakage does not bury the gate
+ * output below it, and the cap says how much it dropped rather than trailing off
+ * silently — the first CI run reported "374/592 passed" with no indication of
+ * which 218 failed, and the failure had to be reproduced locally to be read.
+ */
+function reportFailures(failures: Failure[]): void {
+  if (failures.length === 0) return;
+
+  const shown = 25;
+  console.error(`\n${String(failures.length)} test(s) failed:`);
+  for (const failure of failures.slice(0, shown)) {
+    console.error(`  ${failure.file} — ${failure.name}`);
+    console.error(`      ${failure.message.split("\n")[0] ?? ""}`);
+  }
+  if (failures.length > shown) {
+    console.error(`  ... and ${String(failures.length - shown)} more`);
+  }
+}
+
+/** Add up the per-file counts whose path is under `directory`. */
+function countsUnder(perFile: Map<string, Counts>, directory: string): Counts {
+  const prefix = join("test", directory);
+  const total: Counts = { tests: 0, passed: 0, failed: 0 };
+  for (const [path, counts] of perFile) {
+    if (!path.startsWith(prefix)) continue;
+    total.tests += counts.tests;
+    total.passed += counts.passed;
+    total.failed += counts.failed;
+  }
+  return total;
 }
 
 function suiteOf(counts: Counts): Suite {
@@ -166,44 +234,121 @@ function readMatrixReport(): Record<string, unknown> {
   return JSON.parse(readFileSync(MATRIX_REPORT, "utf8")) as Record<string, unknown>;
 }
 
-async function main(): Promise<void> {
-  const includeIntegration = process.argv.includes("--integration");
+/**
+ * The integration files, and only those (RL-M1-048).
+ *
+ * Separate from main() rather than a branch inside it, because the two modes
+ * measure different things and share almost nothing: there is no coverage to
+ * gate, no matrix report, and no security-findings file. Folding them together
+ * with conditionals is how the previous version ended up running the whole suite
+ * to obtain four files' worth of result.
+ *
+ * The counts go to their own file with their own timestamp. metrics.json points
+ * at it rather than absorbing it, so nobody can read this run's numbers as
+ * belonging to a different run.
+ */
+async function runIntegrationOnly(files: string[]): Promise<void> {
+  if (files.length === 0) {
+    // Not a silent success. An empty glob here means the files moved or the
+    // pattern rotted, and reporting "0/0 passed" for that is how a suite
+    // disappears without anybody noticing.
+    console.error("no files under test/integration — nothing was verified.");
+    process.exitCode = 1;
+    return;
+  }
 
+  const result = await runSuite(files, false);
+
+  mkdirSync(OUT_DIR, { recursive: true });
+  writeFileSync(
+    join(OUT_DIR, "metrics-integration.json"),
+    `${JSON.stringify(
+      {
+        integration: suiteOf(result.counts),
+        files: files.length,
+        measured_at: new Date().toISOString(),
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+
+  console.log(
+    `integration: ${result.counts.passed}/${result.counts.tests} passed ` +
+      `across ${files.length} file(s)`,
+  );
+  console.log(`wrote ${relative(ROOT, join(OUT_DIR, "metrics-integration.json"))}`);
+
+  reportFailures(result.failures);
+  if (result.counts.failed > 0) process.exitCode = 1;
+}
+
+async function main(): Promise<void> {
   const all = globSync("test/**/*.test.ts", { cwd: ROOT }).map((p) => join(ROOT, p));
   const isAuthz = (p: string) => relative(ROOT, p).startsWith(join("test", "authz"));
   const isIntegration = (p: string) => relative(ROOT, p).startsWith(join("test", "integration"));
 
+  // `--integration` runs the integration files INSTEAD of the rest, not in
+  // addition (RL-M1-048). It used to mean "and also", which is why the database
+  // job re-ran all ~600 tests the code job had just run, for four extra files'
+  // worth of signal.
+  //
+  // The flag keeps its name because the workflow and anyone's muscle memory use
+  // it, and "run the integration tests" is what a person means by it. What
+  // changed is that it no longer silently brings the whole suite along.
+  if (process.argv.includes("--integration")) {
+    await runIntegrationOnly(all.filter(isIntegration));
+    return;
+  }
+
   const unitFiles = all.filter((p) => !isAuthz(p) && !isIntegration(p));
   const authzFiles = all.filter(isAuthz);
-  const integrationFiles = includeIntegration ? all.filter(isIntegration) : [];
 
   // Cleared before the run so its presence afterwards proves this run wrote it.
   rmSync(MATRIX_REPORT, { force: true });
 
-  // Coverage comes from the combined unit + authz run: the authorization module
-  // is exercised by both, and measuring them separately would understate it.
+  // ONE run, and the split comes out of it. Coverage has to be measured over
+  // unit and authz together — the authorization module is exercised by both, and
+  // measuring them separately would understate it — and the per-file counts in
+  // the stream give the authz subtotal without executing the matrix twice.
   const main = await runSuite([...unitFiles, ...authzFiles], true);
-  const authz = authzFiles.length > 0 ? await runSuite(authzFiles, false) : null;
-  const integration =
-    integrationFiles.length > 0 ? await runSuite(integrationFiles, false) : null;
+  const authzCounts = countsUnder(main.perFile, "authz");
 
   const authzCoverage = coverageFor(main.files, /^src[/\\]authz[/\\]/);
   const canCoverage = coverageFor(main.files, /^src[/\\]authz[/\\]can\.ts$/);
 
   const unitCounts: Counts = {
-    tests: main.counts.tests - (authz?.counts.tests ?? 0),
-    passed: main.counts.passed - (authz?.counts.passed ?? 0),
-    failed: main.counts.failed - (authz?.counts.failed ?? 0),
+    tests: main.counts.tests - authzCounts.tests,
+    passed: main.counts.passed - authzCounts.passed,
+    failed: main.counts.failed - authzCounts.failed,
   };
+
+  // A guard, not a formality. The subtraction above is only correct if every
+  // file's summary was seen; a future node:test that stops emitting per-file
+  // summaries would silently make `authz_matrix` read 0/0 and `unit` absorb it,
+  // which looks like a passing run with a suite that quietly vanished.
+  if (main.counts.tests > 0 && main.perFile.size !== unitFiles.length + authzFiles.length) {
+    throw new Error(
+      `per-file summaries: got ${main.perFile.size}, expected ` +
+        `${unitFiles.length + authzFiles.length}. The unit/authz split is derived from ` +
+        `them, so an incomplete set would misreport both suites rather than fail. ` +
+        `See countsUnder in this file.`,
+    );
+  }
 
   const metrics: Record<string, unknown> = {
     unit: suiteOf(unitCounts),
     measured_at: new Date().toISOString(),
   };
-  if (authz) metrics["authz_matrix"] = suiteOf(authz.counts);
+  if (authzFiles.length > 0) metrics["authz_matrix"] = suiteOf(authzCounts);
   metrics["authz_matrix_cells"] = readMatrixReport();
-  if (integration) metrics["integration"] = suiteOf(integration.counts);
-  else metrics["integration_note"] = "not run — needs a real host, see RISKS.md R-01";
+  // Deliberately NOT merged in from the integration run's file. Folding another
+  // run's numbers in here would give them this run's timestamp, and a stale
+  // integration result presented as fresh is the failure the matrix report
+  // avoids by deletion. Two files, two timestamps, no borrowed freshness.
+  metrics["integration_note"] =
+    "run separately by the database job — see .ratline/metrics-integration.json";
   if (authzCoverage) metrics["authz_coverage_pct"] = authzCoverage.lines;
   if (canCoverage) metrics["can_branch_coverage_pct"] = canCoverage.branches;
 
@@ -275,10 +420,9 @@ async function main(): Promise<void> {
     }
   }
 
-  const failed = main.counts.failed + (integration?.counts.failed ?? 0);
+  const failed = main.counts.failed;
   console.log(
     `tests: ${main.counts.passed}/${main.counts.tests} passed` +
-      (integration ? `, integration ${integration.counts.passed}/${integration.counts.tests}` : "") +
       (main.totals ? `, lines ${main.totals.coveredLinePercent.toFixed(2)}%` : ""),
   );
   console.log(`wrote ${relative(ROOT, join(OUT_DIR, "metrics.json"))}`);
@@ -300,20 +444,7 @@ async function main(): Promise<void> {
     for (const failure of gateFailures) console.error(`  ${failure}`);
   }
 
-  // Named, not counted. Capped so a wholesale breakage does not bury the gate
-  // output below it, and the cap says how much it dropped rather than trailing
-  // off silently.
-  const allFailures = [...main.failures, ...(integration?.failures ?? [])];
-  if (allFailures.length > 0) {
-    console.error(`\n${String(allFailures.length)} test(s) failed:`);
-    for (const failure of allFailures.slice(0, 25)) {
-      console.error(`  ${failure.file} — ${failure.name}`);
-      console.error(`      ${failure.message.split("\n")[0] ?? ""}`);
-    }
-    if (allFailures.length > 25) {
-      console.error(`  ... and ${String(allFailures.length - 25)} more`);
-    }
-  }
+  reportFailures(main.failures);
 
   if (failed > 0) console.error(`${String(failed)} test(s) failed`);
   if (failed > 0 || gateFailures.length > 0) process.exit(1);

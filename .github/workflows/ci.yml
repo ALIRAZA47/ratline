@@ -12,9 +12,22 @@
 name: ci
 
 on:
+  # Push only, deliberately (RL-M1-048). A `pull_request:` trigger alongside this
+  # one meant every push to a branch with an open PR started TWO full pipelines —
+  # `github.ref` differs between the two events, so the concurrency group below
+  # does not collapse them, and neither cancels the other.
+  #
+  # What that trigger buys is a run against the branch merged into main, which is
+  # a genuinely different question from "does the branch pass". It is not worth
+  # paying for on every push here, because main carries this same workflow: a
+  # merge that breaks it is caught by main's own run within a minute, not never.
+  #
+  # RESTORE `pull_request:` IF THIS REPOSITORY EVER TAKES OUTSIDE CONTRIBUTIONS.
+  # A push from a fork does not trigger a workflow in this repository, so a fork's
+  # pull request would arrive with no CI at all — and unlike the merge-result
+  # question, that gap is silent.
   push:
     branches: ["**"]
-  pull_request:
 
 permissions:
   contents: read
