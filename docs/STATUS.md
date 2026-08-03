@@ -8,7 +8,7 @@ Generated 2026-08-03.
 | Milestone | Progress | Done | Total | Open high-risk |
 | --- | --- | ---: | ---: | ---: |
 | **M0** Plan | `########################` 100% | 26 | 26 | 0 |
-| **M1** Control plane skeleton | `#######################-` 94% | 44 | 47 | 2 |
+| **M1** Control plane skeleton | `######################--` 92% | 44 | 48 | 2 |
 | **M2** Agent and first host | `------------------------` 0% | 0 | 29 | 20 |
 | **M3** Static sites end to end | `------------------------` 0% | 0 | 27 | 18 |
 | **M4** Node and Bun apps | `------------------------` 0% | 0 | 15 | 10 |
@@ -66,23 +66,23 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 
 | Suite | Passing | Rate |
 | --- | ---: | ---: |
-| Unit | 390 / 390 | 100% |
+| Unit | 407 / 407 | 100% |
 | Integration | not measured | — |
 | Authorization matrix | 191 / 191 | 100% |
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | 100% | must be 100% |
 
-Measured 2026-08-02T16:21:59.739Z.
+Measured 2026-08-03T19:23:04.625Z.
 
 ### Authorization matrix (role × endpoint × subject)
 
 | | |
 | --- | ---: |
-| Cells passing | 588 / 588 |
-| Endpoints × roles | 28 × 7 |
+| Cells passing | 630 / 630 |
+| Endpoints × roles | 30 × 7 |
 | Verified end to end (real request) | 56 |
 | Verified at the decision layer (`can()`) | 448 |
-| Unguarded by declaration, nothing to decide | 84 |
+| Unguarded by declaration, nothing to decide | 126 |
 
 > The remainder is verified one layer down, against `can()` with real grants and
 > row-level security. Two things are not expressible as a request: a route the
@@ -107,7 +107,7 @@ CI: _no status recorded yet._
 
 | Status | Count |
 | --- | ---: |
-| todo | 102 |
+| todo | 103 |
 | review | 2 |
 | done | 70 |
-| **all** | **174** |
+| **all** | **175** |

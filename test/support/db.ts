@@ -85,8 +85,15 @@ let loginEnabled: Promise<void> | null = null;
  * `role "ratline_app" is not permitted to log in`. Locally they had been green
  * for the wrong reason: passing because a previous run had mutated the cluster.
  *
- * Enabling it once per process at load removes the ordering dependency
- * altogether, so no test needs to know which helper happens to arrange it.
+ * So it runs once per process from `withMigratedDatabase`, immediately after the
+ * migrations — because the migrations are what CREATE the role.
+ *
+ * Doing it at module load was the first attempt and was worse than the bug it
+ * fixed: on a fresh cluster the role does not exist yet, `alter role` threw
+ * during import, and every file importing this one failed to LOAD. CI reported
+ * 236 of 259 rather than 598 — three hundred tests silently not running, which
+ * is the exact failure shape this file is written against. It passed locally
+ * only because the role was already there.
  */
 async function ensureApplicationRoleCanLogIn(): Promise<void> {
   loginEnabled ??= (async () => {
@@ -101,7 +108,6 @@ async function ensureApplicationRoleCanLogIn(): Promise<void> {
   await loginEnabled;
 }
 
-if (available) await ensureApplicationRoleCanLogIn();
 
 
 let counter = 0;
@@ -173,6 +179,11 @@ export async function withMigratedDatabase(
 ): Promise<void> {
   await withScratchDatabase(async (client, name) => {
     await migrateUp(client, loadMigrations());
+    // AFTER migrating, because migration 2 is what CREATES `ratline_app`, and
+    // once per process because `alter role` is cluster-wide. Here rather than
+    // only in asApplicationRole so a test that builds its own ratline_app URL
+    // — as several do — cannot depend on another file having gone first.
+    await ensureApplicationRoleCanLogIn();
     await fn(client, name);
   });
 }
