@@ -11,7 +11,25 @@ create. Those are repeated in the gate report under "What I need from you".
 
 ---
 
-## R-01 — No integration test host — **blocks the M2 gate**
+## R-01 — No integration test host — **resource offered 2026-08-03, not yet verified**
+
+- **Status:** the human has offered Docker, and §6.7 sanctions "real VMs/containers"
+  explicitly, so a Debian 12 container is an acceptable host rather than a
+  concession. The daemon is running (28.3.3) and `debian:12` is reachable.
+- **Not yet closed, and deliberately not.** R-01's real requirement is a host
+  that can be SSH'd into as a non-root user with sudo, because that is what
+  RL-M2-010 bootstraps and what C1 is asserted against. A container that runs
+  `sh` is not yet that, and claiming the risk closed before proving it would be
+  the fabrication §2.10 forbids.
+- **The caveat to settle first:** several M2 tasks need systemd — socket
+  activation for `privd` (RL-M2-008), unattended upgrades (RL-M2-015), service
+  management (RL-M2-016). A plain Debian container has no PID 1 worth the name.
+  Either a systemd-enabled container or a VM is needed for those, and finding
+  that out at RL-M2-008 rather than now would waste the intervening work.
+- **Verified when:** a container accepts an SSH connection as a sudo user and
+  `systemctl` answers. The fifteen M2 tasks stay `blocked` until then.
+
+## R-01 (original entry) — No integration test host — **blocks the M2 gate**
 
 - **Owner:** human
 - **Likelihood:** certain — it is already true
