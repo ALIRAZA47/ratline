@@ -21,6 +21,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -42,6 +44,19 @@ import { codeOf } from "../support/source_scan.ts";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const skip = skipWithoutDatabase;
 
+/**
+ * A secrets directory that reads as already claimed.
+ *
+ * Every suite except the bootstrap one wants the endpoint closed — an open
+ * bootstrap route would be a second way to create a tenant underneath a test
+ * that is measuring something else.
+ */
+const CLAIMED_SECRETS_DIR = (() => {
+  const dir = mkdtempSync(join(tmpdir(), "rl-claimed-"));
+  writeFileSync(join(dir, "bootstrap.spent"), "claimed by the test fixture\n", { mode: 0o600 });
+  return dir;
+})();
+
 type Tenant = { readonly orgId: string; readonly signInIdentityId: string; readonly ownerId: string };
 
 async function seedTenant(client: Client): Promise<Tenant> {
@@ -57,6 +72,7 @@ function serverFor(tenant: Tenant): ReturnType<typeof createServer> {
   const deps: ServerDeps = {
     cookieSecret: new Uint8Array(32).fill(7),
     sealingKey: Buffer.alloc(32, 9),
+    secretsDir: CLAIMED_SECRETS_DIR,
     resolveTenant: () => Promise.resolve(tenant.orgId),
     signInIdentityId: tenant.signInIdentityId,
     trustedOrigins: ["http://127.0.0.1:7712"],

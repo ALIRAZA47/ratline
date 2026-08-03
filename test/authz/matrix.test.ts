@@ -36,8 +36,10 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
-import { dirname, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Client } from "pg";
 
@@ -86,6 +88,19 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const skip = skipWithoutDatabase;
 
 /**
+ * A secrets directory that reads as already claimed.
+ *
+ * Every suite except the bootstrap one wants the endpoint closed — an open
+ * bootstrap route would be a second way to create a tenant underneath a test
+ * that is measuring something else.
+ */
+const CLAIMED_SECRETS_DIR = (() => {
+  const dir = mkdtempSync(join(tmpdir(), "rl-claimed-"));
+  writeFileSync(join(dir, "bootstrap.spent"), "claimed by the test fixture\n", { mode: 0o600 });
+  return dir;
+})();
+
+/**
  * The server, driven as the deployment drives it.
  *
  * `resolveTenant` is replaced per-world below; everything else is real. A
@@ -96,6 +111,7 @@ const SERVER_DEPS: ServerDeps = {
   resolveTenant: () => Promise.resolve(null),
   signInIdentityId: "00000000-0000-4000-8000-000000000000",
   sealingKey: Buffer.alloc(32, 9),
+  secretsDir: CLAIMED_SECRETS_DIR,
   trustedOrigins: ["http://127.0.0.1:7712"],
 };
 

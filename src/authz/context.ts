@@ -23,6 +23,8 @@
  * accidental case impossible and the deliberate case visible in review.
  */
 
+import { randomUUID } from "node:crypto";
+
 declare const brand: unique symbol;
 
 /** Who is acting. Automation is never anonymous (C6). */
@@ -108,6 +110,43 @@ export function contextForRequest(input: {
     ...(input.ip === undefined ? {} : { ip: input.ip }),
     ...(input.sessionId === undefined ? {} : { sessionId: input.sessionId }),
   });
+}
+
+/**
+ * The first context on an installation (RL-M1-030).
+ *
+ * There is no tenant, no actor and no grant yet, so this is the one constructor
+ * that invents both identifiers rather than being handed them. It lives here
+ * with the others because this is where "every context names an actor" is
+ * enforced, and inventing an identity elsewhere would put that decision
+ * somewhere nothing checks.
+ *
+ * The actor is the OWNER ABOUT TO BE CREATED, which is circular on paper and
+ * truthful in fact: the operator claimed the installation and created
+ * themselves. C6 forbids an action by "the system" and this is the action with
+ * the strongest excuse for one, so it matters that a real person is named.
+ *
+ * Returning the ids alongside the context is deliberate. `createInstallation`
+ * could dig them back out of `ctx.orgId` and `ctx.actor.id`, and does — but the
+ * caller needs them too, to report the new organization, and a caller that
+ * re-derived them from a branded type would be reaching into it.
+ */
+export function contextForBootstrap(): {
+  readonly ctx: AuthzContext;
+  readonly orgId: string;
+  readonly ownerId: string;
+} {
+  const orgId = randomUUID();
+  const ownerId = randomUUID();
+  return {
+    orgId,
+    ownerId,
+    ctx: build({
+      orgId,
+      actor: { kind: "user", id: ownerId },
+      requestId: `bootstrap-${randomUUID()}`,
+    }),
+  };
 }
 
 /** For automation. Named, permissioned, and auditable like any other actor (C6). */

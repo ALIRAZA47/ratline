@@ -25,6 +25,7 @@ import "@fontsource/jetbrains-mono/700.css";
 
 import { renderDesignStylesheet } from "../lib/design/css.ts";
 import { Shell } from "./Shell.tsx";
+import { ClaimForm, Entry, SignInForm } from "./FirstRun.tsx";
 import type { EnvironmentKind, Operation } from "../lib/shell/navigation.ts";
 
 // Emitted from the token registry rather than kept as a `.css` file, so a token
@@ -57,7 +58,32 @@ const operations: Operation[] =
     ? [{ state, label: `Demonstrating the ${state} state` }]
     : [];
 
+/**
+ * `?screen=entry` renders the first-run / sign-in decision instead of the shell.
+ *
+ * Part of the same dev harness: there is no router yet, and RL-M1-030's screens
+ * need to be reachable to be looked at. Goes away with real routing.
+ */
+const screen = params.get("screen");
+
+/**
+ * `entry` asks the server which form to show; `claim` and `signin` force one.
+ *
+ * Forcing matters for review: with no API behind the dev server, `entry`
+ * always falls back to sign-in — correctly, because failing closed there is
+ * safer — which would leave the claim form unreviewable.
+ */
+const ENTRY_SCREENS: Readonly<Record<string, React.JSX.Element>> = {
+  entry: <Entry />,
+  claim: <ClaimForm />,
+  signin: <SignInForm />,
+};
+const forced = screen === null ? undefined : ENTRY_SCREENS[screen];
+
 createRoot(mount).render(
+  forced !== undefined ? (
+    <StrictMode>{forced}</StrictMode>
+  ) : (
   <StrictMode>
     <Shell
       environment={environment}
@@ -65,5 +91,6 @@ createRoot(mount).render(
       operations={operations}
       labels={{ "marketing-www": "marketing-www" }}
     />
-  </StrictMode>,
+  </StrictMode>
+  ),
 );

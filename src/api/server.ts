@@ -75,8 +75,19 @@ import {
   insecureCookiesAcknowledged,
   resolveTrustedOrigins,
 } from "./csrf.ts";
+import {
+  bootstrapState,
+  bootstrapTokenMatches,
+  spendBootstrapToken,
+} from "./bootstrap_token.ts";
+import { createInstallation, type InstallationInput } from "../repo/bootstrap.ts";
 import { NotPermittedError } from "../authz/can.ts";
-import { contextForRequest, contextForServiceIdentity, type AuthzContext } from "../authz/context.ts";
+import {
+  contextForBootstrap,
+  contextForRequest,
+  contextForServiceIdentity,
+  type AuthzContext,
+} from "../authz/context.ts";
 import type { AuditAction } from "../authz/audit_events.ts";
 import { recordAudit } from "../repo/audit.ts";
 import { recordAuthAttempt } from "../auth/rate_limit.ts";
@@ -112,6 +123,8 @@ export type ServerDeps = {
    * audit entries written before an actor exists (ADR 0014's seam).
    */
   readonly signInIdentityId: string;
+  /** Where the first-run secrets live. Injected so a test uses its own (C4). */
+  readonly secretsDir: string;
   /** Unseals a stored TOTP secret (ADR 0006). Required, never a lazy load. */
   readonly sealingKey: Buffer;
   readonly trustedOrigins?: readonly string[];
@@ -158,6 +171,36 @@ async function renderDenial(ctx: AuthzContext, route: Route, error: NotPermitted
   });
   await recordAudit(ctx, audit);
   return send(wire);
+}
+
+/** The header carrying the first-run token. Not a cookie: it is typed in once. */
+export const BOOTSTRAP_HEADER = "x-ratline-bootstrap";
+
+/**
+ * Check the operator's form before touching the database.
+ *
+ * The messages are written for the person reading them, per §291: active voice,
+ * what broke and what to do next, no apology. They are also the ONLY place a
+ * bootstrap response explains itself — see the route.
+ */
+export function validateInstallation(input: Partial<InstallationInput>): string[] {
+  const problems: string[] = [];
+  const slug = (input.organizationSlug ?? "").trim();
+  const email = (input.ownerEmail ?? "").trim();
+
+  if (slug === "") problems.push("Give the organization a short name for URLs, like acme.");
+  else if (!/^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$/.test(slug)) {
+    problems.push("The short name takes lower-case letters, digits and hyphens, and starts and ends with one of those.");
+  }
+  if ((input.organizationName ?? "").trim() === "") problems.push("Name the organization as people call it.");
+  if (email === "" || !email.includes("@")) problems.push("Enter the email address the first owner will sign in with.");
+  if ((input.ownerName ?? "").trim() === "") problems.push("Enter the owner's name, so the audit log has somebody to point at.");
+  // Length only. Strength rules belong to the organization security policy, and
+  // an installation with no organization has no policy yet.
+  if ((input.ownerPassword ?? "").length < 12) {
+    problems.push("Use a password of at least 12 characters. A passphrase of four words beats a short scramble.");
+  }
+  return problems;
 }
 
 // ---------------------------------------------------------------------------
@@ -266,6 +309,61 @@ export function createServer(deps: ServerDeps): Hono {
   // --- public routes, each with a written reason in the table ---------------
 
   app.get("/health", () => json({ status: "up" }));
+
+  /**
+   * Is this installation still unclaimed? (RL-M1-030)
+   *
+   * One boolean, and it leaks nothing an unauthenticated caller could not
+   * already infer by trying to sign in to an installation with no accounts.
+   * The first-run screen needs it to know whether to show the claim form or the
+   * sign-in form.
+   */
+  app.get("/bootstrap", () => json({ unclaimed: bootstrapState(deps.secretsDir) === "unclaimed" }));
+
+  /**
+   * Claim the installation.
+   *
+   * The token is checked FIRST, before anything is read out of the body and
+   * before any work is done, because it is the only authority on this path.
+   *
+   * Every refusal renders identically — already claimed, never minted, wrong
+   * value, malformed body. A response that distinguished them would tell an
+   * unauthenticated caller whether the installation is worth attacking, and
+   * "already claimed" is precisely the answer an attacker wants.
+   */
+  app.post("/bootstrap", async (c) => {
+    const presented = c.req.header(BOOTSTRAP_HEADER) ?? "";
+    if (!bootstrapTokenMatches(presented, deps.secretsDir)) return send(unauthenticated());
+
+    const body = (await c.req.json().catch(() => ({}))) as Partial<InstallationInput>;
+    const problems = validateInstallation(body);
+    // The one place a bootstrap refusal says WHY, and deliberately: these are
+    // the operator's own typos on a form only they can reach, and §291 asks
+    // errors to state what broke and what to do next. Nothing here is a
+    // statement about the installation.
+    if (problems.length > 0) return json({ problems }, 422);
+
+    // The identities are minted here, so the actor of the claim is decided at
+    // the call site rather than inside a repository.
+    const { ctx, orgId } = contextForBootstrap();
+    await createInstallation(ctx, body as InstallationInput);
+
+    // Spent only after the transaction committed. Spending first would close the
+    // endpoint on an installation that failed to claim — unclaimable forever,
+    // with no owner and no second chance.
+    spendBootstrapToken(deps.secretsDir);
+
+    await recordAudit(ctx, {
+      action: "organization.update",
+      resourceType: "organization",
+      resourceId: orgId,
+      decision: "allow",
+      reason: "installation-claimed",
+      metadata: { bootstrap: true },
+    });
+
+    return json({ organizationId: orgId }, 201);
+  });
 
   app.post("/auth/sign-in", async (c) => {
     const orgId = await deps.resolveTenant(c.req.raw);
@@ -488,7 +586,14 @@ export function createServer(deps: ServerDeps): Hono {
 export function boundRouteKeys(deps: ServerDeps): Set<string> {
   const keys = new Set(handlers(deps).keys());
   // The public routes are bound directly rather than through the table loop.
-  for (const key of ["GET /health", "POST /auth/sign-in", "POST /auth/two-factor", "POST /auth/sign-out"]) {
+  for (const key of [
+    "GET /health",
+    "GET /bootstrap",
+    "POST /bootstrap",
+    "POST /auth/sign-in",
+    "POST /auth/two-factor",
+    "POST /auth/sign-out",
+  ]) {
     keys.add(key);
   }
   return keys;

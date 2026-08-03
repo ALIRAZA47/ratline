@@ -104,6 +104,30 @@ export const ROUTES: readonly Route[] = [
   },
   {
     method: "POST",
+    path: "/bootstrap",
+    summary: "Claim an unclaimed installation: create the first organization and its owner",
+    scope: "organization",
+    requires: null,
+    publicReason:
+      "Runs before any organization exists, so there is no tenant to scope a " +
+      "permission to and no grant that could convey one. What gates it instead is " +
+      "the single-use bootstrap token on the server's filesystem — host access " +
+      "rather than network access, which is the right authority for claiming an " +
+      "installation, and which closes permanently once spent (RL-M1-030).",
+  },
+  {
+    method: "GET",
+    path: "/bootstrap",
+    summary: "Whether this installation still needs claiming",
+    scope: "organization",
+    requires: null,
+    publicReason:
+      "Reports one boolean an unauthenticated caller can already infer by trying " +
+      "to sign in to an installation with no accounts. Gating it would make the " +
+      "first-run screen unreachable for exactly the person it exists for.",
+  },
+  {
+    method: "POST",
     path: "/auth/two-factor",
     summary: "Present a second factor and exchange a challenge for a session",
     scope: "organization",

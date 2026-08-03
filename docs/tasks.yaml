@@ -1395,19 +1395,39 @@
 - id: RL-M1-030
   title: Build onboarding, login and organization bootstrap screens
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: L
   depends_on: [RL-M1-017, RL-M1-019, RL-M1-028, RL-M1-042]
   blocks: []
   risk: medium
+  started_at: 2026-08-03
+  done_at: 2026-08-03
   acceptance:
     - First run walks an operator from empty database to an organization with one owner
     - The owner cannot be left in a state where no owner exists
     - Copy follows the voice rules in the brief
-  artifacts: []
+  artifacts:
+    - src/api/bootstrap_token.ts
+    - src/repo/bootstrap.ts
+    - src/web/app/FirstRun.tsx
+    - test/security/bootstrap.test.ts
   decisions: []
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-03 — The gate is a single-use token on the server's filesystem, not 'the database is empty'. That second option is unavailable and C3 is why: a context is bound to one tenant, so a bound context cannot see whether any OTHER organization exists. Reaching around it would mean a SECURITY DEFINER function or a privileged connection counting rows the application is not meant to see — a hole in C3 opened for a convenience, and one that stays open.
 
+    2026-08-03 — The token is the better gate anyway, not merely the available one. It makes the authority to claim an installation HOST ACCESS rather than network access: whoever can read the secrets directory already owns the box, and whoever cannot should not be able to claim it by being first to reach the port. It also gets right the case the empty-database gate gets wrong in the dangerous direction — a database that is not empty but was never claimed.
+    2026-08-03 — Two files, not one. Deleting the token alone would let the next boot mint a fresh one and reopen the endpoint — the vulnerability with extra steps — so a spent marker is written and 'claimed' is derived from THAT, never from the token's absence. The marker is written BEFORE the token is removed, so a crash between them leaves the installation claimed with a stale token file, which is refused. The other order leaves it unclaimed with no token, and the next boot reopens it.
+    2026-08-03 — How the INSERT gets past row-level security without a hole in it: organizations carries with check (id = current_tenant()), so the id is GENERATED IN THE APPLICATION, bound as the tenant, then inserted explicitly. Nothing runs as a privileged role, nothing is SECURITY DEFINER, and the connection is the same NOBYPASSRLS ratline_app. An installation with a hundred organizations is still invisible to that transaction; it can write exactly one row, the one whose id it chose.
+    2026-08-03 — Acceptance 2 is structural rather than checked: scoped() is one transaction, so the organization, user, membership and owner grant commit together or not at all. A sequence of four calls would have had three windows, and a crash in any of them leaves an installation that can NEVER be claimed — an organization exists so a second attempt is refused, and nobody can sign in to it. Mutation testing confirmed: four separate transactions fails the part-way test.
+    2026-08-03 — C6's hardest case, answered rather than dodged: the actor of the claim is the owner being created. Circular on paper, truthful in fact — the operator claimed the installation and created themselves — and it means the audit entry names a person rather than 'the system', which is the one word C6 forbids. contextForBootstrap lives with the other context constructors because that is where 'every context names an actor' is enforced.
+    2026-08-03 — An existing C3 test refused my first shape. createInstallation(input) took no AuthzContext, and scoped_repository has NO exemption mechanism for that rule — correctly, because an escape hatch on 'every repository function is scoped' is the one thing that would make it advisory. So the identities moved to contextForBootstrap and the function takes ctx first, which is better design as well: a repository writes rows for a context it was given rather than minting identities.
+    2026-08-03 — Every bootstrap refusal is byte-identical — already claimed, never minted, wrong value. 'Already claimed' is precisely the answer an attacker wants, because it says the installation is live and worth attacking. The one exception is form validation, and it is safe: those are the operator's own typos on a form only they can reach, and §291 asks errors to state what broke and what to do next.
+    2026-08-03 — Copy per §291, tested rather than asserted by eye: every problem is a sentence, none contains sorry, oops, invalid, error or failed, the slug message describes the shape rather than showing a regex, and the password message says what to do — a passphrase of four words — not only what is wrong. The sign-in form shows ONE message for every cause, because §6.3 requires an unknown account and a wrong password to be indistinguishable and a helpful form would be the account oracle.
+    2026-08-03 — Verified in a real browser: both screens render, the display face is the Expanded instance, all seven controls on the claim form are reachable in form order with a visible --hemp ring at 2px offset, and every input has a label. The Entry component falls back to the sign-in form when it cannot reach the server, which is what the dev server showed — failing closed there is useless on a fresh install and harmless on a live one, where the other way round invites a claim attempt.
+    2026-08-03 — Mutation-tested five ways, all caught: claimed derived from the token's absence rather than the marker (9 tests), spend writing no marker so a restart reopens the endpoint (2), the token spent BEFORE the transaction commits — which would make a failed claim permanently unclaimable (1), the comparison neither constant-time nor length-checked (1), and the four inserts split into four transactions (1). Two of the five did not apply cleanly on the first attempt and were re-run rather than counted.
+    2026-08-03 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 601 tests green locally; five mutations all caught; both screens verified in a real browser.
 - id: RL-M1-031
   title: Build the audit log viewer
   milestone: M1
@@ -3749,3 +3769,23 @@
     2026-08-02 — The done gate refused this at first — high risk with no security-suite artifact — and it was right to. The fix was not to downgrade the risk to pass it: the two structural tests moved to test/security/test_isolation.test.ts, because every security test in the repository is only as meaningful as the isolation underneath it. A scratch database dropped out from under a running test does not only fail that test, it can make one PASS, with assertions running against a database that is half gone. A cross-tenant test passing because its fixture vanished is indistinguishable from a real pass.
     2026-08-02 — closed without CI verification: CI has never executed — no remote yet (RISKS.md R-10). 587 tests green across fifty consecutive full runs.
   acceptance_met: [1, 2, 3]
+- id: RL-M1-046
+  title: Chase the intermittent failure in the no-default-secrets suite
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: []
+  blocks: []
+  risk: high
+  acceptance:
+    - The cause is identified rather than the test retried
+    - Whether it predates the RL-M1-030 bootstrap work is established, not assumed
+    - The suite passes fifty consecutive full runs
+  artifacts: []
+  decisions: []
+  notes: |
+    2026-08-03 — Seen once in a full run: 'every known-default placeholder is refused' (test/security/no_default_secrets.test.ts) failed where the assertion is that loadSecrets reports EXACTLY ONE problem. A second problem appearing intermittently would mean one of the generated secrets occasionally fails its own validation, which would be a product defect rather than a fixture one — that is the reason this is marked high risk before anything is known.
+
+    2026-08-03 — It is NOT the RL-M1-045 collision returning. That cause was identified and eliminated, and the suite then passed fifty consecutive full runs. This is a different test, a different assertion, and it first appeared after the RL-M1-030 bootstrap work — so the honest first question is whether I introduced it, which the acceptance names explicitly rather than leaving to a hunch.
+    2026-08-03 — Diagnostic running: twenty-five isolated runs of the file plus six full-suite runs, capturing the assertion text. Isolated-clean and full-failing would point at cross-file interference; failing in isolation would point at the generator.

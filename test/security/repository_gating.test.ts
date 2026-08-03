@@ -52,6 +52,12 @@ const EXEMPT: Readonly<Record<string, string>> = {
     "audited unless the denied actor could read audit, which inverts C6.",
 
   // --- pre-authentication, where there is no actor to check -----------------
+  createInstallation:
+    "Builds the first AuthzContext there has ever been on this installation — not " +
+    "'no session yet' but 'no tenant yet'. There is no grant to check and nobody to " +
+    "check it for. What stands in for a permission is the bootstrap token, checked " +
+    "before this is reached: host access rather than a grant, which is the right " +
+    "authority for claiming an installation (RL-M1-030).",
   findPasswordCredential:
     "Runs before an actor exists. Requiring a permission would need somebody to " +
     "check it against, and the whole point is that nobody is authenticated yet (ADR 0014).",
