@@ -67,6 +67,20 @@ jobs:
           POSTGRES_USER: ratline
           POSTGRES_PASSWORD: ratline
           POSTGRES_DB: ratline_test
+          # Matches local development, and that is the point rather than a
+          # convenience. The fixtures connect as `ratline_app` with no password —
+          # migration 2 creates it NOLOGIN and passwordless deliberately, because
+          # a login role with a shipped password is the default credential C4
+          # forbids — so under scram-sha-256 every authorization suite fails to
+          # connect while the unit tests pass, which is what the second CI run
+          # showed: 374 of 592, and the matrix reporting "unknown".
+          #
+          # Giving the role a password for CI only would make the pipeline test a
+          # configuration production never uses. Trust here keeps "passes
+          # locally" and "passes in CI" the same claim. It is safe in a way it
+          # would not be anywhere else: an ephemeral container, on loopback,
+          # inside one job, destroyed with it.
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports: ["5432:5432"]
         options: >-
           --health-cmd pg_isready
@@ -130,6 +144,20 @@ jobs:
           POSTGRES_USER: ratline
           POSTGRES_PASSWORD: ratline
           POSTGRES_DB: ratline_test
+          # Matches local development, and that is the point rather than a
+          # convenience. The fixtures connect as `ratline_app` with no password —
+          # migration 2 creates it NOLOGIN and passwordless deliberately, because
+          # a login role with a shipped password is the default credential C4
+          # forbids — so under scram-sha-256 every authorization suite fails to
+          # connect while the unit tests pass, which is what the second CI run
+          # showed: 374 of 592, and the matrix reporting "unknown".
+          #
+          # Giving the role a password for CI only would make the pipeline test a
+          # configuration production never uses. Trust here keeps "passes
+          # locally" and "passes in CI" the same claim. It is safe in a way it
+          # would not be anywhere else: an ephemeral container, on loopback,
+          # inside one job, destroyed with it.
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports: ["5432:5432"]
         options: >-
           --health-cmd pg_isready
