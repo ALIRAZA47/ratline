@@ -1498,13 +1498,14 @@
 - id: RL-M2-001
   title: Scaffold the agent as a dependency-free static binary
   milestone: M2
-  status: in-progress
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M1-002]
   blocks: [RL-M2-002, RL-M2-024, RL-M2-028]
   risk: low
   started_at: 2026-08-03
+  done_at: 2026-08-03
   acceptance:
     - The binary builds statically for amd64 and arm64 with no runtime dependency on the host
     - Vet and static analysis run clean in CI
@@ -1524,7 +1525,8 @@
     2026-08-03 — 2026-08-04 — A dirty tree is reported rather than ignored. C6 wants attribution, and a binary built from uncommitted changes cannot be traced to source: its parent commit describes code that is not what is running, which is the most misleading of the three options because it looks precise. Traceable() is false for such a build and 'version' escalates it to a warning with a fix. RL-M2-002's enrolment will refuse one.
     2026-08-03 — 2026-08-04 — Acceptance 2 NOT checked. 'Vet and static analysis run clean in CI' needs CI; gofmt, go vet and go test are clean locally and the Agent job is added to the workflow, but the box stays unticked until a real run is green. On static analysis specifically: go vet is Go's own, ships with the toolchain, and is what runs. staticcheck is deliberately NOT added — it would be this module's first external dependency, and the module has a test asserting it has none, for the reason that the agent runs unprivileged on somebody else's host next to a root helper. Revisit if go vet ever misses something real.
     2026-08-03 — 2026-08-04 — 'run' and 'serve' refuse rather than no-op, which is the scaffold's most load-bearing behaviour. A 'run' that blocked forever doing nothing would install cleanly, satisfy a systemd readiness check, and present as a healthy host that never receives an instruction. privd matters more: a root process that listens before it validates is the exact vulnerability class this design exists to avoid, so it opens no socket at all rather than a stubbed one.
-  acceptance_met: [1, 3]
+    2026-08-03 — 2026-08-04 — Acceptance 2 met on real CI: run 30856251255, job 'Agent binaries' green in 31s — gofmt, go vet, go test, the reproducibility check, and the release build for both architectures with artefacts uploaded.
+  acceptance_met: [1, 2, 3]
 - id: RL-M2-002
   title: Define the enumerated operation catalogue shared by both sides
   milestone: M2
@@ -3879,6 +3881,7 @@
   notes: |
     2026-08-03 — The database job's last step is ci-metrics --integration, which runs all ~600 tests plus the four integration files. The code job already ran the same 600. So every CI run executes the suite twice for one extra file's worth of signal, roughly doubling wall clock. Noticed while watching the first runs; deliberately not fixed mid-run, because changing the workflow would have cancelled the run that was about to give a verdict.
     2026-08-03 — 2026-08-04 — Acceptance 1 met three times over: the authz suite no longer runs twice inside one ci-metrics invocation (the per-file test:summary events give the subtotal that the second run was paying for), --integration no longer drags the whole suite along, and push+pull_request no longer start two pipelines per push. Acceptance 2 NOT checked: 'wall clock roughly halves' needs a before-and-after on the same hardware, and I only have the after. The honest expectation is that total CI compute more than halves while a single pipeline's wall clock falls by less, because the jobs run in parallel and the code job was always the long pole — it loses the authz re-run but keeps the main suite. Compare the Tests step duration in the last green run against the next one before ticking this.
+    2026-08-03 — 2026-08-04 — MEASURED, and acceptance 2 stays UNCHECKED because the honest answer is that it measures the wrong quantity. Old run 30854557961 against new run 30856251255, same hardware: code job 127s -> 100s (-21%), database job 115s -> 29s (-75%), pipelines per push 2 -> 1. Total CI compute 538 -> 181 job-seconds, a 66% cut, so THAT more than halved. But 'wall clock' for a single pipeline fell 21%, not 50%, because the jobs run in parallel and the code job was always the long pole: it loses the authz re-run and keeps the main suite. The criterion was written expecting a wall-clock doubling; the doubling turned out to be mostly in parallel work. I am not rewriting the criterion to fit the result — that is the goalpost-moving refused over RL-M2-001's dependency edge. It needs a one-line ruling: accept 'roughly halves' as satisfied by the 66% compute cut, or leave the task open pending a real wall-clock win (which would mean sharding the code job).
   acceptance_met: [1]
 - id: RL-M1-049
   title: Put the CSRF guard in front of every request, not every guarded route

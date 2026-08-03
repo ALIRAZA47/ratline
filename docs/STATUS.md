@@ -9,7 +9,7 @@ Generated 2026-08-03.
 | --- | --- | ---: | ---: | ---: |
 | **M0** Plan | `########################` 100% | 26 | 26 | 0 |
 | **M1** Control plane skeleton | `###################-----` 78% | 42 | 54 | 6 |
-| **M2** Agent and first host | `------------------------` 0% | 0 | 29 | 20 |
+| **M2** Agent and first host | `#-----------------------` 3% | 1 | 29 | 20 |
 | **M3** Static sites end to end | `------------------------` 0% | 0 | 27 | 18 |
 | **M4** Node and Bun apps | `------------------------` 0% | 0 | 15 | 10 |
 | **M5** RBAC completion | `------------------------` 0% | 0 | 7 | 6 |
@@ -29,9 +29,7 @@ Auth, org/team/project model, the can() function with 100% branch coverage, hash
 
 ## In progress
 
-| Task | Age | Owner | Risk | Acceptance | Title |
-| --- | ---: | --- | --- | ---: | --- |
-| `RL-M2-001` | 0d | agent | low | 2/3 | Scaffold the agent as a dependency-free static binary |
+_None._
 
 ## Blocked
 
@@ -115,7 +113,6 @@ CI: **green** at `18cca248` (2026-08-03T19:25:43Z)
 | Status | Count |
 | --- | ---: |
 | todo | 108 |
-| in-progress | 1 |
 | review | 4 |
-| done | 68 |
+| done | 69 |
 | **all** | **181** |
