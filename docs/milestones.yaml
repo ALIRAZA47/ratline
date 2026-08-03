@@ -22,7 +22,9 @@
   exit_criteria:
     - Authorization matrix test harness exists and runs, even though most endpoints do not exist yet
     - "`tasks validate` gates the build"
-  exit_met: []
+  exit_met:
+    - Authorization matrix test harness exists and runs, even though most endpoints do not exist yet
+    - "`tasks validate` gates the build"
 
 - id: M2
   name: Agent and first host

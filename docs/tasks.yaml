@@ -630,13 +630,14 @@
 - id: RL-M1-002
   title: Build the CI pipeline and wire the tracker into it
   milestone: M1
-  status: review
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M1-001]
   blocks: [RL-M2-001]
   risk: low
   started_at: 2026-08-01
+  done_at: 2026-08-03
   acceptance:
     - Lint, typecheck, unit tests and tasks validate all run on every pull request
     - A red tracker fails the build
@@ -644,8 +645,13 @@
   artifacts:
     - .github/workflows/ci.yml
   decisions: []
-  acceptance_met: [2]
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-03 — CI has now executed, and closing this is the first time any task in this project has closed on a real pipeline rather than with --no-ci. Run 30845551913 is green on all four jobs for commit 18cca24, and the status job wrote ci-status.json, which is what the done gate reads.
 
+    2026-08-03 — It took five runs, and every failure was a real defect rather than pipeline flakiness — which is the argument for the acceptance saying 'run clean in CI' instead of 'runs clean locally'. Run 1: the test job had no Postgres, so 272 database-backed suites SKIPPED and it reported 320/592 as if that were meaningful. Run 2: 374/592 — Postgres reachable, but ratline_app could not authenticate under scram-sha-256 because migration 2 creates it passwordless on purpose (C4). Run 3: 586/598 — twelve suites failed because 'alter role ... login' is CLUSTER-PERSISTENT and they had been passing locally on state some early session left behind. Run 4: 236/259 — my fix for that threw at module load on a fresh cluster, where the role does not exist until migration 2 creates it, so three hundred tests silently did not run.
+    2026-08-03 — Three guards built earlier caught these rather than letting them read green, and that is the whole return on them. RL-M1-025's deletion-based staleness reported 'the authorization matrix did not run — it is NOT green; it is unknown' rather than reprinting a stale pass. RL-M1-013's coverage gates refused at 71% and 61% rather than printing a number. And render --check caught STATUS.md going stale when I added a task and forgot to regenerate it — the check worked on its own author.
+    2026-08-03 — One change here was worth more than any of the fixes: ci-metrics now NAMES failing tests instead of counting them. Runs 1 and 2 said '374/592 passed' and nothing else, so each diagnosis needed a local reproduction — which defeats running it in CI at all. The message is read from the error's cause, because node:test wraps a failed assertion in a generic wrapper and puts the useful text underneath.
 - id: RL-M1-003
   title: Establish migration tooling with mandatory down migrations
   milestone: M1

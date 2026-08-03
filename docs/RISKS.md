@@ -197,7 +197,18 @@ create. Those are repeated in the gate report under "What I need from you".
 - **Needs a decision:** whether M7 is v1 scope, which would amend brief §5.2, or
   follows v1. Planned as the latter. See ADR 0013.
 
-## R-10 — No remote repository yet
+## R-10 — No remote repository yet — **CLOSED 2026-08-04**
+
+- **Owner:** human. Resource supplied; verification was the agent's.
+- **Closed on evidence:** `origin` exists, PR #2 is open against `main`, and CI
+  run 30845551913 is green on all four jobs for commit `18cca24`. The `status`
+  job wrote `ci-status.json`, so `tasks done` closes on a real pipeline — which
+  RL-M1-002 is the first task in this project to have done.
+- **It cost five runs and every failure was a real defect**, which is the return
+  on the acceptance saying "run clean in CI" rather than "runs clean locally".
+  See RL-M1-002's notes for the sequence.
+
+## R-10 (original entry) — No remote repository yet
 
 - **Owner:** human
 - **Likelihood:** certain

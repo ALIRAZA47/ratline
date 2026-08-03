@@ -8,7 +8,7 @@ Generated 2026-08-03.
 | Milestone | Progress | Done | Total | Open high-risk |
 | --- | --- | ---: | ---: | ---: |
 | **M0** Plan | `########################` 100% | 26 | 26 | 0 |
-| **M1** Control plane skeleton | `######################--` 92% | 44 | 48 | 2 |
+| **M1** Control plane skeleton | `#######################-` 94% | 45 | 48 | 2 |
 | **M2** Agent and first host | `------------------------` 0% | 0 | 29 | 20 |
 | **M3** Static sites end to end | `------------------------` 0% | 0 | 27 | 18 |
 | **M4** Node and Bun apps | `------------------------` 0% | 0 | 15 | 10 |
@@ -39,7 +39,6 @@ _None._
 
 | Task | Age | Owner | Risk | Acceptance | Title |
 | --- | ---: | --- | --- | ---: | --- |
-| `RL-M1-002` | 2d | agent | low | 1/3 | Build the CI pipeline and wire the tracker into it |
 | `RL-M1-020` | 1d | agent | **high** | 2/3 | Rate limit every authentication path |
 
 ## Open high-risk tasks without security-test coverage
@@ -101,13 +100,13 @@ Gate check (critical + high must be zero): PASS
 
 ## Build
 
-CI: _no status recorded yet._
+CI: **green** at `18cca248` (2026-08-03T19:25:43Z)
 
 ## Totals
 
 | Status | Count |
 | --- | ---: |
 | todo | 103 |
-| review | 2 |
-| done | 70 |
+| review | 1 |
+| done | 71 |
 | **all** | **175** |
