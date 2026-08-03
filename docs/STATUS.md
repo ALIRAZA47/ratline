@@ -29,7 +29,9 @@ Auth, org/team/project model, the can() function with 100% branch coverage, hash
 
 ## In progress
 
-_None._
+| Task | Age | Owner | Risk | Acceptance | Title |
+| --- | ---: | --- | --- | ---: | --- |
+| `RL-M2-001` | 0d | agent | low | 2/3 | Scaffold the agent as a dependency-free static binary |
 
 ## Blocked
 
@@ -106,7 +108,8 @@ CI: **green** at `18cca248` (2026-08-03T19:25:43Z)
 
 | Status | Count |
 | --- | ---: |
-| todo | 103 |
+| todo | 102 |
+| in-progress | 1 |
 | review | 1 |
 | done | 71 |
 | **all** | **175** |
