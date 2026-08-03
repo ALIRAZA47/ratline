@@ -3845,3 +3845,19 @@
     2026-08-03 — Not closed as invalid, because two real things came out of it. The freshness check does add one transaction per gated permission check — measured at 0.8ms, so it is a real cost and a known one rather than a surprise later. And three hypotheses about pool lifecycle were eliminated with evidence: no fallback pool is ever created, every pool is per-scratch-database, and pool.end() drains fully at 0ms. That is a cleaner bill of health for scoped() than existed before.
     2026-08-03 — closed without CI verification: No regression existed. Four timed runs at 75-85s against a 25-minute outlier caused by orphaned processes from my own killed command.
   acceptance_met: [1, 2, 3]
+- id: RL-M1-048
+  title: Stop running the whole suite twice per CI run
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: S
+  depends_on: []
+  blocks: []
+  risk: low
+  acceptance:
+    - The suite runs once per CI run, and the integration files run in addition rather than instead
+    - Wall clock roughly halves without losing any signal
+  artifacts: []
+  decisions: []
+  notes: |
+    2026-08-03 — The database job's last step is ci-metrics --integration, which runs all ~600 tests plus the four integration files. The code job already ran the same 600. So every CI run executes the suite twice for one extra file's worth of signal, roughly doubling wall clock. Noticed while watching the first runs; deliberately not fixed mid-run, because changing the workflow would have cancelled the run that was about to give a verdict.

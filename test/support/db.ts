@@ -58,6 +58,52 @@ export const skipWithoutDatabase: false | string = available
   ? false
   : "no database — run ./scripts/pg start, or set DATABASE_URL";
 
+// Before any test runs, so a file that connects as `ratline_app` directly does
+// not depend on some other file having gone first. Awaited at module scope: the
+// suites are the only consumer, and a race between this and the first
+// connection is exactly the bug being closed.
+let loginEnabled: Promise<void> | null = null;
+
+/**
+ * The migration creates `ratline_app` as NOLOGIN on purpose: a login role
+ * created automatically with no password would be precisely the default
+ * credential C4 forbids, so enabling login is a deployment act.
+ *
+ * Tests are a deployment of a sort, and this is their equivalent of that step —
+ * cluster-scoped, idempotent, and done once per process rather than per test.
+ *
+ * ## Why it now runs at module load rather than only from asApplicationRole
+ *
+ * `alter role` is CLUSTER-PERSISTENT, and that made this a latent defect the
+ * suite carried for a dozen sessions without noticing. Some early test enabled
+ * login on the development cluster once; every test written afterwards that
+ * connected as `ratline_app` by building its own URL — rather than going through
+ * `asApplicationRole` — worked because of that leftover state, not because it
+ * arranged anything.
+ *
+ * The first CI run against a FRESH cluster failed twelve of them with
+ * `role "ratline_app" is not permitted to log in`. Locally they had been green
+ * for the wrong reason: passing because a previous run had mutated the cluster.
+ *
+ * Enabling it once per process at load removes the ordering dependency
+ * altogether, so no test needs to know which helper happens to arrange it.
+ */
+async function ensureApplicationRoleCanLogIn(): Promise<void> {
+  loginEnabled ??= (async () => {
+    const admin = new Client({ connectionString: urlFor("postgres") });
+    await admin.connect();
+    try {
+      await admin.query("alter role ratline_app login");
+    } finally {
+      await admin.end();
+    }
+  })();
+  await loginEnabled;
+}
+
+if (available) await ensureApplicationRoleCanLogIn();
+
+
 let counter = 0;
 
 /**
@@ -131,28 +177,6 @@ export async function withMigratedDatabase(
   });
 }
 
-let loginEnabled: Promise<void> | null = null;
-
-/**
- * The migration creates `ratline_app` as NOLOGIN on purpose: a login role
- * created automatically with no password would be precisely the default
- * credential C4 forbids, so enabling login is a deployment act.
- *
- * Tests are a deployment of a sort, and this is their equivalent of that step —
- * cluster-scoped, idempotent, and done once per process rather than per test.
- */
-async function ensureApplicationRoleCanLogIn(): Promise<void> {
-  loginEnabled ??= (async () => {
-    const admin = new Client({ connectionString: urlFor("postgres") });
-    await admin.connect();
-    try {
-      await admin.query("alter role ratline_app login");
-    } finally {
-      await admin.end();
-    }
-  })();
-  await loginEnabled;
-}
 
 /**
  * Open a second connection to the same scratch database as `ratline_app` — the
