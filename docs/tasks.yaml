@@ -4034,3 +4034,53 @@
   decisions: []
   notes: |
     2026-08-03 — 2026-08-04 — weakSecretReason correctly rejects an all-zero 32-byte secret, but is never called for ServerDeps.cookieSecret; csrf.ts validates length only, and csrfTokenForSessionId(new Uint8Array(32), ...) returns a token happily. csrf.ts:240-241 names the exact outcome it is trying to prevent — 'a token every installation on earth could compute' — and then guards only length. Not exploitable today because nothing calls createServer in production: there is no serve() anywhere, and @hono/node-server is declared but never imported. It becomes live the moment M2 adds an entry point, which is why it is filed now rather than when it bites.
+- id: RL-M1-055
+  title: Run the control plane for real, on a container that is not this Mac
+  milestone: M1
+  status: done
+  owner: agent
+  estimate: M
+  depends_on: []
+  blocks: []
+  risk: medium
+  started_at: 2026-08-04
+  done_at: 2026-08-04
+  acceptance:
+    - An entry point starts the server, after preflight and with migrations applied
+    - It runs on Ubuntu 24.04 in a container, built reproducibly from a Dockerfile
+    - "First run is completed end to end against it: token minted, installation claimed, session issued"
+    - "C5 holds inside the container: the dashboard binds localhost and is reached from inside, never published"
+  artifacts: []
+  decisions: []
+  notes: |
+    2026-08-04 — 2026-08-04 — WHY THIS TASK EXISTS AND WHY IT IS LATE. The plan has no task for starting the control plane. Every M1 task built a piece of it and the matrix harness drives createServer in-process, so the suite is green and nothing has ever served a request outside a test. The compliance review found the consequence: @hono/node-server is a declared dependency that is never imported, nothing calls createServer in production, and preflight() is only reachable from boot.ts's own main. That is how RL-M1-054 (an unchecked cookie secret on the createServer path) can be latent rather than live — there is no live path.
+
+    2026-08-04 — 2026-08-04 — A DESIGN TENSION FOUND WHILE WIRING IT, recorded because it is not mine to settle quietly. ServerDeps.signInIdentityId is ONE string, but service_identities.org_id is not null and references organizations — the table is per-organization. One id for every tenant is coherent only for a single-organization installation. Worse for a first run: before the installation is claimed no organization exists, so no sign-in identity can exist either, and yet the server must already serve /bootstrap. Related to RL-M1-053, which found the id has no foreign key and a ghost UUID is accepted — the two findings are the same gap seen from opposite ends.
+    2026-08-04 — 2026-08-04 — Two real defects found by actually running it, which is the whole justification for the task. (1) Postgres would not start: it defaults its unix socket directory to /var/run/postgresql, which the Debian packaging creates owned by 'postgres', so a cluster run by any other account dies with 'could not create lock file ... Permission denied' — one line after reporting that it is listening. Moved to /var/lib/ratline/run rather than chowning a system directory, which is the same instinct as C1: narrow the authority to what the job needs. (2) My Dockerfile set RATLINE_BIND and RATLINE_PORT; the code reads RATLINE_BIND_ADDRESS and RATLINE_BIND_PORT. Those would have been silently ignored and the defaults used, so the container would have looked configured while nothing read the configuration.
+    2026-08-04 — 2026-08-04 — Nothing is published to the host, deliberately. Publishing -p 8787:8787 would make the dashboard reachable from the Mac, and C5's honest reading is that it should not be — so every request goes through docker exec, which is what 'scripts/stack curl' is for. That is the constraint holding in the one place it has ever been exercised rather than a limitation being tolerated. An override exists via RATLINE_ALLOW_PUBLIC_BIND, and preflight reports the exposure loudly on every boot.
+    2026-08-04 — 2026-08-04 — INCOMPLETE AS OF THIS COMMIT. The image built and served once, which is how the socket-directory defect was found; then I ran 'scripts/stack rebuild', which discards the image, at the moment the host's DNS started refusing — buildkit needs a manifest HEAD for ubuntu:24.04 even when the layers are cached, so it cannot rebuild until DNS returns. Acceptances 2, 3 and 4 stay unchecked: the current image is unbuilt, so first run has not been completed end to end against it. Using 'build' rather than 'rebuild' would have kept a working image; noted so the next person does not repeat it.
+    2026-08-04 — 2026-08-04 — A THIRD DEFECT OF THE SAME SHAPE, and the worst of them: mintBootstrapToken had exactly one caller, a test. Its own docstring says 'called on every boot' and nothing called it, so the token file was never created on a real installation and FIRST RUN WAS IMPOSSIBLE — POST /bootstrap requires a token nothing minted. The suite was green throughout, because bootstrap.test.ts mints the token itself before exercising the endpoint. Three defects now, all the same shape: a mechanism built and tested but never wired to a live path. That is what having no entry point costs, and why this task exists.
+    2026-08-04 — 2026-08-04 — The token is NOT printed at boot, only its path. Host access rather than network access is the authority for claiming an installation (RL-M1-030), and a token in a log is readable by everyone who can read logs — a wider set than those who can read a 0600 file in the service account's directory. My own scripts/stack then guessed the filename as 'bootstrap-token' while the code writes 'bootstrap.token', and the symptom was indistinguishable from the server not minting one at all. The script now asks tokenPath() for it rather than hardcoding a guess.
+    2026-08-04 — 2026-08-04 — VERIFIED END TO END on Ubuntu 24.04, aarch64, Node 22.22 and Postgres 17.10, all from distribution repositories: 13 migrations applied, token minted at 0600 in a 0700 directory, POST /bootstrap returned 201 with the organization id, restart, sign-in returned a session cookie plus an x-ratline-csrf header, GET /organization returned the tenant, GET /audit returned the hash-chained log with prevHash all zeroes on entry 1, and the same request with no cookie returned 401 unauthenticated. Nothing was published to the host; every request went through docker exec, so C5's localhost bind held throughout.
+    2026-08-04 — 2026-08-04 — OBSERVED AND WORTH A LOOK: the session cookie carries Secure over http://127.0.0.1. curl does not care and a browser might, which is exactly ADR 0016's unverified assumption — the M1 gate report named it as the riskiest one in that design and it is still unverified. This container is now the place to settle it, since it serves real HTTP over loopback.
+  acceptance_met: [1, 2, 3, 4]
+- id: RL-M1-056
+  title: Reconcile the remaining documentation contradictions a full read found
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: S
+  depends_on: []
+  blocks: []
+  risk: low
+  acceptance:
+    - Every stale closing condition in RISKS.md names a task that is not already done
+    - ADR 0001's Drizzle decision matches the code, or the deviation is recorded in the ADR
+    - PLAN section 7's paths match where the catalogue actually lives
+  artifacts: []
+  decisions: []
+  notes: |
+    2026-08-04 — 2026-08-04 — Found by a documentation pass that read every file in docs/ and src/ at once, which is the one vantage point no single file's tests have. Thirteen contradictions; four were fixed immediately because they were propagation failures rather than open questions, and the rest are here. FIXED ALREADY: THREAT-MODEL R-30 carried '56 of 567 cells' and '8 of 27 routes' — the same two wrong numbers the M1 gate report corrected in ITSELF and never propagated; R-29 said 'Six repository reads' and listed seven while RL-M1-043's own notes say nine; R-29's mitigation 'nothing called them over HTTP because there is no server' expired when RL-M1-042 built one and RL-M1-055 ran it; and src/authz/roles.ts still listed member.revoke_sessions as a gap when RL-M1-034 closed it and the route is bound.
+
+    2026-08-04 — 2026-08-04 — STILL OPEN. (1) ADR 0001 decides 'Drizzle behind a mandatory scoping layer' and src/db/internal/README.md says the directory constructs the Drizzle client; handle.ts imports Pool from pg and runs raw SQL, and drizzle-orm is not in package.json. The code is almost certainly right — a scoping layer over raw SQL is simpler to make unreachable — but an ADR that describes a library nobody installed is a design record that misleads, and ADR 0001 is still 'proposed' so the deviation belongs in it rather than in a commit message. (2) PLAN section 7 puts the catalogue in src/ops/ with generated Go in agent/internal/ops/; src/ops/ holds only a README and the real files are src/agent/catalogue.ts and agent/internal/protocol/catalogue_gen.go. (3) Stale closing conditions: R-12 says the API-token ceiling 'has not landed' (RL-M1-032 is done), R-17 is 'Open until two-factor ships (RL-M1-019)' (done), DESIGN section 10.1 ends 'the reserved hue does not exist yet' (RL-M1-040 is done and ENVIRONMENT.production exists). (4) THREAT-MODEL's own table disagrees about whether an HTTP layer exists: R-15 says 'nothing calls the limiter — there is no HTTP layer' and R-21 says 'Owed by whatever builds the HTTP layer', while R-23 three rows later says 'Closed by RL-M1-042'.
+    2026-08-04 — 2026-08-04 — NOT contradictions, checked and dismissed rather than left on the list: the gate report's 'green on all four jobs' reconciles with ci.yml's five, because the fifth only records the result and needs the other four. And brief section 6.3 ('cannot read PRODUCTION secret values') versus RL-M1-010's acceptance ('provably cannot read secret values') is a real disagreement that roles.ts D1 already flags in writing rather than hiding — which is the right handling, so there is nothing to fix.

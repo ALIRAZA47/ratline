@@ -1,0 +1,10 @@
+# Kept small on purpose: the build copies the repository, and node_modules from a Mac
+# contains darwin-arm64 binaries that would be silently wrong inside a linux image.
+# `npm ci` in the Dockerfile installs the right ones.
+node_modules
+.git
+agent/dist
+dist
+.ratline
+docs-site
+.claude

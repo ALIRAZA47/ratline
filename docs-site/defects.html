@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Known defects and open questions — Ratline</title>
+<meta name="description" content="What is outstanding at the M1 gate, the four defects that were invisible while every test was green, what the owner is being asked to decide, and where the documents disagree with each other.">
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/site.css">
+<script defer src="assets/app.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<div class="shroud">
+
+  <nav class="rail" aria-label="Documentation sections">
+    <a class="rail__brand" href="index.html">
+      <span class="rail__wordmark display">RATLINE</span>
+    </a>
+    <div class="rail__group">
+      <p class="rail__group-label label">Reference</p>
+      <ul class="rail__list">
+        <li><a class="rail__link" href="index.html"><span class="rail__num">01</span> Overview</a></li>
+        <li><a class="rail__link" href="constraints.html"><span class="rail__num">02</span> Constraints</a></li>
+        <li><a class="rail__link" href="architecture.html"><span class="rail__num">03</span> Architecture</a></li>
+        <li><a class="rail__link" href="authorization.html"><span class="rail__num">04</span> Authorization</a></li>
+        <li><a class="rail__link" href="agent.html"><span class="rail__num">05</span> Agent protocol</a></li>
+        <li><a class="rail__link" href="threat-model.html"><span class="rail__num">06</span> Threat model</a></li>
+        <li><a class="rail__link" href="decisions.html"><span class="rail__num">07</span> Decisions</a></li>
+        <li><a class="rail__link" href="roadmap.html"><span class="rail__num">08</span> Roadmap</a></li>
+        <li><a class="rail__link" href="workflow.html"><span class="rail__num">09</span> Workflow</a></li>
+        <li><a class="rail__link" href="defects.html"><span class="rail__num">10</span> Defects</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="column">
+    <header class="topbar">
+      <div class="topbar__row">
+        <nav class="crumbs" aria-label="Breadcrumb">
+          <a href="index.html">ratline</a>
+          <span class="crumbs__sep" aria-hidden="true">/</span>
+          <span class="crumbs__here">defects</span>
+        </nav>
+        <span class="topbar__spacer"></span>
+        <div class="search">
+          <label class="skip" for="site-search">Search the documentation</label>
+          <input class="search__input" id="site-search" type="search" placeholder="Search — press / or Ctrl-K"
+                 autocomplete="off" aria-controls="site-search-results">
+          <ul class="search__results" id="site-search-results" aria-label="Search results"
+              aria-live="polite" hidden></ul>
+        </div>
+        <button class="themetoggle" id="theme-toggle" type="button">Theme: System</button>
+      </div>
+      <div class="tension" aria-hidden="true"></div>
+    </header>
+
+    <main class="page" id="main">
+      <h1>Known defects and open questions</h1>
+      <p class="lede">The project's own documents lead with this material, so this page does too. Nothing here is
+      inferred: every item is taken from the M1 gate report, the risk register, the tracker or the source.</p>
+
+      <div class="note" data-status="working">
+        <span class="note__label">How to read the statuses on this page</span>
+        <p>Task statuses were read from <span class="pathref">docs/tasks.yaml</span> on 2026-08-04, and the
+        working tree was being edited by another session while this page was written. A task can therefore be
+        marked <code>todo</code> in the tracker while code annotated with its id already exists — RL-M1-049 and
+        RL-M1-050 were both in that state when this was written. <code>./scripts/tasks list --milestone M1</code>
+        is the current answer; a page is not.</p>
+      </div>
+
+      <h2 id="outstanding">Outstanding at the M1 gate</h2>
+
+      <p>Both M1 exit criteria are met and eleven tasks remain open inside the milestone. The gate report is
+      explicit about the one that could have been quietly closed:</p>
+
+      <div class="note" data-status="attention">
+        <span class="note__label">RL-M1-020 stays in review, honestly</span>
+        <p>Its first acceptance line says all four authentication paths are limited. Sign-in and two-factor
+        are; password reset and token exchange have no endpoints yet, so their budgets are published and
+        unspent. <strong>Two of four is not four.</strong></p>
+      </div>
+
+      <h3>In review — built and locally verified, awaiting outside confirmation</h3>
+
+      <div class="scroller">
+        <table>
+          <caption class="skip">M1 tasks in review, with age, risk, acceptance progress and what remains</caption>
+          <thead>
+            <tr>
+              <th scope="col">Task</th>
+              <th scope="col">Age</th>
+              <th scope="col">Risk</th>
+              <th scope="col">Acceptance</th>
+              <th scope="col">What it is</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row" class="mono nowrap">RL-M1-015</th><td>3d</td><td>medium</td><td class="num">2/3</td>
+              <td>Schedule audit chain verification and surface its result. The remaining line asks for the last verification time to be visible in the interface.</td>
+            </tr>
+            <tr>
+              <th scope="row" class="mono nowrap">RL-M1-020</th><td>2d</td><td><strong>high</strong></td><td class="num">2/3</td>
+              <td>Rate limit every authentication path. Two of four paths have endpoints. See above.</td>
+            </tr>
+            <tr>
+              <th scope="row" class="mono nowrap">RL-M1-041</th><td>—</td><td>low</td><td class="num">2/3</td>
+              <td>Make the source scanners agree about comments — one shared helper with one rule, tested against a fixture that contains the pattern both in prose and in code.</td>
+            </tr>
+            <tr>
+              <th scope="row" class="mono nowrap">RL-M1-045</th><td>2d</td><td><strong>high</strong></td><td class="num">2/3</td>
+              <td>Chase the intermittent failure in the API token ceiling suite. Its acceptance requires the cause be identified rather than the test retried, and fifty consecutive full runs.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Still todo inside M1</h3>
+
+      <div class="scroller">
+        <table>
+          <caption class="skip">M1 tasks still todo, with risk and the acceptance that defines them</caption>
+          <thead>
+            <tr><th scope="col">Task</th><th scope="col">Risk</th><th scope="col">What it is</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row" class="mono nowrap">RL-M1-046</th><td><strong>high</strong></td>
+              <td>Chase the intermittent failure in the no-default-secrets suite. Seen once and not reproduced in 31 runs. Its assertion now names its own cause if it recurs, and the reading that would have made it a <em>product</em> defect is eliminated by a test that generates and validates the secret set 60 times. Acceptance: identify the cause rather than retry the test, establish whether it predates the bootstrap work rather than assuming, and pass fifty consecutive full runs.</td>
+            </tr>
+            <tr>
+              <th scope="row" class="mono nowrap">RL-M1-049</th><td><strong>high</strong></td>
+              <td>Put the CSRF guard in front of every request, not every guarded route. The guard used to live inside the guarded-route loop, so <code>POST /auth/sign-out</code> — bound above it as a public route — never reached it: a cross-origin fetch with credentials from any page an operator visited ended their session, and left no audit entry either. Only <code>SameSite</code> stood in the way, and the CSRF module argues at length that <code>SameSite</code> must never be the only lock. Authorized by the owner under A-03.</td>
+            </tr>
+            <tr>
+              <th scope="row" class="mono nowrap">RL-M1-050</th><td><strong>high</strong></td>
+              <td>Make the audit half of a refusal impossible to drop. A cross-tenant probe on <code>GET /projects/:projectId</code> left no audit record. The fix is in the signature: a refusal cannot yield a wire response without an audit entry that covers it. Authorized by the owner under A-03.</td>
+            </tr>
+            <tr>
+              <th scope="row" class="mono nowrap">RL-M1-051</th><td>medium</td>
+              <td>Fail the coverage gate for an authz file no test ever loads. A file under <span class="pathref">src/authz/</span> that nothing imports contributes nothing to the aggregate rather than dragging it down, and a module with no branches must not satisfy the <code>can()</code> branch gate by having nothing to cover.</td>
+            </tr>
+            <tr>
+              <th scope="row" class="mono nowrap">RL-M1-052</th><td><strong>high</strong></td>
+              <td>Catch a repository export that is not async. The repository-gating scan — the durable fix for R-29 — does not currently match a non-async export, so one could slip past the check that every exported repository function resolves a permission.</td>
+            </tr>
+            <tr>
+              <th scope="row" class="mono nowrap">RL-M1-053</th><td>medium</td>
+              <td>Give <code>audit.actor_id</code> referential integrity. An audit entry naming an actor that does not exist should be refused by the database rather than by convention, and the sign-in service identity should exist as a row before it is used as an actor.</td>
+            </tr>
+            <tr>
+              <th scope="row" class="mono nowrap">RL-M1-054</th><td>medium</td>
+              <td>Check the cookie secret for entropy, not just length. A secret that passes the length check while carrying no entropy is currently accepted, and <code>createServer</code> should not be constructible with one.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Two more items the gate report lists that are not defects in the product:
+      <strong>RL-M1-048</strong> — both CI jobs ran the whole suite, so it executed twice per run for one extra
+      file's worth of signal — is now <code>done</code>, and the acceptance was ruled met on the compute figure
+      rather than the wall clock: total CI compute fell from 538 to 181 job-seconds, a 66% cut, while a single
+      pipeline's wall clock fell 21% because the jobs run in parallel and the code job was always the long pole.
+      That ruling is recorded as A-02 rather than by editing the criterion, so the tracker still says “wall
+      clock” and the authorization says why 21% was accepted.</p>
+
+      <h2 id="invisible-defects">Four defects that were invisible while every test was green</h2>
+
+      <p>All four were found by timing or stress rather than by running the suite.</p>
+
+      <ol>
+        <li><strong>A scratch-database name derived from a boot-shared clock collided across processes</strong>,
+        and <code>with (force)</code> turned that collision into terminated connections mid-test. Two
+        individually correct decisions, jointly a landmine.</li>
+        <li><strong>Twelve suites passed locally on cluster state an early session left behind.</strong>
+        <code>alter role … login</code> is persistent. Only a fresh CI database could notice.</li>
+        <li><strong>A twenty-fold “regression” reported from one sample</strong>, which four timed runs showed
+        did not exist. Both slow measurements had been taken while orphaned processes from the reporter's own
+        killed commands hammered the same database.</li>
+        <li><strong><code>ci-metrics</code> reported counts and not names</strong>, so the first two CI failures
+        were undiagnosable without local reproduction. It now names failures, capped so a wholesale breakage does
+        not bury the gate.</li>
+      </ol>
+
+      <div class="note" data-status="working">
+        <span class="note__label">The pattern, stated plainly by the gate report</span>
+        <p><strong>A test suite measures correctness, not its own health.</strong></p>
+      </div>
+
+      <p>Three mutations also <em>escaped</em> during M1's mutation testing, and each is recorded rather than
+      omitted because each exposed a test asserting the right thing for the wrong reason.</p>
+
+      <h2 id="open-questions">Open questions the owner holds</h2>
+
+      <p>The M1 gate report ends with five requests. None had been answered when this page was written.</p>
+
+      <div class="scroller">
+        <table>
+          <caption class="skip">What the M1 gate report asks the owner for</caption>
+          <thead><tr><th scope="col">#</th><th scope="col">The question</th><th scope="col">Why it cannot wait indefinitely</th></tr></thead>
+          <tbody>
+            <tr>
+              <th scope="row">1</th>
+              <td>Eighteen decision records are <span class="badge badge--proposed">proposed</span> and none is accepted. §2.6 reserves acceptance for the owner.</td>
+              <td>Two are named as most wanted: <a href="decisions.html#adr-0016">ADR 0016</a>, because it assumes <code>Secure</code> works on <code>http://127.0.0.1</code> and that could not be verified without a browser, and <a href="decisions.html#adr-0006">ADR 0006</a>, because M2 builds on it directly.</td>
+            </tr>
+            <tr>
+              <th scope="row">2</th>
+              <td><a href="threat-model.html#risks">R-08</a> — all three crown-jewel keys live on one machine.</td>
+              <td>M2 hardens around this choice. A ruling now is cheaper than a ruling later.</td>
+            </tr>
+            <tr>
+              <th scope="row">3</th>
+              <td>Is <a href="roadmap.html#m7">M7</a> v1 scope or post-v1?</td>
+              <td>Sixteen tasks wait on the answer.</td>
+            </tr>
+            <tr>
+              <th scope="row">4</th>
+              <td>The managed-database scope change itself — Mongo, PostgreSQL and MySQL with database and user creation.</td>
+              <td>It is a real expansion of §5.2, which put managed databases out of scope for v1, and it needs an explicit yes rather than an inference. A-01 covers proceeding through gates on the existing plan, not enlarging it.</td>
+            </tr>
+            <tr>
+              <th scope="row">5</th>
+              <td>Does <span class="pathref">docs/THREAT-MODEL.md</span> stay public?</td>
+              <td>It names the crown jewels and states plainly that concentrating all three on the control plane is the biggest structural risk in the design. That is what a threat model should do; it is also a roadmap for anyone attacking a real deployment, and the repository is now public.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Two further open questions sit in the risk register with the owner as owner:
+      <a href="threat-model.html#risks">R-02</a> — whether C2's strict reading is intended, which decides
+      whether sites have editable build commands at all — and
+      <a href="threat-model.html#risks">R-05</a>'s policy half, on production and non-production sharing a
+      host.</p>
+
+      <p><span class="pathref">docs/PLAN.md</span> §9 also carries six open questions from M0. Two have since
+      closed — the integration host (R-01) and the front-end framework (R-03). Four remain: C2 versus
+      user-authored build commands; SAML, which §6.3 lists but the M5 exit criteria omit and which is tracked
+      as RL-M5-006; per-PR preview environments, allowed by §6.5 “if it doesn't blow the milestone” and tracked
+      as an explicit decision point at RL-M3-027; and managed databases.</p>
+
+      <h2 id="contradictions">Where the documents disagree</h2>
+
+      <p>Reading these files together surfaces places where two of them say different things. None of the
+      following is a security defect; all of them are reasons to prefer a generated file over a written one when
+      the two conflict.</p>
+
+      <div class="scroller">
+        <div class="filter">
+          <label class="skip" for="conflict-filter">Filter discrepancies</label>
+          <input id="conflict-filter" type="search" placeholder="Filter — try stale, count, drizzle"
+                 data-filter-for="conflict-table" data-filter-count="conflict-count" data-filter-empty="conflict-empty" autocomplete="off">
+          <span class="filter__count" id="conflict-count" aria-live="polite"></span>
+        </div>
+        <table id="conflict-table">
+          <caption class="skip">Discrepancies between documents in the repository</caption>
+          <thead>
+            <tr>
+              <th scope="col">Subject</th>
+              <th scope="col">What each says</th>
+              <th scope="col">Which to believe</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Test count</th>
+              <td><span class="pathref">.ratline/metrics.json</span>: 422 unit test cases plus 191 in <code>test/authz</code> at 08:05Z, and 433 plus 191 an hour later. <span class="pathref">docs/gates/M1.md</span>: “598 tests”. <span class="pathref">README.md</span>: “602 tests passing”.</td>
+              <td>The metrics file, with its timestamp. It is rewritten on every run; the other two are prose snapshots taken at different moments and neither says which.</td>
+            </tr>
+            <tr>
+              <th scope="row">M1 task count</th>
+              <td><span class="pathref">README.md</span>: “44 of 47 tasks done”. <span class="pathref">docs/gates/M1.md</span>: “45 of 48 done. Three outstanding”. <span class="pathref">docs/STATUS.md</span>: 43 done of 54, with 4 in review and 7 todo.</td>
+              <td>The dashboard. Tasks were added to M1 after both prose figures were written, which moves the denominator as well as the numerator.</td>
+            </tr>
+            <tr>
+              <th scope="row">Matrix size and bound routes</th>
+              <td><span class="pathref">docs/THREAT-MODEL.md</span> R-30: “only 56 of 567 matrix cells”, “the server binds 8 of 27 declared routes”. <span class="pathref">docs/STATUS.md</span> and the metrics file: 630 cells, 30 declared routes, 12 bound.</td>
+              <td>630 and 12 of 30, which <code>generateMatrix()</code> and <code>transportCoverage()</code> compute. The M1 gate report already corrected the same two numbers in its own text and explained the mistake — 27 was invented, and “eight” was the count of transport-expressible cells <em>per role</em> (8 × 7 = 56), a different quantity that happened to appear in the same sentence. R-30 was not updated to match.</td>
+            </tr>
+            <tr>
+              <th scope="row">How many ungated repository reads</th>
+              <td><span class="pathref">docs/gates/M1.md</span>: “nine repository reads that resolved no permission at all”. <span class="pathref">docs/THREAT-MODEL.md</span> R-29: “Six repository reads resolved no permission at all”, then enumerates seven — <code>listAudit</code>, <code>verifyAuditChain</code>, the two verification reads, and the organization, member and project reads.</td>
+              <td>Unresolved. Three figures appear for one finding, and R-29's own count disagrees with R-29's own list. The fix is not in question — <span class="pathref">test/security/repository_gating.test.ts</span> now requires every exported repository function to resolve a permission or carry a written argument for why not.</td>
+            </tr>
+            <tr>
+              <th scope="row">“There is no action for revoking a member's active sessions”</th>
+              <td>The KNOWN GAPS note at the foot of <span class="pathref">src/authz/roles.ts</span> says so.</td>
+              <td>The catalogue. <code>member.revoke_sessions</code> exists, is held by Owner and Admin, and <code>POST /members/:userId/revoke-sessions</code> is one of the twelve bound routes. The note was not updated when RL-M1-018 landed.</td>
+            </tr>
+            <tr>
+              <th scope="row">Drizzle</th>
+              <td><a href="decisions.html#adr-0001">ADR 0001</a> names “Drizzle behind a mandatory scoping layer”, <span class="pathref">docs/PLAN.md</span> §7 says <span class="pathref">db/internal</span> “constructs the Drizzle client”, and <span class="pathref">src/db/internal/README.md</span> repeats it.</td>
+              <td>The code. <span class="pathref">src/db/internal/handle.ts</span> uses <code>pg</code> directly with raw SQL, and <code>drizzle-orm</code> is not a dependency in <span class="pathref">package.json</span>. C3's three layers hold either way — the change is which library sits behind <code>scoped()</code>.</td>
+            </tr>
+            <tr>
+              <th scope="row">Where the operation catalogue lives</th>
+              <td><span class="pathref">docs/PLAN.md</span> §7 puts it in <span class="pathref">src/ops/</span> with generated types in <span class="pathref">agent/internal/ops/</span>.</td>
+              <td>The tree. <span class="pathref">src/ops/</span> holds only a README; the catalogue is <span class="pathref">src/agent/catalogue.ts</span> and the generated file is <span class="pathref">agent/internal/protocol/catalogue_gen.go</span>. The behaviour matches the plan; the paths do not.</td>
+            </tr>
+            <tr>
+              <th scope="row">The API token ceiling</th>
+              <td><span class="pathref">docs/THREAT-MODEL.md</span> R-12: the ceiling “is enforced in RL-M1-032, which has not landed. Until it does, a token's permissions are whatever its grants say.”</td>
+              <td>The code and the tracker. RL-M1-032 is <code>done</code>, and <code>can()</code> evaluates the intersection against the issuing user on <em>every</em> decision, not only at issue time. The register entry is stale.</td>
+            </tr>
+            <tr>
+              <th scope="row">Whether an HTTP layer exists</th>
+              <td><span class="pathref">docs/THREAT-MODEL.md</span> R-15 says “nothing calls the limiter — there is no HTTP layer”, and R-21 says the address-derivation risk is “owed by whatever builds the HTTP layer”. R-23, in the same table, is marked closed <em>because</em> <code>createServer</code> now runs the CSRF guard on every unsafe method.</td>
+              <td>The server exists — <span class="pathref">src/api/server.ts</span>, RL-M1-042. R-23 was updated and R-15 and R-21 were not, so the file contradicts itself within one table. The underlying risks are still real: RL-M1-020 remains in review because two of four authentication paths have no endpoint.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-17's closing condition</th>
+              <td>R-17 is “<strong>Open until two-factor authentication ships (RL-M1-019)</strong>.”</td>
+              <td>RL-M1-019 is <code>done</code>. The residual R-17 describes — the impersonation window itself — is genuinely not closable, which is what the entry's own body says; only the stated condition is out of date.</td>
+            </tr>
+            <tr>
+              <th scope="row">The reserved production hue</th>
+              <td><span class="pathref">docs/DESIGN.md</span> §10.1 ends “Owed by RL-M1-027's token work: the reserved hue does not exist yet.”</td>
+              <td>The tokens. RL-M1-040 is <code>done</code> and <code>ENVIRONMENT.production</code> exists in <span class="pathref">src/web/lib/design/palette.ts</span>, chosen by search over the violet band at 286° against the three requirements the ruling set, with contrast measured rather than asserted.</td>
+            </tr>
+            <tr>
+              <th scope="row">Two documents about secret values for Infrastructure</th>
+              <td>Brief §6.3 says Infrastructure “cannot read <em>production</em> secret values”. RL-M1-010's acceptance says “provably cannot read secret values”, with no qualifier.</td>
+              <td>Neither, and the disagreement is flagged in the source rather than resolved silently. <span class="pathref">src/authz/roles.ts</span> D1 implements the stricter reading and records that the two documents genuinely disagree, noting that the narrower reading is still reachable as an environment-scoped custom role.</td>
+            </tr>
+            <tr>
+              <th scope="row">Milestone count</th>
+              <td>Brief §8 defines M0 to M6. <span class="pathref">docs/milestones.yaml</span> holds M0 to M7.</td>
+              <td>Both, in sequence. M7 is an amendment to §5.2 made by <a href="decisions.html#adr-0013">ADR 0013</a> at the owner's request, and the milestone's own goal field says so. Whether the amendment is accepted is open question 4 above.</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="filter__empty" id="conflict-empty" hidden></p>
+      </div>
+
+      <div class="note" data-status="working">
+        <span class="note__label">The one place this pattern is already handled well</span>
+        <p><span class="pathref">README.md</span> points at the dashboard and says it is “the only status claim
+        in this repository that cannot go stale”. That instinct is right, and it is the reason most of the rows
+        above resolve in favour of a generated file. The prose that has gone stale is prose that repeated a
+        number instead of linking to the file that owns it.</p>
+      </div>
+
+      <section class="sources" aria-labelledby="sources-heading">
+        <h2 id="sources-heading" class="label" style="border:0;padding:0;margin:0 0 var(--space-xs)">Sources for this page</h2>
+        <ul>
+          <li><span class="pathref">docs/gates/M1.md</span> — outstanding tasks, the four invisible defects, the mutation-testing note, the five requests</li>
+          <li><span class="pathref">docs/tasks.yaml</span> — statuses, risks and acceptance lines for every task named above</li>
+          <li><span class="pathref">docs/STATUS.md</span> — the in-review table, its ages and acceptance counts</li>
+          <li><span class="pathref">docs/RISKS.md</span>, <span class="pathref">docs/THREAT-MODEL.md</span> §8 — R-02, R-05, R-08, R-12, R-14, R-15, R-17, R-21, R-23, R-29, R-30</li>
+          <li><span class="pathref">docs/AUTHORIZATIONS.md</span> A-01, A-02, A-03</li>
+          <li><span class="pathref">docs/PLAN.md</span> §9 — the six M0 open questions</li>
+          <li><span class="pathref">docs/DESIGN.md</span> §10.1 · <span class="pathref">src/web/lib/design/palette.ts</span></li>
+          <li><span class="pathref">src/authz/roles.ts</span> D1 and the KNOWN GAPS note · <span class="pathref">src/authz/catalogue.ts</span></li>
+          <li><span class="pathref">src/db/internal/handle.ts</span>, <span class="pathref">package.json</span>, <span class="pathref">src/ops/README.md</span></li>
+          <li><span class="pathref">src/api/server.ts</span>, <span class="pathref">src/api/refusal.ts</span> — the RL-M1-049 and RL-M1-050 annotations</li>
+        </ul>
+      </section>
+
+      <nav class="pager" aria-label="Section navigation">
+        <a href="workflow.html"><span class="label">Previous</span> Development workflow</a>
+        <a href="index.html"><span class="label">Back to</span> Overview</a>
+      </nav>
+    </main>
+
+    <footer class="page" style="padding-top:0">
+      <p class="dim" style="font-size:var(--text-xs)">Written from the repository at
+      <span class="pathref">/Users/ark/Desktop/FunProjects/moss-clone</span>. Design tokens copied from
+      <span class="pathref">src/web/lib/design/</span>; no font files or scripts are loaded from any external
+      origin.</p>
+    </footer>
+  </div>
+</div>
+</body>
+</html>

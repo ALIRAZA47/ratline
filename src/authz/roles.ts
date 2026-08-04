@@ -953,9 +953,16 @@ export const ALL_DEFAULT_ROLES: readonly RoleDefinition[] = DEFAULT_ROLE_KEYS.ma
  *     denials recorded and visible; an action scoped to the actor's own
  *     decisions would let that reach the person it concerns.
  *
- *   - **There is no action for revoking a member's active sessions**, already
- *     recorded as a gap in `catalogue.ts`. It matters here because
- *     Infrastructure and Release Manager can both be handed the SSH and deploy
- *     powers to respond to a compromised account without being able to end that
- *     account's session.
+ *   - ~~**There is no action for revoking a member's active sessions.**~~
+ *     **CLOSED by RL-M1-034.** `member.revoke_sessions` exists, is held by Owner
+ *     and Admin only, and `POST /members/:userId/revoke-sessions` is one of the
+ *     twelve bound routes. Left visible rather than deleted because the reasoning
+ *     that follows still stands and is the argument for who holds it: Infrastructure
+ *     and Release Manager can both be handed the SSH and deploy powers needed to
+ *     respond to a compromised account, and neither can end that account's session —
+ *     which is deliberate, since ending sessions is an identity power rather than an
+ *     operational one.
+ *
+ *     Found stale by a documentation pass reading every file at once, which is the
+ *     kind of drift no single file's tests can see.
  */

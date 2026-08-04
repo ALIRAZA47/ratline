@@ -406,6 +406,8 @@ h2:hover .anchor, h3:hover .anchor, .anchor:focus-visible { opacity: 1; }
   margin: var(--space-md) 0 var(--space-lg);
 }
 .note > :last-child { margin-bottom: 0; }
+/* The fallback is --chalk-dim, never --hemp: DESIGN.md §10.2 records that --hemp
+   sits at 4.47:1 in light mode and "must not become a text colour" there. */
 .note__label {
   display: block;
   font-size: var(--text-xs);
@@ -413,7 +415,7 @@ h2:hover .anchor, h3:hover .anchor, .anchor:focus-visible { opacity: 1; }
   letter-spacing: 0.08em;
   text-transform: uppercase;
   font-weight: var(--weight-body-strong);
-  color: var(--status-color, var(--hemp));
+  color: var(--status-color, var(--chalk-dim));
   margin-bottom: var(--space-xs);
 }
 
@@ -543,6 +545,14 @@ td .mono, th .mono { font-size: var(--text-sm); }
 .nowrap { white-space: nowrap; }
 .num { text-align: right; font-family: var(--font-mono); }
 
+/* Role initials in the action table. The dotted rule is the affordance that
+   says "hover or focus me for the full name"; the title attribute carries it. */
+abbr[title] {
+  text-decoration: underline dotted var(--rule-hairline);
+  text-underline-offset: 2px;
+  cursor: help;
+}
+
 /* Filter above a table. */
 .filter {
   display: flex;
@@ -655,6 +665,11 @@ svg { display: block; max-width: 100%; height: auto; }
 svg text { font-family: var(--font-body); }
 svg .svg-mono { font-family: var(--font-mono); }
 
+/* A diagram scaled down to phone width is unreadable — 10px labels land near
+   4px. Below this floor the diagram keeps its size and scrolls inside its own
+   container instead, which is what the container is for. */
+figure > .scroller > svg { min-width: 720px; }
+
 /* Hand-authored diagram vocabulary. Linework only — DESIGN.md §9 rejected rope
    textures and knot iconography; what is left is one hairline and one hue. */
 .dg-zone {
@@ -687,7 +702,9 @@ svg .svg-mono { font-family: var(--font-mono); }
 .dg-head--strong { fill: var(--hemp); }
 .dg-edge { fill: var(--chalk-dim); font-size: 10px; }
 .dg-bnd { fill: var(--st-fail); font-size: 10px; font-weight: 700; }
-.dg-step { fill: var(--hemp); font-size: 11px; font-weight: 700; }
+/* --chalk rather than --hemp: these are small text, and DESIGN.md §10.2 rules
+   --hemp out as a text colour in light mode at 4.47:1. */
+.dg-step { fill: var(--chalk); font-size: 11px; font-weight: 700; }
 
 /* --------------------------------------------------------------------------
    Next / previous
