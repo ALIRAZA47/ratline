@@ -29,7 +29,9 @@ Auth, org/team/project model, the can() function with 100% branch coverage, hash
 
 ## In progress
 
-_None._
+| Task | Age | Owner | Risk | Acceptance | Title |
+| --- | ---: | --- | --- | ---: | --- |
+| `RL-M2-002` | 0d | agent | **high** | 4/4 | Define the enumerated operation catalogue shared by both sides |
 
 ## Blocked
 
@@ -71,13 +73,13 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 
 | Suite | Passing | Rate |
 | --- | ---: | ---: |
-| Unit | 413 / 413 | 100% |
+| Unit | 422 / 422 | 100% |
 | Integration | not measured | — |
 | Authorization matrix | 191 / 191 | 100% |
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | 100% | must be 100% |
 
-Measured 2026-08-04T07:22:32.355Z.
+Measured 2026-08-04T08:05:55.706Z.
 
 ### Authorization matrix (role × endpoint × subject)
 
@@ -112,7 +114,8 @@ CI: **green** at `18cca248` (2026-08-03T19:25:43Z)
 
 | Status | Count |
 | --- | ---: |
-| todo | 107 |
+| todo | 106 |
+| in-progress | 1 |
 | review | 4 |
 | done | 70 |
 | **all** | **181** |

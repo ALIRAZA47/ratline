@@ -75,6 +75,13 @@ cmd_verify() {
 	need_go
 	failed=0
 
+	# The generated catalogue first: everything below tests code that assumes the
+	# two halves agree, so a stale copy makes the rest of this misleading rather
+	# than merely incomplete.
+	say "== generated catalogue =="
+	if "$ROOT/scripts/gen-agent-protocol" --check; then :; else failed=1; fi
+
+	say ""
 	say "== gofmt =="
 	unformatted=$( cd "$MODULE" && gofmt -l . )
 	if [ -n "$unformatted" ]; then

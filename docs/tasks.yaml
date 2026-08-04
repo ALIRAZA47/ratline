@@ -1530,21 +1530,29 @@
 - id: RL-M2-002
   title: Define the enumerated operation catalogue shared by both sides
   milestone: M2
-  status: todo
+  status: in-progress
   owner: agent
   estimate: L
   depends_on: [RL-M2-001]
   blocks: [RL-M2-003, RL-M2-008]
   risk: high
+  started_at: 2026-08-04
   acceptance:
     - Every operation the agent will ever perform is declared with typed arguments in one schema
     - Control plane and agent types are generated from that schema so they cannot drift
     - There is no operation that accepts a free-form command
     - A test asserts the agent rejects an operation name outside the catalogue
   artifacts:
-    - test/security/agent_operation_catalogue_test.go
+    - agent/internal/protocol/catalogue_test.go
+    - test/security/agent_operation_catalogue.test.ts
   decisions: [2, 4]
+  acceptance_met: [1, 2, 3, 4]
+  notes: |
+    2026-08-04 — 2026-08-04 — ARTIFACT PATH CORRECTED, and this is a real correction rather than a convenience. The planned path was test/security/agent_operation_catalogue_test.go, which cannot work: Go requires a _test.go file to live in the package it tests, and test/ is outside the agent module, so a file there would never be compiled or run — a security suite that silently does nothing, which is worse than an inconvenient path. Both halves are recorded instead, and they are not redundant: ADR 0004 requires each party across the boundary to validate independently, so each side asserts its own checking. The TypeScript half additionally asserts properties of the SOURCE that Go cannot see — that the generated copy is current, and that no pattern uses a construct RE2 would reject.
 
+    2026-08-04 — 2026-08-04 — Acceptance 1 read as being about the MECHANISM rather than a promise that no operation is ever added. Thirteen operations cover M2's scope; M3 will add release and rollback. What is met and enforced is that nothing operates outside the schema: Accept() resolves against the catalogue and returns ErrUnknownOperation with a zero Operation, so a caller ignoring the error receives nothing usable. Adding an operation means editing the schema and regenerating, which is the point.
+    2026-08-04 — 2026-08-04 — Acceptance 3 is asserted against the argument VOCABULARY, not the operation list. Reviewing the list would miss a string argument named 'options', which is a free-form command with better manners. Verified by three mutations: (1) editing the source without regenerating fails the drift check; (2) adding a 'shell_command' kind fails the word scan on BOTH sides independently; (3) adding an 'options' kind with a length limit and nothing else PASSES the word scan and still fails the constrains-nothing check — which is the mutation that matters, because it proves the guarantee holds independent of naming.
+    2026-08-04 — 2026-08-04 — Two defects my own tests found. The path_in_site pattern excluded dots entirely, reasoning that every traversal trick needs one; it also excluded every filename with an extension, so the validator refused all legitimate input — caught by the single test asserting a well-formed instruction is ACCEPTED, which exists because a validator failing closed on everything looks exactly like one that works until somebody uses it. And the two enumeration kinds carried no length bound, so the length check (which runs first, deliberately) was skipped for them.
 - id: RL-M2-003
   title: Implement the signed instruction envelope
   milestone: M2

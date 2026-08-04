@@ -225,6 +225,19 @@ jobs:
       # bytes — the claim ADR 0002's checksum-before-execute bootstrap depends
       # on. Running the script rather than inlining the steps keeps CI and a
       # developer's terminal executing the same checks in the same order.
+      # Node as well as Go, because the drift check reads the TypeScript catalogue
+      # that generates the agent's copy of it.
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+
+      # Acceptance 2 of RL-M2-002. A generator makes the two sides agree when
+      # somebody remembers to run it; this is what makes "cannot drift" true. A
+      # stale copy here means the control plane signs instructions the agent
+      # refuses, which would present as a broken host rather than as a stale file.
+      - name: Catalogue is not stale
+        run: ./scripts/gen-agent-protocol --check
+
       - name: Verify
         run: ./scripts/agent verify
 
