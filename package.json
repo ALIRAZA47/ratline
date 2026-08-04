@@ -34,7 +34,8 @@
     "@fontsource/jetbrains-mono": "5.3.0",
     "@fontsource/public-sans": "5.3.0",
     "@hono/node-server": "^2.0.12",
-    "hono": "^4.12.33",
+    "@peculiar/x509": "^2.0.0",
+    "hono": "^4.13.0",
     "pg": "^8.22.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
