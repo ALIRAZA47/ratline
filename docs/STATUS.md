@@ -9,7 +9,7 @@ Generated 2026-08-04.
 | --- | --- | ---: | ---: | ---: |
 | **M0** Plan | `########################` 100% | 26 | 26 | 0 |
 | **M1** Control plane skeleton | `###################-----` 78% | 46 | 59 | 6 |
-| **M2** Agent and first host | `####--------------------` 17% | 5 | 29 | 16 |
+| **M2** Agent and first host | `#####-------------------` 21% | 6 | 29 | 15 |
 | **M3** Static sites end to end | `------------------------` 0% | 0 | 27 | 18 |
 | **M4** Node and Bun apps | `------------------------` 0% | 0 | 15 | 10 |
 | **M5** RBAC completion | `------------------------` 0% | 0 | 7 | 6 |
@@ -78,7 +78,7 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | 100% | must be 100% |
 
-Measured 2026-08-04T10:29:01.630Z.
+Measured 2026-08-04T14:40:35.828Z.
 
 ### Authorization matrix (role × endpoint × subject)
 
@@ -113,7 +113,7 @@ CI: **green** at `18cca248` (2026-08-03T19:25:43Z)
 
 | Status | Count |
 | --- | ---: |
-| todo | 104 |
+| todo | 103 |
 | review | 5 |
-| done | 77 |
+| done | 78 |
 | **all** | **186** |

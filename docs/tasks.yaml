@@ -1588,21 +1588,31 @@
 - id: RL-M2-004
   title: Manage the control plane instruction signing key
   milestone: M2
-  status: todo
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M2-003]
   blocks: [RL-M2-005]
   risk: high
+  started_at: 2026-08-04
+  done_at: 2026-08-04
   acceptance:
     - The signing key is generated on first run and never has a default
     - It is stored separately from the database with restrictive permissions
     - Rotation is supported with an overlap window so agents accept both keys during rollover
     - A test confirms an envelope signed by an unknown key is refused
   artifacts:
-    - test/security/signing_key_rotation_test.go
+    - test/security/instruction_key_rotation.test.ts
   decisions: [2, 6]
+  acceptance_met: [1, 2, 3, 4]
+  notes: |
+    2026-08-04 — 2026-08-04 — ROTATION LANDED. Three files: instruction-signing.pem is what signs now, instruction-signing.previous.pem is the outgoing key present only during an overlap, and instruction-signing.rotated-at records when. The deadline is derived from that stamp and NOT from the previous key's mtime — an mtime does not survive a copy, a restore, or a container rebuild, and every one of those would silently move the deadline in the direction of accepting a retired key for longer. A timestamp the rotation wrote is a fact; an mtime is an artefact of the filesystem.
 
+    2026-08-04 — 2026-08-04 — THE OVERLAP MUST OUTLAST AN ENVELOPE, and that is enforced rather than documented. An envelope signed one millisecond before rotation is valid for up to MAX_VALIDITY_MS afterwards, so an overlap shorter than that would have an instruction already signed and already sent refused partway through its own validity window — and the operator would see a deploy fail for a reason nothing in the logs connects to a key change. rotateInstructionKey refuses an overlap below MIN_OVERLAP_MS, and a test asserts MIN_OVERLAP_MS equals MAX_VALIDITY_MS, which is what actually stops the two constants drifting across module boundaries.
+    2026-08-04 — 2026-08-04 — Three refusals that each prevent a different failure. A SECOND rotation during an open overlap is refused, because chaining would leave three keys able to sign an instruction to every host and each extra accepted key is another one an attacker only has to obtain one of. PRUNING during an open overlap is refused, because an agent that has not learned the current key would have nothing it accepts and no recovery but re-enrolment — --force exists for an operator who knows every host is current, and is a flag rather than the default because being wrong bricks every agent that was behind. And a STALE previous file with a closed window is not accepted: both the file and the deadline are checked, not either, because a leftover file would otherwise extend acceptance indefinitely through a cleanup that never ran.
+    2026-08-04 — 2026-08-04 — The write order is deliberate and the reverse of convenient: outgoing key MOVED to its slot first, then the new key written, then the stamp. There is no instant where the current key is replaced and the outgoing one is not yet recoverable, and a crash between steps leaves no stamp — which acceptedInstructionKeys reads as no overlap, so the installation refuses rather than accepting a key it cannot account for. A loud failure needing an operator is the right outcome for a half-completed key rotation.
+    2026-08-04 — 2026-08-04 — Acceptance 4's specific gap is now covered. The agent suite already proved a FORGED signature is refused; what nothing covered was an envelope CORRECTLY SIGNED by a key the agent does not hold, which is a different claim and the one that fails if verification ever falls back to key material the envelope carries. The test builds a real signature over real canonical bytes with a stranger's key and asserts that key is in neither slot, so the only thing between it and acceptance is the key set itself. Mutation-verified two ways: accepting previous regardless of the deadline fails two tests, and replacing the key instead of moving it fails fifteen.
+    2026-08-04 — 2026-08-04 — Rotation is an OPERATOR ACTION via ./scripts/keys, not an API endpoint, and that is a decision. An endpoint would let anyone reaching the dashboard replace the key authorising every instruction to every host, so the authority is the same as for claiming an installation: shell access to the machine holding the key. No key material is ever printed — status shows a sha256 fingerprint of the PUBLIC key, which discloses nothing that key was not already public for, and is what an operator compares against what an agent reports.
 - id: RL-M2-005
   title: Implement agent enrolment and mutual transport authentication
   milestone: M2
