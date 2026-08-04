@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Overview — Ratline</title>
+<meta name="description" content="Ratline is a self-hosted deployment and server management platform. What it is, what it covers, and where the build stands.">
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/site.css">
+<script defer src="assets/app.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<div class="shroud">
+
+  <nav class="rail" aria-label="Documentation sections">
+    <a class="rail__brand" href="index.html">
+      <span class="rail__wordmark display">RATLINE</span>
+    </a>
+    <div class="rail__group">
+      <p class="rail__group-label label">Reference</p>
+      <ul class="rail__list">
+        <li><a class="rail__link" href="index.html"><span class="rail__num">01</span> Overview</a></li>
+        <li><a class="rail__link" href="constraints.html"><span class="rail__num">02</span> Constraints</a></li>
+        <li><a class="rail__link" href="architecture.html"><span class="rail__num">03</span> Architecture</a></li>
+        <li><a class="rail__link" href="authorization.html"><span class="rail__num">04</span> Authorization</a></li>
+        <li><a class="rail__link" href="agent.html"><span class="rail__num">05</span> Agent protocol</a></li>
+        <li><a class="rail__link" href="threat-model.html"><span class="rail__num">06</span> Threat model</a></li>
+        <li><a class="rail__link" href="decisions.html"><span class="rail__num">07</span> Decisions</a></li>
+        <li><a class="rail__link" href="roadmap.html"><span class="rail__num">08</span> Roadmap</a></li>
+        <li><a class="rail__link" href="workflow.html"><span class="rail__num">09</span> Workflow</a></li>
+        <li><a class="rail__link" href="defects.html"><span class="rail__num">10</span> Defects</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="column">
+    <header class="topbar">
+      <div class="topbar__row">
+        <nav class="crumbs" aria-label="Breadcrumb">
+          <a href="index.html">ratline</a>
+          <span class="crumbs__sep" aria-hidden="true">/</span>
+          <span class="crumbs__here">overview</span>
+        </nav>
+        <span class="topbar__spacer"></span>
+        <div class="search">
+          <label class="skip" for="site-search">Search the documentation</label>
+          <input class="search__input" id="site-search" type="search" placeholder="Search — press / or Ctrl-K"
+                 autocomplete="off" role="combobox" aria-expanded="false" aria-controls="site-search-results">
+          <ul class="search__results" id="site-search-results" hidden></ul>
+        </div>
+        <button class="themetoggle" id="theme-toggle" type="button">Theme: System</button>
+      </div>
+      <div class="tension" aria-hidden="true"></div>
+    </header>
+
+    <main class="page" id="main">
+      <h1>Ratline</h1>
+      <p class="lede">A single control plane that connects to VPS hosts you already own, provisions a hardened
+      web stack on them, and gives a team a clean interface to deploy static sites, Node.js apps and Bun apps
+      from Git — with role-based access control that holds up, and managed SSH access to the underlying
+      machines.</p>
+
+      <div class="note" data-status="working">
+        <span class="note__label">Read this first</span>
+        <p>The repository is mid-build. M0 (plan) and M1 (control plane skeleton) are closed; M2 (the host
+        agent) is in progress. Nothing on this site describes a feature as working unless a file in the
+        repository shows it working, and every page ends with the files its claims came from.</p>
+      </div>
+
+      <h2 id="what-it-is">What Ratline is</h2>
+
+      <p>Ratline sits in the same category as Laravel Forge, Moss.sh and CloudPanel for provisioning and
+      hosting, and Coolify or Dokploy for push-to-deploy. The brief states the difference plainly: two
+      things are differentiators and everything else is table stakes executed well.</p>
+
+      <p>It is aimed at engineering teams of two to twenty running their own infrastructure on Hetzner,
+      DigitalOcean, Vultr or bare metal — competent with Linux, unwilling to hand-write Nginx virtual hosts
+      and systemd units per project. Internal tools, marketing sites and production apps share one fleet, so
+      isolation and permissions matter more than they do for a single developer.</p>
+
+      <div class="note" data-status="attention">
+        <span class="note__label">The design tiebreaker</span>
+        <p>When in doubt, favour the team of eight with a production incident at 2am over the solo developer
+        deploying a side project. Density, auditability and blast-radius control beat onboarding smoothness.
+        <span class="pathref">docs/BRIEF.md §3.3</span></p>
+      </div>
+
+      <h3 id="differentiators">The two differentiators</h3>
+
+      <div class="grid grid--2">
+        <div class="card">
+          <p class="card__title">A privilege architecture that never hands the control plane root</p>
+          <p>The agent on each host executes only enumerated operations with typed arguments. No operation
+          carries a shell command. The agent itself runs unprivileged, and a separate root helper
+          re-validates every argument independently rather than trusting it — so the property survives agent
+          compromise, not only control plane compromise.</p>
+          <p><a href="agent.html">The agent protocol</a> · <a href="constraints.html#c1">C1</a></p>
+        </div>
+        <div class="card">
+          <p class="card__title">Authorization enforced at the data-access layer</p>
+          <p>Every query is tenant-scoped inside the repository function, the unscoped variant cannot be
+          written, and Postgres row-level security holds independently of application code. A handler that
+          forgets its check still returns nothing.</p>
+          <p><a href="authorization.html">The authorization model</a> · <a href="constraints.html#c3">C3</a></p>
+        </div>
+      </div>
+
+      <p>Both differentiators are stated in <span class="pathref">README.md</span> and derived from the six
+      hard constraints, which the brief calls requirements rather than preferences. Violating one is grounds
+      for rejecting the work regardless of how well it functions.</p>
+
+      <h2 id="scope">In scope for phase 1</h2>
+
+      <div class="grid grid--3">
+        <div class="card">
+          <p class="card__title">Static sites</p>
+          <p>Plain HTML, CSS and JavaScript, plus build-step SPAs and static site generators: Vite, Astro,
+          Next static export, the SvelteKit static adapter, Nuxt generate, Eleventy, Hugo.</p>
+        </div>
+        <div class="card">
+          <p class="card__title">Node.js server apps</p>
+          <p>Next.js, Nuxt, Remix / React Router, NestJS, Express, Hono, Fastify.</p>
+        </div>
+        <div class="card">
+          <p class="card__title">Bun apps</p>
+          <p><code>Bun.serve</code>, Elysia, Hono on Bun, and Bun used purely as a build tool for any of the
+          above.</p>
+        </div>
+      </div>
+
+      <p>Runtimes are pinned per site: several Node and Bun versions coexist on one host with no global
+      installs. A runtime upgrade is a deliberate, per-site, rollback-able action.</p>
+
+      <h3 id="out-of-scope">Out of scope for v1</h3>
+
+      <p>The brief lists these as things to design for and not build: managed databases, email hosting,
+      Docker or container workloads, Python, PHP and Ruby runtimes, multi-region, a template marketplace,
+      billing, and a public API beyond what the interface itself consumes.</p>
+
+      <div class="note" data-status="attention">
+        <span class="note__label">One scope change is pending</span>
+        <p>Managed databases were requested after M0 and are planned as <a href="roadmap.html#m7">M7</a>
+        under <a href="decisions.html#adr-0013">ADR 0013</a>, which amends §5.2. Whether M7 is v1 scope or
+        follows v1 has not been decided. Sixteen tasks wait on that answer.
+        <span class="pathref">docs/gates/M1.md, docs/RISKS.md R-14</span></p>
+      </div>
+
+      <p>The brief's own instruction about the seam is worth quoting because it shapes the codebase: if you
+      find yourself building an abstraction so databases can be added later, stop — leave a clean seam and a
+      decision record, not an implementation.</p>
+
+      <p>There is also a hard product boundary. Ratline is not a PaaS and not a hosting business. There is no
+      multi-tenancy across untrusted customers: tenants are teams inside one organization that broadly trust
+      each other but should not have unnecessary access. No Kubernetes. No attempt to abstract away Linux —
+      a competent operator should always be able to SSH in and recognise what Ratline did.</p>
+
+      <h2 id="status">Where the build stands</h2>
+
+      <p>The figures below are read from <span class="pathref">docs/STATUS.md</span>, which is generated by
+      <code>./scripts/tasks render</code> and never hand-edited, and from
+      <span class="pathref">.ratline/metrics.json</span>, which the test runner writes. The dashboard was
+      generated 2026-08-04 and measured at 2026-08-04T08:05:55Z.</p>
+
+      <div class="scroller">
+        <table>
+          <caption class="skip">Milestone progress, from docs/STATUS.md</caption>
+          <thead>
+            <tr>
+              <th scope="col">Milestone</th>
+              <th scope="col">Progress</th>
+              <th scope="col" class="num">Done</th>
+              <th scope="col" class="num">Total</th>
+              <th scope="col" class="num">Open high-risk</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row"><a href="roadmap.html#m0">M0 Plan</a></th>
+              <td><span class="meter"><span class="meter__fill" style="width:100%"></span></span></td>
+              <td class="num">26</td><td class="num">26</td><td class="num">0</td></tr>
+            <tr><th scope="row"><a href="roadmap.html#m1">M1 Control plane skeleton</a></th>
+              <td><span class="meter"><span class="meter__fill" style="width:80%"></span></span></td>
+              <td class="num">43</td><td class="num">54</td><td class="num">6</td></tr>
+            <tr><th scope="row"><a href="roadmap.html#m2">M2 Agent and first host</a></th>
+              <td><span class="meter"><span class="meter__fill" style="width:7%"></span></span></td>
+              <td class="num">2</td><td class="num">29</td><td class="num">19</td></tr>
+            <tr><th scope="row"><a href="roadmap.html#m3">M3 Static sites end to end</a></th>
+              <td><span class="meter"><span class="meter__fill" style="width:0"></span></span></td>
+              <td class="num">0</td><td class="num">27</td><td class="num">18</td></tr>
+            <tr><th scope="row"><a href="roadmap.html#m4">M4 Node and Bun apps</a></th>
+              <td><span class="meter"><span class="meter__fill" style="width:0"></span></span></td>
+              <td class="num">0</td><td class="num">15</td><td class="num">10</td></tr>
+            <tr><th scope="row"><a href="roadmap.html#m5">M5 RBAC completion</a></th>
+              <td><span class="meter"><span class="meter__fill" style="width:0"></span></span></td>
+              <td class="num">0</td><td class="num">7</td><td class="num">6</td></tr>
+            <tr><th scope="row"><a href="roadmap.html#m6">M6 SSH access</a></th>
+              <td><span class="meter"><span class="meter__fill" style="width:0"></span></span></td>
+              <td class="num">0</td><td class="num">7</td><td class="num">7</td></tr>
+            <tr><th scope="row"><a href="roadmap.html#m7">M7 Managed databases</a></th>
+              <td><span class="meter"><span class="meter__fill" style="width:0"></span></span></td>
+              <td class="num">0</td><td class="num">16</td><td class="num">15</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="grid grid--2">
+        <div class="card">
+          <p class="card__title">Test health</p>
+          <dl class="facts">
+            <dt>Unit</dt><dd>422 / 422 <span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">●</span> passing</span></dd>
+            <dt>Authorization suites</dt><dd>191 / 191 test cases</dd>
+            <dt>Matrix cells</dt><dd>630 / 630</dd>
+            <dt>Integration</dt><dd><span class="status" data-status="idle"><span class="status__glyph" aria-hidden="true">○</span> not measured</span></dd>
+            <dt><code>src/authz/**</code> lines</dt><dd>100% — gate is 100%</dd>
+            <dt><code>can()</code> branches</dt><dd>100% — gate is 100%</dd>
+          </dl>
+        </div>
+        <div class="card">
+          <p class="card__title">Security findings and build</p>
+          <dl class="facts">
+            <dt>Critical</dt><dd>0</dd>
+            <dt>High</dt><dd>0</dd>
+            <dt>Medium</dt><dd>0</dd>
+            <dt>Gate check</dt><dd><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">●</span> pass — critical + high must be zero</span></dd>
+            <dt>CI</dt><dd><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">●</span> green</span> at <code>18cca248</code>, 2026-08-03T19:25:43Z</dd>
+            <dt>Tasks</dt><dd>71 done, 4 in review, 106 todo, 181 total</dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="note" data-status="attention">
+        <span class="note__label">Three test counts disagree across the repository</span>
+        <p><span class="pathref">.ratline/metrics.json</span> reports 422 unit test cases plus 191 in
+        <code>test/authz</code>. <span class="pathref">docs/gates/M1.md</span> says 598 tests and
+        <span class="pathref">README.md</span> says 602. The gate report and the README are earlier
+        snapshots; the generated metrics file is the one that is rewritten on every run. Treat the metrics
+        file as current and the other two as dated. Listed in full on the
+        <a href="defects.html#contradictions">defects page</a>.</p>
+      </div>
+
+      <h2 id="vocabulary">Vocabulary</h2>
+
+      <p>One vocabulary runs across code, interface copy and documentation. The glossary is enforced by
+      review rather than by a tool, and the words it forbids are as load-bearing as the words it defines.</p>
+
+      <div class="scroller">
+        <div class="filter">
+          <label class="skip" for="glossary-filter">Filter the glossary</label>
+          <input id="glossary-filter" type="search" placeholder="Filter terms" data-filter-for="glossary-table"
+                 data-filter-count="glossary-count" data-filter-empty="glossary-empty" autocomplete="off">
+          <span class="filter__count" id="glossary-count" aria-live="polite"></span>
+        </div>
+        <table id="glossary-table">
+          <caption class="skip">Glossary terms, from docs/GLOSSARY.md</caption>
+          <thead><tr><th scope="col">Term</th><th scope="col">Meaning</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Host</th><td>A machine Ratline manages. Never “server” in interface copy, to avoid confusion with the web server.</td></tr>
+            <tr><th scope="row">Site</th><td>A deployable unit — one app or static bundle, one domain set, one systemd unit.</td></tr>
+            <tr><th scope="row">Release</th><td>An immutable timestamped build directory.</td></tr>
+            <tr><th scope="row">Deployment</th><td>The act of producing and activating a release. “Deploy” is the verb; the noun is “deployment”.</td></tr>
+            <tr><th scope="row">Grant</th><td>A role assignment scoped to a node in the hierarchy, optionally time-bound.</td></tr>
+            <tr><th scope="row">Permission</th><td>The raw capability a role composes. Distinct from a grant, which is the assignment.</td></tr>
+            <tr><th scope="row">Agent</th><td>The Ratline binary running on a host.</td></tr>
+            <tr><th scope="row">Break-glass</th><td>Emergency temporary elevation. Temporary Admin, never Owner.</td></tr>
+            <tr><th scope="row">Control plane</th><td>The web application, API, workers and database. Never runs customer workloads. Not “panel”, “backend” or “app”.</td></tr>
+            <tr><th scope="row">Operation</th><td>One entry in the enumerated catalogue the agent will execute, with typed arguments. Not “command”, which implies a shell string.</td></tr>
+            <tr><th scope="row">Envelope</th><td>A signed, typed, nonce'd, expiring instruction carrying exactly one operation.</td></tr>
+            <tr><th scope="row">Catalogue</th><td>The complete set of operations. Closed by construction.</td></tr>
+            <tr><th scope="row">Privileged helper</th><td><code>ratline-privd</code> — the root, socket-activated, network-less process that performs privileged operations and distrusts the agent.</td></tr>
+            <tr><th scope="row">Scope path</th><td>The materialised Organization → Team → Project → Environment path on a hierarchy node.</td></tr>
+            <tr><th scope="row">Authorization context</th><td>The branded value carrying actor and tenant, required as the first argument of every repository function.</td></tr>
+            <tr><th scope="row">Principal</th><td>The name inside an SSH certificate that a host authorises against, derived from a grant.</td></tr>
+            <tr><th scope="row">Service identity</th><td>A named non-human actor with its own permissions. Automation is never anonymous.</td></tr>
+            <tr><th scope="row">Crown jewel</th><td>One of the three keys whose compromise is unrecoverable without rotation: SSH authority, instruction signing, secret wrapping.</td></tr>
+            <tr><th scope="row">Tension line</th><td>The 2px stateful rule beneath the top bar; the deploy spine on the live deployment screen.</td></tr>
+            <tr><th scope="row">Lashing</th><td>The notch marking the active rail item, and a step tick on the deploy spine.</td></tr>
+            <tr><th scope="row">Session</th><td>One person's authenticated access to one organization. A person in three organizations holds three sessions.</td></tr>
+            <tr><th scope="row">Rotation</th><td>Replacing a session identifier with a new one and revoking the old, on login and on any privilege change. Never an edit to the existing row.</td></tr>
+            <tr><th scope="row">Engine</th><td>An installed database server on a data host. Not “database”, which is one logical database inside it. M7.</td></tr>
+            <tr><th scope="row">Data host</th><td>A host whose role is running database engines. Sites are refused on one by default. M7.</td></tr>
+            <tr><th scope="row">Label</th><td>The human-facing name an operator gives a database. Never becomes an identifier. M7.</td></tr>
+          </tbody>
+        </table>
+        <p class="filter__empty" id="glossary-empty" hidden></p>
+      </div>
+
+      <h3 id="where-to-start">How to read this site</h3>
+
+      <p>Read in rail order for the whole system. The short paths:</p>
+
+      <ul>
+        <li><strong>New engineer.</strong> <a href="constraints.html">Constraints</a> →
+          <a href="architecture.html">Architecture</a> → <a href="authorization.html">Authorization</a> →
+          <a href="workflow.html">Workflow</a>.</li>
+        <li><strong>Reviewer checking a claim.</strong> <a href="authorization.html#matrix">The matrix</a>,
+          <a href="threat-model.html#risks">the risk register</a> and
+          <a href="defects.html">known defects</a> carry the numbers and their sources.</li>
+        <li><strong>Deciding something.</strong> <a href="decisions.html">All 18 decision records</a>, every
+          one <span class="badge badge--proposed">proposed</span>, plus
+          <a href="defects.html#open-questions">what the owner is being asked for</a>.</li>
+      </ul>
+
+      <section class="sources" aria-labelledby="sources-heading">
+        <h2 id="sources-heading" class="label" style="border:0;padding:0;margin:0 0 var(--space-xs)">Sources for this page</h2>
+        <ul>
+          <li><span class="pathref">docs/BRIEF.md</span> §1, §3.1–§3.4, §5.1, §5.2 — identity, positioning, audience, scope</li>
+          <li><span class="pathref">README.md</span> — the two differentiators, requirements</li>
+          <li><span class="pathref">docs/STATUS.md</span> — milestone table, test health, findings, build</li>
+          <li><span class="pathref">.ratline/metrics.json</span> — unit 422/422, authz 191/191, 630 cells, coverage</li>
+          <li><span class="pathref">docs/GLOSSARY.md</span> — every term in the table above</li>
+          <li><span class="pathref">docs/RISKS.md</span> R-14, <span class="pathref">docs/gates/M1.md</span> — the M7 scope question</li>
+        </ul>
+      </section>
+
+      <nav class="pager" aria-label="Next section">
+        <a href="constraints.html"><span class="label">Next</span> The six hard constraints</a>
+      </nav>
+    </main>
+
+    <footer class="page" style="padding-top:0">
+      <p class="dim" style="font-size:var(--text-xs)">Written from the repository at
+      <span class="pathref">/Users/ark/Desktop/FunProjects/moss-clone</span>. Design tokens copied from
+      <span class="pathref">src/web/lib/design/</span>; no font files or scripts are loaded from any external
+      origin.</p>
+    </footer>
+  </div>
+</div>
+</body>
+</html>

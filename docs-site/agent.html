@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The agent protocol — Ratline</title>
+<meta name="description" content="The signed instruction envelope, the canonical bytes a signature covers, the verification order, and the closed operation catalogue with its argument-kind vocabulary.">
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/site.css">
+<script defer src="assets/app.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<div class="shroud">
+
+  <nav class="rail" aria-label="Documentation sections">
+    <a class="rail__brand" href="index.html">
+      <span class="rail__wordmark display">RATLINE</span>
+    </a>
+    <div class="rail__group">
+      <p class="rail__group-label label">Reference</p>
+      <ul class="rail__list">
+        <li><a class="rail__link" href="index.html"><span class="rail__num">01</span> Overview</a></li>
+        <li><a class="rail__link" href="constraints.html"><span class="rail__num">02</span> Constraints</a></li>
+        <li><a class="rail__link" href="architecture.html"><span class="rail__num">03</span> Architecture</a></li>
+        <li><a class="rail__link" href="authorization.html"><span class="rail__num">04</span> Authorization</a></li>
+        <li><a class="rail__link" href="agent.html"><span class="rail__num">05</span> Agent protocol</a></li>
+        <li><a class="rail__link" href="threat-model.html"><span class="rail__num">06</span> Threat model</a></li>
+        <li><a class="rail__link" href="decisions.html"><span class="rail__num">07</span> Decisions</a></li>
+        <li><a class="rail__link" href="roadmap.html"><span class="rail__num">08</span> Roadmap</a></li>
+        <li><a class="rail__link" href="workflow.html"><span class="rail__num">09</span> Workflow</a></li>
+        <li><a class="rail__link" href="defects.html"><span class="rail__num">10</span> Defects</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="column">
+    <header class="topbar">
+      <div class="topbar__row">
+        <nav class="crumbs" aria-label="Breadcrumb">
+          <a href="index.html">ratline</a>
+          <span class="crumbs__sep" aria-hidden="true">/</span>
+          <span class="crumbs__here">agent protocol</span>
+        </nav>
+        <span class="topbar__spacer"></span>
+        <div class="search">
+          <label class="skip" for="site-search">Search the documentation</label>
+          <input class="search__input" id="site-search" type="search" placeholder="Search — press / or Ctrl-K"
+                 autocomplete="off" role="combobox" aria-expanded="false" aria-controls="site-search-results">
+          <ul class="search__results" id="site-search-results" hidden></ul>
+        </div>
+        <button class="themetoggle" id="theme-toggle" type="button">Theme: System</button>
+      </div>
+      <div class="tension" aria-hidden="true"></div>
+    </header>
+
+    <main class="page" id="main">
+      <h1>The agent protocol</h1>
+      <p class="lede">The control plane cannot ask a host to run a command, because there is no way to say
+      one. It can only name an operation from a closed catalogue and supply arguments that fit a vocabulary in
+      which no free-form command is expressible. The envelope carrying that request is signed, addressed,
+      expiring and single-use, and the order the agent checks those properties in is itself a security
+      property.</p>
+
+      <div class="grid grid--3">
+        <div class="card"><p class="label">Operations</p><p class="display" style="font-size:var(--text-xxl)">13</p><p class="dim">10 performed by the root helper, 3 by the unprivileged agent.</p></div>
+        <div class="card"><p class="label">Argument kinds</p><p class="display" style="font-size:var(--text-xxl)">13</p><p class="dim">Constrained identifiers, bounded numbers, enumerations, validated blobs.</p></div>
+        <div class="card"><p class="label">Kinds that can carry a command</p><p class="display" style="font-size:var(--text-xxl)">0</p><p class="dim">A test fails if <code>text</code>, <code>args</code>, <code>command</code>, <code>flags</code> or <code>env</code> ever appears.</p></div>
+      </div>
+
+      <h2 id="envelope">The signed instruction envelope</h2>
+
+      <p>Every instruction is one envelope carrying exactly one operation:</p>
+
+<pre><code>{
+  <span class="t-str">"operation"</span>:      <span class="t-str">"service.control"</span>,
+  <span class="t-str">"arguments"</span>:      { <span class="t-str">"service"</span>: <span class="t-str">"rl-marketing-www"</span>, <span class="t-str">"action"</span>: <span class="t-str">"reload"</span> },
+  <span class="t-str">"nonce"</span>:          <span class="t-str">"&lt;32 random bytes, hex&gt;"</span>,
+  <span class="t-str">"issued_at"</span>:      <span class="t-num">1754308800000</span>,
+  <span class="t-str">"expires_at"</span>:     <span class="t-num">1754309100000</span>,
+  <span class="t-str">"target_host_id"</span>: <span class="t-str">"&lt;this host&gt;"</span>,
+  <span class="t-str">"signature"</span>:      <span class="t-str">"&lt;Ed25519 over canonicalBytes, base64&gt;"</span>,
+  <span class="t-str">"key_id"</span>:         <span class="t-str">"&lt;which key signed — a hint, never trusted&gt;"</span>
+}</code></pre>
+
+      <dl class="facts">
+        <dt>Signature</dt><dd>Ed25519, using the control plane's instruction key, which is stored as a file outside the database.</dd>
+        <dt>Nonce</dt><dd>32 random bytes, hex encoded. The wire form is therefore 64 characters, and the agent refuses anything else as malformed.</dd>
+        <dt>Validity window</dt><dd>At most 5 minutes, enforced on both sides. A short window is what makes the nonce store bounded: the agent only has to remember a nonce until it expires, so the store's size is a function of the instruction rate within one window rather than of uptime.</dd>
+        <dt>Future skew</dt><dd>An issue stamp may sit at most 30 seconds ahead of the agent's local time. Not zero, because clocks differ and refusing every instruction from a host whose NTP drifted by a second would be worse than useless. Not large, because the issue-to-expiry window is what a replay has to land in.</dd>
+        <dt><code>key_id</code></dt><dd>Present so an agent holding two keys during a rotation overlap knows which to try first, and so a rotation that goes wrong names the key rather than reporting “bad signature” for everything. <strong>It is not trusted:</strong> the agent tries every key it accepts regardless, because a hint an attacker controls must not be allowed to select the verification key — naming a revoked key would otherwise be enough to have it used.</dd>
+      </dl>
+
+      <p>An agent that holds no accepted keys refuses everything rather than accepting everything. That is
+      written as its own branch, because a range over an empty key list falls straight through to “no key
+      matched”, and relying on that is relying on a coincidence.</p>
+
+      <h2 id="canonical-bytes">The signature is not over the JSON</h2>
+
+      <p>JSON is not a canonical encoding. Key order, whitespace, <code>\/</code> escaping, unicode escape
+      form and number formatting all vary between implementations, and two of them signing “the same object”
+      produce different bytes. Every protocol that has tried to fix this with a canonical-JSON profile has
+      produced a second specification to disagree about.</p>
+
+      <p>So the signature covers a length-prefixed binary encoding with one legal form per instruction. JSON
+      remains the transport, and the agent re-derives the canonical bytes from the fields it parsed before
+      verifying — so a JSON quirk cannot survive: any encoding difference lands as a signature mismatch, which
+      is a refusal rather than a divergence.</p>
+
+      <div class="grid grid--2">
+        <div class="card">
+          <p class="card__title">Why every field is length-prefixed</p>
+          <p>Concatenation without lengths is ambiguous, and ambiguity in signed bytes is forgery.
+          <code>{a: "bc"}</code> and <code>{ab: "c"}</code> both flatten to <code>abc</code>: one signature
+          would be valid for two different instructions. Length prefixes make the encoding injective, which is
+          the property a signature needs and the one easiest to lose by accident.</p>
+        </div>
+        <div class="card">
+          <p class="card__title">Why there is a domain-separation prefix</p>
+          <p>The same key must never produce a signature valid in two contexts. Without a prefix, an agent's
+          signed <em>response</em> could be replayed as an <em>instruction</em> if the field layouts ever
+          coincided — and “ever coincided” is a property of future code, not of this file.
+          <code>ratline-instruction-v1</code> names the context and the version, so a v2 envelope cannot be
+          verified as a v1 one either. It is written first and NUL-terminated, so the separator cannot be
+          confused with the start of a field.</p>
+        </div>
+      </div>
+
+      <p>Arguments are sorted by name before encoding, by <em>code unit</em> rather than by locale.
+      <code>localeCompare</code> would make the encoding depend on the machine's locale, which shows up as an
+      unverifiable instruction on one host and works everywhere else. The Go side sorts byte-wise to match.</p>
+
+      <p>The two implementations are independent —
+      <span class="pathref">src/agent/envelope.ts</span> and
+      <span class="pathref">agent/internal/protocol/envelope.go</span> — and are checked against each other by
+      committed test vectors rather than by inspection, because “these two functions agree” is not a property
+      source review establishes. <span class="pathref">scripts/gen-envelope-vectors.ts</span> produces them.</p>
+
+      <h2 id="order">The verification order is the security property</h2>
+
+      <p>Every step before the argument check exists so that an unauthenticated party cannot reach the
+      argument parsers at all. The order is asserted by a test that reads the source file, not merely written
+      down in it — comments do not hold an order in place across a refactor.</p>
+
+      <figure>
+        <div class="scroller">
+        <svg viewBox="0 0 880 420" width="880" height="420" role="img"
+             aria-label="The agent's verification order. First a shape check, then the signature, then the target host, then expiry, then the nonce, and only then the catalogue lookup and argument validation. Each step has its own refusal reason: malformed, bad signature, wrong host, expired or not yet valid or validity too long, replayed, and unknown operation.">
+          <defs>
+            <marker id="arw-ord" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path class="dg-head" d="M0,0 L8,4 L0,8 z"/>
+            </marker>
+          </defs>
+
+          <text class="dg-zonelabel" x="110" y="16">An envelope arrives on the mTLS connection</text>
+          <path class="dg-arrow" d="M405,20 L405,34" marker-end="url(#arw-ord)"/>
+
+          <text class="dg-step" x="96" y="62" text-anchor="end">0</text>
+          <rect class="dg-box" x="110" y="36" width="590" height="44" rx="3"/>
+          <text class="dg-title" x="124" y="56">Shape</text>
+          <text class="dg-sub" x="124" y="71">Nonce is 32 hex bytes; stamps present; expiry after issue. Reads no argument.</text>
+          <path class="dg-arrow" d="M700,58 L752,58" marker-end="url(#arw-ord)"/>
+          <text class="dg-sub svg-mono" x="758" y="61">ErrMalformed</text>
+
+          <path class="dg-arrow" d="M405,80 L405,92" marker-end="url(#arw-ord)"/>
+
+          <text class="dg-step" x="96" y="120" text-anchor="end">1</text>
+          <rect class="dg-box" x="110" y="94" width="590" height="44" rx="3"/>
+          <text class="dg-title" x="124" y="114">Signature, against every accepted key</text>
+          <text class="dg-sub" x="124" y="129">Arguments before this would hand an attacker the whole validation surface, keyless.</text>
+          <path class="dg-arrow" d="M700,116 L752,116" marker-end="url(#arw-ord)"/>
+          <text class="dg-sub svg-mono" x="758" y="119">ErrBadSignature</text>
+
+          <path class="dg-arrow" d="M405,138 L405,150" marker-end="url(#arw-ord)"/>
+
+          <text class="dg-step" x="96" y="178" text-anchor="end">2</text>
+          <rect class="dg-box" x="110" y="152" width="590" height="44" rx="3"/>
+          <text class="dg-title" x="124" y="172">Target host, compared in constant time</text>
+          <text class="dg-sub" x="124" y="187">Before the signature, guesses would leak this host's identity. The expected id is never logged.</text>
+          <path class="dg-arrow" d="M700,174 L752,174" marker-end="url(#arw-ord)"/>
+          <text class="dg-sub svg-mono" x="758" y="177">ErrWrongHost</text>
+
+          <path class="dg-arrow" d="M405,196 L405,208" marker-end="url(#arw-ord)"/>
+
+          <text class="dg-step" x="96" y="236" text-anchor="end">3</text>
+          <rect class="dg-box" x="110" y="210" width="590" height="52" rx="3"/>
+          <text class="dg-title" x="124" y="230">Expiry, skew and the validity ceiling</text>
+          <text class="dg-sub" x="124" y="245">Before the nonce, so a flood of already-dead envelopes cannot fill a bounded replay store.</text>
+          <text class="dg-sub" x="124" y="257">Before the signature, it would leak this host's clock offset — what a replay needs to aim.</text>
+          <path class="dg-arrow" d="M700,232 L752,232" marker-end="url(#arw-ord)"/>
+          <text class="dg-sub svg-mono" x="758" y="228">ErrExpired</text>
+          <text class="dg-sub svg-mono" x="758" y="240">ErrNotYetValid</text>
+          <text class="dg-sub svg-mono" x="758" y="252">ErrValidityTooLong</text>
+
+          <path class="dg-arrow" d="M405,262 L405,274" marker-end="url(#arw-ord)"/>
+
+          <text class="dg-step" x="96" y="302" text-anchor="end">4</text>
+          <rect class="dg-box" x="110" y="276" width="590" height="44" rx="3"/>
+          <text class="dg-title" x="124" y="296">Nonce — checked and recorded in one call</text>
+          <text class="dg-sub" x="124" y="311">A check-then-record pair leaves a window two concurrent copies both pass.</text>
+          <path class="dg-arrow" d="M700,298 L752,298" marker-end="url(#arw-ord)"/>
+          <text class="dg-sub svg-mono" x="758" y="301">ErrReplayed</text>
+
+          <path class="dg-arrow" d="M405,320 L405,332" marker-end="url(#arw-ord)"/>
+
+          <text class="dg-step" x="96" y="360" text-anchor="end">5</text>
+          <rect class="dg-box" x="110" y="334" width="590" height="52" rx="3"/>
+          <text class="dg-title" x="124" y="354">Only now: catalogue lookup, then arguments</text>
+          <text class="dg-sub" x="124" y="369">Length before pattern. An unknown name is refused; there is no default branch.</text>
+          <text class="dg-sub" x="124" y="381">privd re-validates all of it again, because it must assume the agent is compromised.</text>
+          <path class="dg-arrow" d="M700,356 L752,356" marker-end="url(#arw-ord)"/>
+          <text class="dg-sub svg-mono" x="758" y="352">ErrUnknown-</text>
+          <text class="dg-sub svg-mono" x="758" y="364">Operation</text>
+
+          <path class="dg-arrow" d="M405,386 L405,400" marker-end="url(#arw-ord)"/>
+          <text class="dg-sub" x="420" y="404">the operation is performed</text>
+        </svg>
+        </div>
+        <figcaption>From <span class="pathref">agent/internal/protocol/envelope.go</span>. The shape check
+        comes before the signature and is not “validation” in the sense the order forbids: it reads no argument
+        and decides nothing about content — it exists because the steps below cannot be performed on a
+        malformed envelope at all, since a signature cannot be checked against a nonce that is not 32 bytes of
+        hex.</figcaption>
+      </figure>
+
+      <p>Two further properties of that path are worth naming. A nonce store that cannot answer means replay
+      cannot be ruled out, so the envelope is refused — failing open there would make the whole check advisory
+      the first time a disk filled. And the JSON decoder accepts exactly one value: trailing data would
+      otherwise be ignored, and an envelope followed by a second one is a request to interpret two things while
+      verifying one.</p>
+
+      <h2 id="operations">The operation catalogue</h2>
+
+      <p>Thirteen operations. <code>performer</code> carries the privilege, and the boundary is declared in
+      the data so a reviewer can count the privileged operations without reading any implementation — and so
+      the agent can refuse to attempt one itself, up front. Attempting it would fail on file permissions
+      somewhere deep in the work, and a permissions failure is indistinguishable from a misconfigured host, so
+      the operator would be sent to look at ownership instead of at the instruction that should never have been
+      routed there.</p>
+
+      <div class="scroller">
+        <div class="filter">
+          <label class="skip" for="op-filter">Filter operations</label>
+          <input id="op-filter" type="search" placeholder="Filter — try privd, site, webserver"
+                 data-filter-for="op-table" data-filter-count="op-count" data-filter-empty="op-empty" autocomplete="off">
+          <span class="filter__count" id="op-count" aria-live="polite"></span>
+        </div>
+        <table id="op-table">
+          <caption class="skip">The 13 operations in src/agent/catalogue.ts</caption>
+          <thead>
+            <tr>
+              <th scope="col">Operation</th>
+              <th scope="col">Performed by</th>
+              <th scope="col">Arguments</th>
+              <th scope="col">What it does</th>
+              <th scope="col">Idempotent</th>
+            </tr>
+          </thead>
+          <tbody>
+<tr><th scope="row" class="mono nowrap">host.inventory.collect</th><td class="nowrap"><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">&#9679;</span> agent</span></td><td><span class="dim">none</span></td><td>Report this host&#x27;s distribution, kernel, memory, disks and installed runtimes</td><td class="nowrap">yes</td></tr>
+<tr><th scope="row" class="mono nowrap">host.health.report</th><td class="nowrap"><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">&#9679;</span> agent</span></td><td><span class="dim">none</span></td><td>Report load, memory pressure, disk headroom and clock skew</td><td class="nowrap">yes</td></tr>
+<tr><th scope="row" class="mono nowrap">site.user.create</th><td class="nowrap"><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">&#10005;</span> privd (root)</span></td><td><code>slug</code>: site_slug</td><td>Create the Linux user and home directory a site runs as</td><td class="nowrap">yes</td></tr>
+<tr><th scope="row" class="mono nowrap">site.user.remove</th><td class="nowrap"><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">&#10005;</span> privd (root)</span></td><td><code>slug</code>: site_slug</td><td>Remove a site&#x27;s Linux user and its home directory</td><td class="nowrap">no</td></tr>
+<tr><th scope="row" class="mono nowrap">site.file.write</th><td class="nowrap"><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">&#9679;</span> agent</span></td><td><code>slug</code>: site_slug, <code>path</code>: path_in_site</td><td>Write a file inside a site directory the agent owns</td><td class="nowrap">yes</td></tr>
+<tr><th scope="row" class="mono nowrap">service.unit.install</th><td class="nowrap"><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">&#10005;</span> privd (root)</span></td><td><code>service</code>: service_id, <code>unit</code>: unit_file</td><td>Install a systemd unit and reload the manager</td><td class="nowrap">yes</td></tr>
+<tr><th scope="row" class="mono nowrap">service.control</th><td class="nowrap"><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">&#10005;</span> privd (root)</span></td><td><code>service</code>: service_id, <code>action</code>: service_action</td><td>Start, stop, restart or reload a Ratline service</td><td class="nowrap">no</td></tr>
+<tr><th scope="row" class="mono nowrap">service.enable</th><td class="nowrap"><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">&#10005;</span> privd (root)</span></td><td><code>service</code>: service_id, <code>enabled</code>: enabled</td><td>Set whether a Ratline service starts at boot</td><td class="nowrap">yes</td></tr>
+<tr><th scope="row" class="mono nowrap">webserver.config.install</th><td class="nowrap"><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">&#10005;</span> privd (root)</span></td><td><code>slug</code>: site_slug, <code>config</code>: webserver_config</td><td>Install a site&#x27;s web server configuration and reload it</td><td class="nowrap">yes</td></tr>
+<tr><th scope="row" class="mono nowrap">webserver.certificate.install</th><td class="nowrap"><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">&#10005;</span> privd (root)</span></td><td><code>slug</code>: site_slug, <code>certificate</code>: certificate_pem, <code>key</code>: private_key_pem</td><td>Install a certificate and its key with root ownership and mode 0600</td><td class="nowrap">yes</td></tr>
+<tr><th scope="row" class="mono nowrap">package.install</th><td class="nowrap"><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">&#10005;</span> privd (root)</span></td><td><code>package</code>: package_name</td><td>Install a package from the distribution&#x27;s repositories</td><td class="nowrap">yes</td></tr>
+<tr><th scope="row" class="mono nowrap">sudoers.fragment.install</th><td class="nowrap"><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">&#10005;</span> privd (root)</span></td><td><code>slug</code>: site_slug, <code>fragment</code>: sudoers_fragment</td><td>Install a sudoers.d fragment, after visudo -c accepts it</td><td class="nowrap">yes</td></tr>
+<tr><th scope="row" class="mono nowrap">runtime.provision</th><td class="nowrap"><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">&#10005;</span> privd (root)</span></td><td><code>runtime</code>: runtime, <code>port</code>: port</td><td>Make a runtime available on this host and reserve its port</td><td class="nowrap">yes</td></tr>
+          </tbody>
+        </table>
+        <p class="filter__empty" id="op-empty" hidden></p>
+      </div>
+
+      <p>Idempotence is declared per operation rather than assumed of the runner, because M2's exit criteria
+      include “the same action runs twice in a row idempotently”. Declaring it in the data means the harness can
+      drive every operation twice and assert the second run changed nothing, instead of consulting a
+      hand-maintained list. Two operations answer <code>no</code>, and the comments say why:
+      <code>site.user.remove</code> because removing an absent user is a no-op but not the <em>same</em> as the
+      first run, which had something to remove; and <code>service.control</code> because start-then-start is a
+      no-op while restart-then-restart genuinely restarts twice — declared false rather than per-action, because
+      the harness asks per operation and a half-true answer is worse than a false one.</p>
+
+      <h2 id="kinds">The argument-kind vocabulary</h2>
+
+      <p>“No operation accepts a free-form command” is not achieved by reviewing the operation list. A
+      <code>string</code> argument called <code>options</code> is a free-form command with better manners. It is
+      achieved by there being <strong>no argument kind capable of expressing one</strong>: every kind is a
+      constrained identifier with an anchored pattern, a bounded number, an enumeration, or a content blob that
+      a named parser must accept before anything installs it.</p>
+
+      <div class="scroller">
+        <div class="filter">
+          <label class="skip" for="kind-filter">Filter argument kinds</label>
+          <input id="kind-filter" type="search" placeholder="Filter — try validator, pattern, int64"
+                 data-filter-for="kind-table" data-filter-count="kind-count" data-filter-empty="kind-empty" autocomplete="off">
+          <span class="filter__count" id="kind-count" aria-live="polite"></span>
+        </div>
+        <table id="kind-table">
+          <caption class="skip">The 13 argument kinds, their constraints and why each exists</caption>
+          <thead>
+            <tr>
+              <th scope="col">Kind</th>
+              <th scope="col">Go type</th>
+              <th scope="col">Constraint</th>
+              <th scope="col">Why it exists</th>
+            </tr>
+          </thead>
+          <tbody>
+<tr><th scope="row" class="mono nowrap">site_slug</th><td class="nowrap">string</td><td>pattern <code class="mono">^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$</code> · max 32 bytes</td><td>one slug is simultaneously a Linux user, a directory and part of a unit name</td></tr>
+<tr><th scope="row" class="mono nowrap">service_id</th><td class="nowrap">string</td><td>pattern <code class="mono">^rl-[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$</code> · max 50 bytes</td><td>the rl- prefix is what makes &#x27;restart a service&#x27; unable to name sshd</td></tr>
+<tr><th scope="row" class="mono nowrap">package_name</th><td class="nowrap">string</td><td>pattern <code class="mono">^[a-z0-9][a-z0-9+.-]{1,62}$</code> · max 64 bytes</td><td>distribution package names, narrower than dpkg allows and deliberately so</td></tr>
+<tr><th scope="row" class="mono nowrap">path_in_site</th><td class="nowrap">string</td><td>pattern <code class="mono">^[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*(?:/[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*)*$</code> · max 255 bytes</td><td>a path the agent may write inside a site it owns; privd re-resolves it anyway</td></tr>
+<tr><th scope="row" class="mono nowrap">port</th><td class="nowrap">int64</td><td>range 1&ndash;65535</td><td>a TCP port, bounded so an out-of-range value is refused before it reaches a config</td></tr>
+<tr><th scope="row" class="mono nowrap">runtime</th><td class="nowrap">string</td><td>one of <code>node</code>, <code>python</code>, <code>static</code>, <code>php</code>, <code>ruby</code> · max 16 bytes</td><td>which runtime a site needs, from a closed set rather than a name to look up</td></tr>
+<tr><th scope="row" class="mono nowrap">service_action</th><td class="nowrap">string</td><td>one of <code>start</code>, <code>stop</code>, <code>restart</code>, <code>reload</code> · max 16 bytes</td><td>the four things that can be done to a unit, enumerated so there is no fifth</td></tr>
+<tr><th scope="row" class="mono nowrap">enabled</th><td class="nowrap">bool</td><td><code>true</code> or <code>false</code></td><td>a flag, for operations whose only variation is on or off</td></tr>
+<tr><th scope="row" class="mono nowrap">unit_file</th><td class="nowrap">string</td><td>validator <code>systemd-analyze-verify</code> · max 16384 bytes</td><td>a systemd unit, inert until systemd itself parses it without complaint</td></tr>
+<tr><th scope="row" class="mono nowrap">webserver_config</th><td class="nowrap">string</td><td>validator <code>nginx-t</code> · max 65536 bytes</td><td>a server block, inert until the web server&#x27;s own parser accepts it</td></tr>
+<tr><th scope="row" class="mono nowrap">sudoers_fragment</th><td class="nowrap">string</td><td>validator <code>visudo-c</code> · max 4096 bytes</td><td>a sudoers.d fragment; ADR 0004 requires visudo -c to pass before install</td></tr>
+<tr><th scope="row" class="mono nowrap">certificate_pem</th><td class="nowrap">string</td><td>validator <code>x509</code> · max 32768 bytes</td><td>a certificate chain, parsed as X.509 before it is written anywhere</td></tr>
+<tr><th scope="row" class="mono nowrap">private_key_pem</th><td class="nowrap">string</td><td>validator <code>pkcs8</code> · max 16384 bytes</td><td>a private key, parsed before install and never logged</td></tr>
+          </tbody>
+        </table>
+        <p class="filter__empty" id="kind-empty" hidden></p>
+      </div>
+
+      <h3>Four details in that table that carry more than they look</h3>
+
+      <dl class="facts">
+        <dt><code>service_id</code></dt>
+        <dd>The <code>rl-</code> prefix is load-bearing rather than cosmetic. It is what stops any operation
+        from naming a unit outside Ratline's namespace, so an instruction can never stop <code>sshd</code>.</dd>
+
+        <dt>RE2 patterns</dt>
+        <dd>Go's <code>regexp</code> package is RE2, which has no lookahead and no backreferences. A pattern
+        using either would work in the control plane and fail to compile in the agent, so the agent would
+        either refuse everything or — worse, depending on how the error were handled — check nothing. The test
+        suite rejects both constructs rather than trusting a reviewer to notice.</dd>
+
+        <dt><code>path_in_site</code></dt>
+        <dd>A dot may appear only <em>between</em> word characters within a segment, which admits
+        <code>posts/index.html</code> while refusing <code>.hidden</code>, <code>..</code>,
+        <code>a/../b</code> and <code>index..html</code> — without a lookahead Go could not compile. The first
+        version excluded dots entirely and therefore refused every filename with an extension. It was caught by
+        the one test asserting a well-formed instruction is <em>accepted</em>, which exists because a validator
+        failing closed on everything looks identical to a validator working until somebody tries to use it.
+        <code>privd</code> re-resolves the result and re-confirms it is inside the site root regardless,
+        because a pattern is not a filesystem and a symlink is not a path.</dd>
+
+        <dt>Length before pattern</dt>
+        <dd>The length check runs first in both validators, deliberately, so a multi-megabyte value is refused
+        on sight rather than carried into a comparison. An enumeration makes that comparison cheap, but cheap is
+        not the same as not performed.</dd>
+      </dl>
+
+      <h3>One contract, three checkers</h3>
+
+      <p>The catalogue's data is generated in one direction: TypeScript is the source, and
+      <code>./scripts/gen-agent-protocol</code> writes
+      <span class="pathref">agent/internal/protocol/catalogue_gen.go</span>. CI runs it with
+      <code>--check</code>, so drift fails the build rather than being promised against in a comment. The
+      direction is not preference: the control plane needs the catalogue's shape available to the type checker
+      at every call site that builds an instruction, and going the other way would lose the literal-union
+      narrowing that makes an unknown operation name a compile error rather than a runtime one.</p>
+
+      <p><strong>The validation is not generated.</strong> Three parties check the same contract, and each must
+      do its own checking:</p>
+
+      <ol>
+        <li>The <strong>control plane</strong> validates an instruction before signing it. That proves nothing
+        to the agent — but it is still the right place for the error to surface, because a bug here should fail
+        in the control plane's tests rather than as a refusal on somebody's host that looks like a protocol
+        problem.</li>
+        <li>The <strong>agent</strong> re-validates, because it must assume the control plane is compromised.
+        Checking code it inherited from the control plane would be checking nothing.</li>
+        <li><strong><code>privd</code></strong> re-validates again, because it must assume the agent is.</li>
+      </ol>
+
+      <p>Duplicating validation is deliberate: if it lived only in the agent, <code>privd</code> would be a
+      confused deputy and the boundary would be decorative. Generation is what keeps the three from disagreeing
+      about <em>what</em> to check while each still does the checking. The control plane's checks are also not
+      looser than the agent's — a control plane that accepted more would sign instructions that are refused on
+      arrival, and the operator would see a host that rejects valid work.</p>
+
+      <h2 id="privd">The privileged helper</h2>
+
+      <p><code>ratline-privd</code> runs as root, socket-activated, <strong>with no network access at
+      all</strong>, and holds nothing persistent. It accepts only the enumerated privileged operations:</p>
+
+      <ul>
+        <li>create or remove a site's Linux user;</li>
+        <li>install a validated systemd unit and reload the manager;</li>
+        <li>install a validated web server configuration and reload it;</li>
+        <li>install a <code>sudoers.d</code> fragment, after <code>visudo -c</code> passes;</li>
+        <li>install a certificate and key with correct ownership and mode;</li>
+        <li>install a package from the distribution's repositories;</li>
+        <li>start, stop or restart a service <em>named by identifier</em> in the Ratline namespace.</li>
+      </ul>
+
+      <p>It identifies its caller by <code>SO_PEERCRED</code> rather than trusting the socket's mode alone, and
+      re-validates every argument independently of the agent: site slugs re-checked against the strict pattern,
+      paths re-resolved and re-confirmed inside the site root, unit and configuration files re-parsed before
+      install, service identifiers checked against the naming convention so no unit outside it can be
+      touched.</p>
+
+      <p>It also writes every operation to a local append-only log <strong>before</strong> performing it, owned
+      by root and not writable by the agent user, and ships that log to the control plane audit trail. So an
+      attacker who owns the agent cannot erase the record of what they asked for.</p>
+
+      <div class="note" data-status="attention">
+        <span class="note__label">What exists on disk today</span>
+        <p>The catalogue (RL-M2-002) and the signed envelope (RL-M2-003) are <code>done</code>, in both
+        languages, with committed vectors. <span class="pathref">agent/cmd/ratline-privd/main.go</span> exists
+        as a command entry point; the socket-activated helper itself is <strong>RL-M2-008</strong> and its
+        root-owned append-only log is <strong>RL-M2-009</strong>, both <code>todo</code>. The durable nonce
+        store is <strong>RL-M2-007</strong>, also <code>todo</code> — the in-memory store lives in
+        <span class="pathref">agent/internal/protocol/nonces.go</span>. Read from
+        <span class="pathref">docs/tasks.yaml</span> on 2026-08-04.</p>
+      </div>
+
+      <p>The friction of adding an operation is the feature. It costs a catalogue entry, generated types on
+      both sides, argument validators in the agent <em>and</em> independently in the privileged helper, and
+      fuzz coverage.</p>
+
+      <section class="sources" aria-labelledby="sources-heading">
+        <h2 id="sources-heading" class="label" style="border:0;padding:0;margin:0 0 var(--space-xs)">Sources for this page</h2>
+        <ul>
+          <li><span class="pathref">src/agent/catalogue.ts</span> — the operation and argument-kind tables are generated from this file</li>
+          <li><span class="pathref">src/agent/envelope.ts</span> — canonical bytes, domain separation, validity ceiling, control-plane validation</li>
+          <li><span class="pathref">agent/internal/protocol/envelope.go</span> — the verification order, refusal reasons, skew and shape checks</li>
+          <li><span class="pathref">agent/internal/protocol/validate.go</span>, <span class="pathref">catalogue_gen.go</span>, <span class="pathref">nonces.go</span></li>
+          <li><span class="pathref">docs/decisions/0002-agent-transport-and-authentication.md</span>, <span class="pathref">0004-host-privilege-separation.md</span></li>
+          <li><span class="pathref">src/ops/README.md</span> — the friction argument</li>
+          <li><span class="pathref">.github/workflows/ci.yml</span> — <code>gen-agent-protocol --check</code> and <code>scripts/agent verify</code></li>
+          <li><span class="pathref">docs/tasks.yaml</span> — RL-M2-002/003 done; RL-M2-007/008/009 todo</li>
+        </ul>
+      </section>
+
+      <nav class="pager" aria-label="Section navigation">
+        <a href="authorization.html"><span class="label">Previous</span> The authorization model</a>
+        <a href="threat-model.html"><span class="label">Next</span> Threat model and risks</a>
+      </nav>
+    </main>
+
+    <footer class="page" style="padding-top:0">
+      <p class="dim" style="font-size:var(--text-xs)">Written from the repository at
+      <span class="pathref">/Users/ark/Desktop/FunProjects/moss-clone</span>. Design tokens copied from
+      <span class="pathref">src/web/lib/design/</span>; no font files or scripts are loaded from any external
+      origin.</p>
+    </footer>
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,779 @@
+/*
+ * Layout and components for the Ratline documentation site.
+ *
+ * Follows DESIGN.md's structure rather than inventing one: a fixed 200px rail
+ * that does not collapse into a hamburger, a 44px top bar, the 2px tension line
+ * beneath it, 32px table rows, hairline rules, no zebra striping.
+ *
+ * Every colour is a token from tokens.css. There is no hex value in this file,
+ * which is the rule src/web/lib/design/palette.ts enforces on the product.
+ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html {
+  background-color: var(--tar);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--tar);
+  color: var(--chalk);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  font-weight: var(--weight-body);
+  line-height: var(--leading-base);
+  /* DESIGN.md §3: numerals are tabular everywhere a number can change. */
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  overflow-wrap: break-word;
+}
+
+/* DESIGN.md §8: focus is never suppressed. */
+:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring);
+  outline-offset: var(--focus-ring-offset);
+}
+
+a {
+  color: var(--chalk);
+  text-decoration-color: var(--hemp);
+  text-decoration-thickness: var(--hairline-width);
+  text-underline-offset: 3px;
+}
+a:hover { text-decoration-thickness: var(--lashing-width); }
+
+hr {
+  border: 0;
+  border-top: var(--hairline-width) solid var(--rule-hairline);
+  margin: var(--space-xl) 0;
+}
+
+/* --------------------------------------------------------------------------
+   Type helpers
+   -------------------------------------------------------------------------- */
+
+.display {
+  font-family: var(--font-display);
+  font-stretch: var(--display-stretch);
+  font-weight: var(--weight-display);
+  letter-spacing: 0.01em;
+}
+
+.mono, code, kbd, pre, samp {
+  font-family: var(--font-mono);
+  font-weight: var(--weight-mono);
+  font-variant-ligatures: none;
+  font-feature-settings: "liga" 0, "calt" 0;
+}
+
+.dim { color: var(--chalk-dim); }
+
+.label {
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--chalk-dim);
+  font-weight: var(--weight-body-strong);
+}
+
+/* --------------------------------------------------------------------------
+   Skip link
+   -------------------------------------------------------------------------- */
+
+.skip {
+  position: absolute;
+  left: var(--space-sm);
+  top: calc(-1 * var(--space-xxxl));
+  z-index: 40;
+  background: var(--pitch);
+  color: var(--chalk);
+  border: var(--hairline-width) solid var(--hemp);
+  border-radius: var(--radius-sm);
+  padding: var(--space-sm) var(--space-md);
+  transition: top var(--duration-fast) var(--easing-standard);
+}
+.skip:focus { top: var(--space-sm); }
+
+/* --------------------------------------------------------------------------
+   The shroud: rail + top bar + tension line + content
+   -------------------------------------------------------------------------- */
+
+.shroud {
+  display: grid;
+  grid-template-columns: var(--rail-width) minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+/* Rail, 200px, always visible. DESIGN.md §4. */
+.rail {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  overflow-y: auto;
+  background: var(--pitch);
+  border-right: var(--hairline-width) solid var(--rule-hairline);
+  padding-bottom: var(--space-xl);
+}
+
+.rail__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  height: var(--top-bar-height);
+  padding: 0 var(--space-md);
+  border-bottom: var(--hairline-width) solid var(--rule-hairline);
+  text-decoration: none;
+}
+.rail__brand:hover { background: var(--surface-hover); }
+
+.rail__wordmark {
+  font-family: var(--font-display);
+  font-stretch: var(--display-stretch);
+  font-weight: var(--weight-display-strong);
+  font-size: var(--text-md);
+  letter-spacing: 0.04em;
+}
+
+.rail__group { padding: var(--space-lg) 0 var(--space-xs); }
+.rail__group-label { padding: 0 var(--space-md) var(--space-xs); }
+
+.rail__list { list-style: none; margin: 0; padding: 0; }
+
+.rail__link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: var(--row-height);
+  padding: var(--space-xs) var(--space-md) var(--space-xs) calc(var(--space-md) - var(--lashing-width));
+  border-left: var(--lashing-width) solid transparent;
+  color: var(--chalk-dim);
+  text-decoration: none;
+  font-size: var(--text-base);
+}
+.rail__link:hover { background: var(--surface-hover); color: var(--chalk); }
+
+/* The lashing: a 2px --hemp bar with a notch at its midpoint, the way a rope is
+   whipped at its end. DESIGN.md §4 — the one place the metaphor is literal. */
+.rail__link[aria-current="page"] {
+  color: var(--chalk);
+  border-left-color: var(--hemp);
+  background: var(--surface-hover);
+  position: relative;
+}
+.rail__link[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  left: calc(-1 * var(--lashing-width));
+  top: 50%;
+  transform: translateY(-50%);
+  width: calc(var(--lashing-width) * 3);
+  height: var(--space-sm);
+  background: var(--hemp);
+}
+
+.rail__num {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--chalk-dim);
+  min-width: 1.4em;
+}
+
+/* --------------------------------------------------------------------------
+   Top bar and tension line
+   -------------------------------------------------------------------------- */
+
+.column { display: flex; flex-direction: column; min-width: 0; }
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--tar);
+}
+
+.topbar__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  height: var(--top-bar-height);
+  padding: 0 var(--space-lg);
+  border-bottom: var(--hairline-width) solid var(--rule-hairline);
+}
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-width: 0;
+  font-size: var(--text-sm);
+  color: var(--chalk-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.crumbs a { color: var(--chalk-dim); }
+.crumbs__sep { color: var(--chalk-dim); opacity: 0.6; }
+.crumbs__here { color: var(--chalk); }
+
+.topbar__spacer { flex: 1 1 auto; }
+
+/* The tension line, DESIGN.md §5. At rest on a documentation site: --hemp at
+   12%, a slack rope. Nothing here is under load, so it never travels. */
+.tension {
+  height: var(--tension-line-height);
+  background: var(--tension-rest);
+}
+
+/* --------------------------------------------------------------------------
+   Search
+   -------------------------------------------------------------------------- */
+
+.search { position: relative; flex: 0 1 320px; min-width: 120px; }
+
+.search__input {
+  width: 100%;
+  height: 26px;
+  background: var(--pitch);
+  color: var(--chalk);
+  border: var(--hairline-width) solid var(--rule-hairline);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-sm);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+}
+.search__input::placeholder { color: var(--chalk-dim); }
+
+.search__results {
+  position: absolute;
+  top: calc(100% + var(--space-xs));
+  right: 0;
+  left: 0;
+  z-index: 30;
+  margin: 0;
+  padding: var(--space-xs) 0;
+  list-style: none;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: var(--pitch);
+  border: var(--hairline-width) solid var(--rule-hairline);
+  border-radius: var(--radius-md);
+}
+.search__results[hidden] { display: none; }
+
+.search__results a {
+  display: block;
+  padding: var(--space-xs) var(--space-md);
+  text-decoration: none;
+  color: var(--chalk);
+  font-size: var(--text-sm);
+}
+.search__results a:hover,
+.search__results a:focus-visible { background: var(--surface-hover); }
+.search__results .where {
+  display: block;
+  color: var(--chalk-dim);
+  font-size: var(--text-xs);
+}
+.search__empty {
+  padding: var(--space-sm) var(--space-md);
+  color: var(--chalk-dim);
+  font-size: var(--text-sm);
+}
+
+.themetoggle {
+  height: 26px;
+  padding: 0 var(--space-sm);
+  background: var(--pitch);
+  color: var(--chalk-dim);
+  border: var(--hairline-width) solid var(--rule-hairline);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.themetoggle:hover { color: var(--chalk); }
+
+/* --------------------------------------------------------------------------
+   Page body
+   -------------------------------------------------------------------------- */
+
+.page {
+  padding: var(--space-xl) var(--space-xl) var(--space-xxxl);
+  max-width: 1120px;
+  min-width: 0;
+}
+
+h1 {
+  font-family: var(--font-display);
+  font-stretch: var(--display-stretch);
+  font-weight: var(--weight-display-strong);
+  font-size: var(--text-xxl);
+  line-height: var(--leading-xxl);
+  margin: 0 0 var(--space-sm);
+  letter-spacing: 0.005em;
+}
+
+h2 {
+  font-family: var(--font-display);
+  font-stretch: var(--display-stretch);
+  font-weight: var(--weight-display);
+  font-size: var(--text-xl);
+  line-height: var(--leading-xl);
+  margin: var(--space-xxl) 0 var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: var(--hairline-width) solid var(--rule-hairline);
+}
+
+h3 {
+  font-family: var(--font-display);
+  font-stretch: var(--display-stretch);
+  font-weight: var(--weight-display);
+  font-size: var(--text-lg);
+  line-height: var(--leading-lg);
+  margin: var(--space-xl) 0 var(--space-xs);
+}
+
+h4 {
+  font-size: var(--text-md);
+  line-height: var(--leading-md);
+  font-weight: var(--weight-body-strong);
+  margin: var(--space-lg) 0 var(--space-xs);
+}
+
+p { margin: 0 0 var(--space-md); max-width: 78ch; }
+ul, ol { margin: 0 0 var(--space-md); padding-left: var(--space-xl); max-width: 78ch; }
+li { margin-bottom: var(--space-xs); }
+li > ul, li > ol { margin-top: var(--space-xs); }
+
+.lede {
+  font-size: var(--text-md);
+  line-height: var(--leading-md);
+  color: var(--chalk-dim);
+  max-width: 74ch;
+  margin-bottom: var(--space-xl);
+}
+
+/* Anchor affordance on headings. */
+.anchor {
+  margin-left: var(--space-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--chalk-dim);
+  text-decoration: none;
+  opacity: 0;
+}
+h2:hover .anchor, h3:hover .anchor, .anchor:focus-visible { opacity: 1; }
+
+:target { scroll-margin-top: calc(var(--top-bar-height) + var(--space-xl)); }
+
+/* --------------------------------------------------------------------------
+   Cards, notes, sources
+   -------------------------------------------------------------------------- */
+
+.card {
+  background: var(--pitch);
+  border: var(--hairline-width) solid var(--rule-hairline);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  margin-bottom: var(--space-md);
+}
+.card > :last-child { margin-bottom: 0; }
+.card__title {
+  font-family: var(--font-display);
+  font-stretch: var(--display-stretch);
+  font-weight: var(--weight-display);
+  font-size: var(--text-md);
+  margin: 0 0 var(--space-xs);
+}
+
+.grid { display: grid; gap: var(--space-md); }
+.grid--2 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.grid--3 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+
+/* A note carries a status hue on its left edge and always a text label, never
+   colour alone. DESIGN.md §1 corollary. */
+.note {
+  background: var(--pitch);
+  border: var(--hairline-width) solid var(--rule-hairline);
+  border-left: var(--space-xs) solid var(--status-color, var(--hemp));
+  border-radius: var(--radius-md);
+  padding: var(--space-md) var(--space-lg);
+  margin: var(--space-md) 0 var(--space-lg);
+}
+.note > :last-child { margin-bottom: 0; }
+.note__label {
+  display: block;
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: var(--weight-body-strong);
+  color: var(--status-color, var(--hemp));
+  margin-bottom: var(--space-xs);
+}
+
+/* Where a claim came from. Every page ends with one. */
+.sources {
+  margin-top: var(--space-xxl);
+  padding-top: var(--space-md);
+  border-top: var(--hairline-width) solid var(--rule-hairline);
+  font-size: var(--text-sm);
+  color: var(--chalk-dim);
+}
+.sources ul { list-style: none; padding: 0; column-gap: var(--space-xl); }
+.sources li { margin-bottom: var(--space-xxs); }
+
+.pathref {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--chalk-dim);
+}
+
+/* --------------------------------------------------------------------------
+   Chips and status marks
+   -------------------------------------------------------------------------- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  border: var(--hairline-width) solid var(--rule-hairline);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-xs);
+  font-size: var(--text-xs);
+  line-height: 18px;
+  color: var(--chalk-dim);
+  white-space: nowrap;
+}
+
+/* The environment chip, ruled 2026-08-02: production is filled AND carries the
+   one reserved hue; everything else is outlined in --chalk-dim with no hue. */
+.chip--production {
+  background: var(--env-production);
+  color: var(--env-production-on);
+  border-color: var(--env-production);
+  font-weight: var(--weight-body-strong);
+}
+
+.status {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  color: var(--status-color, var(--chalk-dim));
+  white-space: nowrap;
+}
+.status__glyph { font-variant-emoji: text; line-height: 1; }
+/* Idle does not reach 4.5:1 in either mode, so it is mark-only: the glyph
+   carries the hue and the label sits in --chalk-dim (DESIGN.md §10.2). */
+.status[data-status="idle"] { color: var(--chalk-dim); }
+.status[data-status="idle"] .status__glyph { color: var(--st-idle); }
+
+.badge {
+  display: inline-block;
+  border: var(--hairline-width) solid currentColor;
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-xs);
+  font-size: var(--text-xs);
+  line-height: 18px;
+  font-weight: var(--weight-body-strong);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.badge--proposed { color: var(--st-attention); }
+.badge--done { color: var(--st-healthy); }
+.badge--open { color: var(--st-fail); }
+.badge--todo { color: var(--chalk-dim); }
+.badge--review { color: var(--st-working); }
+
+/* --------------------------------------------------------------------------
+   Tables. 32px rows, hairline rules, no zebra striping, sticky header,
+   first column is the identifier. DESIGN.md §4.
+   -------------------------------------------------------------------------- */
+
+.scroller {
+  overflow-x: auto;
+  border: var(--hairline-width) solid var(--rule-hairline);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-lg);
+  background: var(--pitch);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+  line-height: var(--leading-sm);
+}
+
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--pitch);
+  text-align: left;
+  font-size: var(--text-xs);
+  line-height: var(--leading-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--chalk-dim);
+  font-weight: var(--weight-body-strong);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: var(--hairline-width) solid var(--rule-hairline);
+  white-space: nowrap;
+}
+
+tbody td, tbody th {
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: var(--hairline-width) solid var(--rule-hairline);
+  vertical-align: top;
+  text-align: left;
+  font-weight: var(--weight-body);
+}
+tbody tr:last-child td, tbody tr:last-child th { border-bottom: 0; }
+tbody tr:hover { background: var(--surface-hover); }
+
+tbody th { color: var(--chalk); font-weight: var(--weight-body-strong); }
+td .mono, th .mono { font-size: var(--text-sm); }
+.nowrap { white-space: nowrap; }
+.num { text-align: right; font-family: var(--font-mono); }
+
+/* Filter above a table. */
+.filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+.filter input[type="search"] {
+  height: 26px;
+  min-width: 180px;
+  flex: 0 1 260px;
+  background: var(--pitch);
+  color: var(--chalk);
+  border: var(--hairline-width) solid var(--rule-hairline);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-sm);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+}
+.filter__count { font-size: var(--text-xs); color: var(--chalk-dim); }
+.filter__empty {
+  padding: var(--space-md);
+  color: var(--chalk-dim);
+  font-size: var(--text-sm);
+}
+
+/* --------------------------------------------------------------------------
+   Code
+   -------------------------------------------------------------------------- */
+
+pre {
+  margin: 0 0 var(--space-lg);
+  padding: var(--space-md);
+  background: var(--pitch);
+  border: var(--hairline-width) solid var(--rule-hairline);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+  font-size: var(--text-log);
+  line-height: var(--leading-log);
+  color: var(--chalk);
+}
+pre code { font-size: inherit; }
+
+:not(pre) > code {
+  background: var(--pitch);
+  border: var(--hairline-width) solid var(--rule-hairline);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-xxs);
+  font-size: 0.92em;
+}
+
+/* Hand-rolled highlighting. No library, no CDN. Hues are reused status tokens
+   rather than a second palette: DESIGN.md §1 forbids inventing saturated
+   colour, so code marks borrow meaning-free roles from the existing set. */
+.t-com { color: var(--chalk-dim); font-style: italic; }
+.t-key { color: var(--st-working); }
+.t-str { color: var(--st-healthy); }
+.t-num { color: var(--st-attention); }
+.t-fn  { color: var(--hemp); }
+.t-pun { color: var(--chalk-dim); }
+
+/* --------------------------------------------------------------------------
+   Definition lists and key/value facts
+   -------------------------------------------------------------------------- */
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-xs) var(--space-lg);
+  margin: 0 0 var(--space-lg);
+  font-size: var(--text-sm);
+}
+.facts dt { color: var(--chalk-dim); }
+.facts dd { margin: 0; }
+
+/* --------------------------------------------------------------------------
+   Progress bars, drawn with a hairline outline so they read without colour
+   -------------------------------------------------------------------------- */
+
+.meter {
+  display: block;
+  width: 100%;
+  min-width: 90px;
+  height: var(--space-sm);
+  border: var(--hairline-width) solid var(--rule-hairline);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.meter__fill { display: block; height: 100%; background: var(--hemp); }
+
+/* --------------------------------------------------------------------------
+   Diagrams
+   -------------------------------------------------------------------------- */
+
+figure {
+  margin: 0 0 var(--space-lg);
+  background: var(--pitch);
+  border: var(--hairline-width) solid var(--rule-hairline);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+}
+figure > .scroller { border: 0; margin: 0; background: transparent; }
+figcaption {
+  margin-top: var(--space-sm);
+  font-size: var(--text-sm);
+  color: var(--chalk-dim);
+}
+svg { display: block; max-width: 100%; height: auto; }
+svg text { font-family: var(--font-body); }
+svg .svg-mono { font-family: var(--font-mono); }
+
+/* Hand-authored diagram vocabulary. Linework only — DESIGN.md §9 rejected rope
+   textures and knot iconography; what is left is one hairline and one hue. */
+.dg-zone {
+  fill: none;
+  stroke: var(--hemp);
+  stroke-opacity: 0.35;
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+.dg-box {
+  fill: var(--tar);
+  stroke: var(--hemp);
+  stroke-opacity: 0.55;
+  stroke-width: 1;
+}
+.dg-box--root { stroke: var(--st-fail); stroke-opacity: 1; stroke-width: 1.5; }
+.dg-box--data { fill: var(--pitch); }
+.dg-title { fill: var(--chalk); font-size: 12px; font-weight: 500; }
+.dg-sub { fill: var(--chalk-dim); font-size: 10px; }
+.dg-zonelabel {
+  fill: var(--chalk-dim);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.dg-arrow { stroke: var(--chalk-dim); stroke-width: 1; fill: none; }
+.dg-arrow--strong { stroke: var(--hemp); stroke-width: 1.5; }
+.dg-arrow--dashed { stroke-dasharray: 3 3; }
+.dg-head { fill: var(--chalk-dim); }
+.dg-head--strong { fill: var(--hemp); }
+.dg-edge { fill: var(--chalk-dim); font-size: 10px; }
+.dg-bnd { fill: var(--st-fail); font-size: 10px; font-weight: 700; }
+.dg-step { fill: var(--hemp); font-size: 11px; font-weight: 700; }
+
+/* --------------------------------------------------------------------------
+   Next / previous
+   -------------------------------------------------------------------------- */
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  margin-top: var(--space-xxl);
+  padding-top: var(--space-md);
+  border-top: var(--hairline-width) solid var(--rule-hairline);
+}
+.pager a {
+  flex: 1 1 220px;
+  min-width: 0;
+  background: var(--pitch);
+  border: var(--hairline-width) solid var(--rule-hairline);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm) var(--space-md);
+  text-decoration: none;
+}
+.pager a:hover { background: var(--surface-hover); }
+.pager .label { display: block; }
+
+/* --------------------------------------------------------------------------
+   Responsive. The rail becomes a horizontal strip that scrolls inside itself,
+   so the page never scrolls horizontally and no hamburger appears — DESIGN.md
+   §4 rejects a collapsible sidebar and this keeps every item visible.
+   -------------------------------------------------------------------------- */
+
+@media (max-width: 860px) {
+  .shroud { grid-template-columns: minmax(0, 1fr); }
+
+  .rail {
+    position: static;
+    height: auto;
+    overflow: visible;
+    border-right: 0;
+    border-bottom: var(--hairline-width) solid var(--rule-hairline);
+    padding-bottom: 0;
+  }
+  .rail__group { padding: var(--space-sm) 0; }
+  .rail__group-label { display: none; }
+  .rail__list {
+    display: flex;
+    gap: var(--space-xxs);
+    overflow-x: auto;
+    padding: 0 var(--space-sm) var(--space-xs);
+  }
+  .rail__link {
+    border-left: 0;
+    border-bottom: var(--lashing-width) solid transparent;
+    padding: var(--space-xs) var(--space-sm);
+    white-space: nowrap;
+  }
+  .rail__link[aria-current="page"] {
+    border-left: 0;
+    border-bottom-color: var(--hemp);
+  }
+  .rail__link[aria-current="page"]::before {
+    left: 50%;
+    top: auto;
+    bottom: calc(-1 * var(--lashing-width));
+    transform: translateX(-50%);
+    width: var(--space-sm);
+    height: calc(var(--lashing-width) * 3);
+  }
+  .rail__num { display: none; }
+
+  .topbar__row { padding: 0 var(--space-md); }
+  .crumbs { display: none; }
+  .search { flex: 1 1 auto; }
+  .page { padding: var(--space-lg) var(--space-md) var(--space-xxl); }
+  h1 { font-size: var(--text-xl); line-height: var(--leading-xl); }
+  h2 { font-size: var(--text-lg); line-height: var(--leading-lg); }
+  .facts { grid-template-columns: minmax(0, 1fr); gap: 0 0; }
+  .facts dt { margin-top: var(--space-sm); }
+}
+
+@media (max-width: 420px) {
+  .page { padding-left: var(--space-sm); padding-right: var(--space-sm); }
+}
+
+@media print {
+  .rail, .topbar, .pager, .skip { display: none; }
+  .shroud { display: block; }
+  body { color: #000; background: #fff; }
+}

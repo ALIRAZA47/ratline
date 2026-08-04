@@ -88,6 +88,18 @@ export default tseslint.config(
 			".ratline/**",
 			"agent/**",
 
+			// The documentation site. Hand-written HTML, CSS and vanilla JS with no
+			// build step and no dependencies, deliberately — a docs site does not earn
+			// one under §6.7. It is therefore not part of the typed project, and this
+			// config's rules are type-aware: without this line every file there fails
+			// with "was not found by the project service", which is what the first CI
+			// run after it appeared did.
+			//
+			// Adding it to tsconfig instead would be the wrong fix. That would put
+			// documentation markup inside the program `tsc --noEmit` checks and make
+			// the control plane's typecheck depend on a page's script.
+			"docs-site/**",
+
 			// Scratch git worktrees for delegated agents. They contain complete
 			// checkouts, so without this the sweep lints another branch's
 			// work-in-progress and `npm run lint` fails on code that is not in

@@ -1,0 +1,211 @@
+/*
+ * Ratline design tokens, transcribed for this documentation site.
+ *
+ * SOURCE OF EVERY VALUE BELOW:
+ *   src/web/lib/design/palette.ts     surfaces, status hues, --st-fail-mark, --env-production, ALPHA
+ *   src/web/lib/design/status.ts      status glyphs and labels
+ *   src/web/lib/design/typography.ts  font stacks, DISPLAY_STRETCH, FONT_WEIGHT, TYPE_SCALE
+ *   src/web/lib/design/space.ts       SPACE, RADIUS, LAYOUT
+ *   src/web/lib/design/motion.ts      DURATION, EASING, REDUCED_MOTION_MAX
+ *   src/web/lib/design/css.ts         the emission order and the theme cascade copied below
+ *
+ * Copied, not imported. The product emits these from TypeScript
+ * (`renderTokensCss()`); this site is plain CSS and must open from file://, so
+ * the values are duplicated here by hand. If a value in src/ changes, this file
+ * is stale and says nothing about it.
+ *
+ * Dark is the default (brief §6.6: "Dark mode default, light mode fully
+ * supported"). Light arrives three ways, in the same precedence order css.ts
+ * uses: the system preference, an explicit data-theme on the root, or neither,
+ * in which case dark wins.
+ *
+ * The three faces named in DESIGN.md §3 are self-hosted in the product from
+ * vendored @fontsource packages. This site ships no font files and links to no
+ * font CDN, so the stacks below fall back to system faces. The expanded display
+ * width (`font-stretch: 125%`) only appears where Archivo is installed locally.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* --- type, DESIGN.md §3 ------------------------------------------------- */
+  --font-display: 'Archivo Variable', 'Archivo', 'Helvetica Neue', Arial, sans-serif;
+  --font-body: 'Public Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace;
+  --display-stretch: 125%;
+
+  --weight-display: 600;
+  --weight-display-strong: 700;
+  --weight-body: 400;
+  --weight-body-strong: 500;
+  --weight-mono: 400;
+  --weight-mono-strong: 700;
+
+  --text-xs: 11px;    --leading-xs: 16px;
+  --text-sm: 12px;    --leading-sm: 16px;
+  --text-base: 13px;  --leading-base: 20px;
+  --text-md: 15px;    --leading-md: 24px;
+  --text-lg: 18px;    --leading-lg: 24px;
+  --text-xl: 24px;    --leading-xl: 32px;
+  --text-xxl: 32px;   --leading-xxl: 40px;
+  --text-log: 12.5px; --leading-log: 18px;
+
+  /* --- space and radius, DESIGN.md §4 ------------------------------------ */
+  --space-xxs: 2px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-xxl: 32px;
+  --space-xxxl: 48px;
+
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-pill: 999px;
+
+  /* --- fixed structure, DESIGN.md §4, §5, §8 ----------------------------- */
+  --rail-width: 200px;
+  --top-bar-height: 44px;
+  --tension-line-height: 2px;
+  --lashing-width: 2px;
+  --facts-width: 280px;
+  --row-height: 32px;
+  --hairline-width: 1px;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+
+  /* --- motion, DESIGN.md §5 and §8 --------------------------------------- */
+  --duration-instant: 0ms;
+  --duration-fast: 80ms;
+  --duration-base: 120ms;
+  --duration-slow: 240ms;
+  --duration-tension-travel: 2400ms;
+  --duration-pulse: 1600ms;
+  --easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --reduced-motion-max: 120ms;
+
+  /* --- surfaces and text, dark (default) -------------------------------- */
+  --tar: #14110F;
+  --pitch: #1E1A17;
+  --chalk: #EDE7DF;
+  --chalk-dim: #9A918A;
+  --hemp: #D8B98A;
+  --focus-ring: #D8B98A;
+  --rule-hairline: rgb(216 185 138 / 0.12);
+  --surface-hover: rgb(237 231 223 / 0.04);
+  --tension-rest: rgb(216 185 138 / 0.12);
+
+  /* --- status, dark ----------------------------------------------------- */
+  --st-healthy: #4FB477;
+  --st-working: #59A5D8;
+  --st-attention: #E0A33E;
+  --st-fail: #FF6369;
+  --st-idle: #7A736C;
+  --st-fail-mark: #E5484D;
+  --st-fail-on: #14110F;
+
+  /* --- environment, dark ------------------------------------------------ */
+  --env-production: #D28DE7;
+  --env-production-on: #14110F;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+
+    --tar: #FBF8F4;
+    --pitch: #FFFFFF;
+    --chalk: #1A1613;
+    --chalk-dim: #5E564F;
+    --hemp: #8A6F45;
+    --focus-ring: #8A6F45;
+    --rule-hairline: rgb(138 111 69 / 0.12);
+    --surface-hover: rgb(26 22 19 / 0.04);
+    --tension-rest: rgb(138 111 69 / 0.12);
+
+    --st-healthy: #1F7A46;
+    --st-working: #1D6FA5;
+    --st-attention: #8A5A00;
+    --st-fail: #C0272D;
+    --st-idle: #8A837C;
+    --st-fail-mark: #E5484D;
+    --st-fail-on: #FBF8F4;
+
+    --env-production: #741197;
+    --env-production-on: #FBF8F4;
+  }
+}
+
+/* The explicit override comes last, as in css.ts: identical specificity, so an
+   operator who forced a theme gets the theme they forced. */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --tar: #FBF8F4;
+  --pitch: #FFFFFF;
+  --chalk: #1A1613;
+  --chalk-dim: #5E564F;
+  --hemp: #8A6F45;
+  --focus-ring: #8A6F45;
+  --rule-hairline: rgb(138 111 69 / 0.12);
+  --surface-hover: rgb(26 22 19 / 0.04);
+  --tension-rest: rgb(138 111 69 / 0.12);
+
+  --st-healthy: #1F7A46;
+  --st-working: #1D6FA5;
+  --st-attention: #8A5A00;
+  --st-fail: #C0272D;
+  --st-idle: #8A837C;
+  --st-fail-mark: #E5484D;
+  --st-fail-on: #FBF8F4;
+
+  --env-production: #741197;
+  --env-production-on: #FBF8F4;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --tar: #14110F;
+  --pitch: #1E1A17;
+  --chalk: #EDE7DF;
+  --chalk-dim: #9A918A;
+  --hemp: #D8B98A;
+  --focus-ring: #D8B98A;
+  --rule-hairline: rgb(216 185 138 / 0.12);
+  --surface-hover: rgb(237 231 223 / 0.04);
+  --tension-rest: rgb(216 185 138 / 0.12);
+
+  --st-healthy: #4FB477;
+  --st-working: #59A5D8;
+  --st-attention: #E0A33E;
+  --st-fail: #FF6369;
+  --st-idle: #7A736C;
+  --st-fail-mark: #E5484D;
+  --st-fail-on: #14110F;
+
+  --env-production: #D28DE7;
+  --env-production-on: #14110F;
+}
+
+/* DESIGN.md §8: reduced motion removes transitions over 120ms. Implemented by
+   zeroing the long duration tokens, exactly as renderReducedMotionCss() does,
+   rather than by a blanket !important on every element. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-slow: 0ms;
+    --duration-tension-travel: 0ms;
+    --duration-pulse: 0ms;
+  }
+}
+
+/* Status plumbing, from renderStatusCss(). A component sets data-status and
+   gets the right hue; it never names a colour. The glyph is real text beside a
+   real label, never generated content — DESIGN.md §1's corollary requires the
+   glyph to be information. */
+[data-status="healthy"]   { --status-color: var(--st-healthy); }
+[data-status="working"]   { --status-color: var(--st-working); }
+[data-status="attention"] { --status-color: var(--st-attention); }
+[data-status="fail"]      { --status-color: var(--st-fail); }
+[data-status="idle"]      { --status-color: var(--st-idle); }

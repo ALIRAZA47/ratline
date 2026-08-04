@@ -1,0 +1,734 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The authorization model — Ratline</title>
+<meta name="description" content="The permission catalogue, the seven default roles, can(), three layers of tenant isolation, the route table and the 630-cell matrix.">
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/site.css">
+<script defer src="assets/app.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<div class="shroud">
+
+  <nav class="rail" aria-label="Documentation sections">
+    <a class="rail__brand" href="index.html">
+      <span class="rail__wordmark display">RATLINE</span>
+    </a>
+    <div class="rail__group">
+      <p class="rail__group-label label">Reference</p>
+      <ul class="rail__list">
+        <li><a class="rail__link" href="index.html"><span class="rail__num">01</span> Overview</a></li>
+        <li><a class="rail__link" href="constraints.html"><span class="rail__num">02</span> Constraints</a></li>
+        <li><a class="rail__link" href="architecture.html"><span class="rail__num">03</span> Architecture</a></li>
+        <li><a class="rail__link" href="authorization.html"><span class="rail__num">04</span> Authorization</a></li>
+        <li><a class="rail__link" href="agent.html"><span class="rail__num">05</span> Agent protocol</a></li>
+        <li><a class="rail__link" href="threat-model.html"><span class="rail__num">06</span> Threat model</a></li>
+        <li><a class="rail__link" href="decisions.html"><span class="rail__num">07</span> Decisions</a></li>
+        <li><a class="rail__link" href="roadmap.html"><span class="rail__num">08</span> Roadmap</a></li>
+        <li><a class="rail__link" href="workflow.html"><span class="rail__num">09</span> Workflow</a></li>
+        <li><a class="rail__link" href="defects.html"><span class="rail__num">10</span> Defects</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="column">
+    <header class="topbar">
+      <div class="topbar__row">
+        <nav class="crumbs" aria-label="Breadcrumb">
+          <a href="index.html">ratline</a>
+          <span class="crumbs__sep" aria-hidden="true">/</span>
+          <span class="crumbs__here">authorization</span>
+        </nav>
+        <span class="topbar__spacer"></span>
+        <div class="search">
+          <label class="skip" for="site-search">Search the documentation</label>
+          <input class="search__input" id="site-search" type="search" placeholder="Search — press / or Ctrl-K"
+                 autocomplete="off" role="combobox" aria-expanded="false" aria-controls="site-search-results">
+          <ul class="search__results" id="site-search-results" hidden></ul>
+        </div>
+        <button class="themetoggle" id="theme-toggle" type="button">Theme: System</button>
+      </div>
+      <div class="tension" aria-hidden="true"></div>
+    </header>
+
+    <main class="page" id="main">
+      <h1>The authorization model</h1>
+      <p class="lede">One function answers every authorization question, and it lives at the data layer. The
+      permission catalogue is closed, the seven shipped roles are compositions of raw permissions with nothing
+      structurally privileged about them, and tenant isolation is three mechanisms that each fail closed on
+      their own.</p>
+
+      <div class="grid grid--3">
+        <div class="card"><p class="label">Actions in the catalogue</p><p class="display" style="font-size:var(--text-xxl)">106</p><p class="dim">Every one carried by at least one default role, asserted by a test.</p></div>
+        <div class="card"><p class="label">Default roles</p><p class="display" style="font-size:var(--text-xxl)">7</p><p class="dim">Editable. Custom roles compose the same raw actions.</p></div>
+        <div class="card"><p class="label">Matrix cells</p><p class="display" style="font-size:var(--text-xxl)">630</p><p class="dim">30 routes × 7 roles × 3 subjects, generated from the route table.</p></div>
+      </div>
+
+      <h2 id="catalogue">The permission catalogue</h2>
+
+      <p>Every authorization question is “may this actor take this action on this resource”, and every action
+      appears exactly once in <span class="pathref">src/authz/catalogue.ts</span>. Three consequences follow:</p>
+
+      <ol>
+        <li><strong>The catalogue is closed.</strong> <code>Action</code> is a union of literal names, not
+        <code>string</code>. An undeclared action cannot be named in a call to <code>can()</code> without a
+        deliberate cast, and <code>isAction()</code> rejects it at the runtime boundary where names arrive as
+        data — a request body, a stored custom role, an API token's scope list. Deny-by-default is a property
+        of the type, not a rule people are asked to remember.</li>
+        <li><strong>An action is the raw capability, not the assignment.</strong> The assignment of a role at a
+        scope is a <em>grant</em>; the capability a role composes is a <em>permission</em>.</li>
+        <li><strong>Splitting an action is a security decision, not a taxonomy exercise.</strong></li>
+      </ol>
+
+      <p>The splits the brief names explicitly, all present in the catalogue:</p>
+
+      <div class="grid grid--2">
+        <div class="card">
+          <p class="card__title"><code>secret.read_name</code> / <code>secret.read_value</code></p>
+          <p>Most roles need the former and almost none need the latter. Of the seven defaults, only Owner and
+          Admin hold <code>secret.read_value</code>.</p>
+        </div>
+        <div class="card">
+          <p class="card__title">Production versus non-production deployment</p>
+          <p><code>deployment.create_production</code>, <code>deployment.create_nonproduction</code>,
+          <code>deployment.rollback_production</code>, <code>deployment.rollback_nonproduction</code>. Granting
+          one without the other is the most common real request.</p>
+        </div>
+        <div class="card">
+          <p class="card__title"><code>terminal.open</code></p>
+          <p>Its own permission, off by default for every role except Infrastructure.
+          <code>terminal.read_recording</code> is separate again, because a recording contains everything typed
+          and printed in somebody else's session.</p>
+        </div>
+        <div class="card">
+          <p class="card__title"><code>site.build_command.write</code> and <code>site.run_command</code></p>
+          <p>Setting a build command is code execution as the site's Linux user, so it is a distinct grant
+          rather than a side effect of Developer. The one-off command runner is separate again.</p>
+        </div>
+      </div>
+
+      <p>Scope levels run widest first — <code>organization</code>, <code>team</code>, <code>project</code>,
+      <code>environment</code>, <code>resource</code> — and the order is load-bearing: permissions inherit
+      downward, so a grant at one level conveys the action at every level after it. Each entry declares the
+      <em>narrowest</em> level at which it is meaningfully granted, which is what makes the difference
+      visible: <code>organization.delete</code> is organization-only, so no project-scoped grant can ever
+      convey it, while <code>site.read</code> reaches down to a single site.</p>
+
+      <h3>Every action, and who holds it</h3>
+
+      <p>Generated from <span class="pathref">src/authz/catalogue.ts</span> and
+      <span class="pathref">src/authz/roles.ts</span>. Role initials: <abbr title="Owner">O</abbr>wner,
+      <abbr title="Admin">A</abbr>dmin, <abbr title="Infrastructure">I</abbr>nfrastructure,
+      <abbr title="Release Manager">R</abbr>elease Manager, <abbr title="Developer">D</abbr>eveloper,
+      <abbr title="Viewer">V</abbr>iewer, <abbr title="Billing">B</abbr>illing.</p>
+
+      <div class="scroller">
+        <div class="filter">
+          <label class="skip" for="action-filter">Filter actions</label>
+          <input id="action-filter" type="search" placeholder="Filter — try secret, terminal, production"
+                 data-filter-for="action-table" data-filter-count="action-count" data-filter-empty="action-empty"
+                 autocomplete="off">
+          <span class="filter__count" id="action-count" aria-live="polite"></span>
+        </div>
+        <table id="action-table">
+          <caption class="skip">The 106 actions in the permission catalogue, with the default roles that carry each</caption>
+          <thead>
+            <tr>
+              <th scope="col">Action</th>
+              <th scope="col">Resource</th>
+              <th scope="col">Narrowest scope</th>
+              <th scope="col">Held by</th>
+              <th scope="col">What the holder can do</th>
+            </tr>
+          </thead>
+          <tbody>
+<!-- 106 actions, generated from src/authz/catalogue.ts and src/authz/roles.ts -->
+<tr><th scope="row" class="mono nowrap">organization.read</th><td class="nowrap">organization</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr> <abbr title="Developer">D</abbr> <abbr title="Viewer">V</abbr></td><td>View the organization&#x27;s name, settings and policies.</td></tr>
+<tr><th scope="row" class="mono nowrap">organization.update</th><td class="nowrap">organization</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Change the organization&#x27;s name and settings.</td></tr>
+<tr><th scope="row" class="mono nowrap">organization.delete</th><td class="nowrap">organization</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr></td><td>Permanently delete the organization and everything in it.</td></tr>
+<tr><th scope="row" class="mono nowrap">organization.transfer_ownership</th><td class="nowrap">organization</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr></td><td>Transfer ownership of the organization to another member.</td></tr>
+<tr><th scope="row" class="mono nowrap">organization.manage_sso</th><td class="nowrap">organization</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Configure OIDC or SAML single sign-on for the organization.</td></tr>
+<tr><th scope="row" class="mono nowrap">organization.manage_security_policy</th><td class="nowrap">organization</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Set organization-wide policy: enforced two-factor authentication, session lifetime and minimum SSH key strength.</td></tr>
+<tr><th scope="row" class="mono nowrap">team.read</th><td class="nowrap">team</td><td class="nowrap">team</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr> <abbr title="Developer">D</abbr> <abbr title="Viewer">V</abbr></td><td>View a team and who belongs to it.</td></tr>
+<tr><th scope="row" class="mono nowrap">team.create</th><td class="nowrap">team</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Create a team in the organization.</td></tr>
+<tr><th scope="row" class="mono nowrap">team.update</th><td class="nowrap">team</td><td class="nowrap">team</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Rename a team or change its settings.</td></tr>
+<tr><th scope="row" class="mono nowrap">team.delete</th><td class="nowrap">team</td><td class="nowrap">team</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Delete a team, along with every grant scoped to it.</td></tr>
+<tr><th scope="row" class="mono nowrap">team.manage_members</th><td class="nowrap">team</td><td class="nowrap">team</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Add people to a team and remove them from it.</td></tr>
+<tr><th scope="row" class="mono nowrap">member.read</th><td class="nowrap">member</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr> <abbr title="Developer">D</abbr> <abbr title="Viewer">V</abbr></td><td>View the people in the organization and their status.</td></tr>
+<tr><th scope="row" class="mono nowrap">member.invite</th><td class="nowrap">member</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Invite a person to join the organization.</td></tr>
+<tr><th scope="row" class="mono nowrap">member.remove</th><td class="nowrap">member</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Remove a person from the organization, ending their access immediately.</td></tr>
+<tr><th scope="row" class="mono nowrap">member.revoke_sessions</th><td class="nowrap">member</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>Sign another member out everywhere, immediately, without removing them.</td></tr>
+<tr><th scope="row" class="mono nowrap">member.reset_password</th><td class="nowrap">member</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Set another member&#x27;s password when they have lost access to their account.</td></tr>
+<tr><th scope="row" class="mono nowrap">member.reset_two_factor</th><td class="nowrap">member</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Turn off another member&#x27;s second factor when they have lost their authenticator and their recovery codes.</td></tr>
+<tr><th scope="row" class="mono nowrap">role.read</th><td class="nowrap">role</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>View roles and the permissions each one carries.</td></tr>
+<tr><th scope="row" class="mono nowrap">role.create</th><td class="nowrap">role</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Create a custom role from the raw permission set.</td></tr>
+<tr><th scope="row" class="mono nowrap">role.update</th><td class="nowrap">role</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Change which permissions a role carries.</td></tr>
+<tr><th scope="row" class="mono nowrap">role.delete</th><td class="nowrap">role</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Delete a custom role.</td></tr>
+<tr><th scope="row" class="mono nowrap">grant.read</th><td class="nowrap">grant</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>See who has access to what, and when that access expires.</td></tr>
+<tr><th scope="row" class="mono nowrap">grant.create</th><td class="nowrap">grant</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Assign a role at a scope, or record a deny, optionally with an expiry.</td></tr>
+<tr><th scope="row" class="mono nowrap">grant.revoke</th><td class="nowrap">grant</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Revoke a role assignment, or remove a deny.</td></tr>
+<tr><th scope="row" class="mono nowrap">grant.break_glass</th><td class="nowrap">grant</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr> <abbr title="Developer">D</abbr></td><td>Take temporary Admin access with a written reason. Every Owner is notified and it expires on its own.</td></tr>
+<tr><th scope="row" class="mono nowrap">service_identity.read</th><td class="nowrap">service_identity</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>View the identities automation acts as, and what each one may do.</td></tr>
+<tr><th scope="row" class="mono nowrap">service_identity.create</th><td class="nowrap">service_identity</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Create a named identity for automation to act as.</td></tr>
+<tr><th scope="row" class="mono nowrap">service_identity.delete</th><td class="nowrap">service_identity</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Delete a service identity, stopping everything acting as it.</td></tr>
+<tr><th scope="row" class="mono nowrap">api_token.manage_own</th><td class="nowrap">api_token</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr> <abbr title="Developer">D</abbr></td><td>Issue, inspect and revoke your own API tokens.</td></tr>
+<tr><th scope="row" class="mono nowrap">api_token.read_any</th><td class="nowrap">api_token</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>List every API token in the organization, with its scope and last use.</td></tr>
+<tr><th scope="row" class="mono nowrap">api_token.revoke_any</th><td class="nowrap">api_token</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Revoke any API token, including revoking every token at once.</td></tr>
+<tr><th scope="row" class="mono nowrap">project.read</th><td class="nowrap">project</td><td class="nowrap">project</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr> <abbr title="Developer">D</abbr> <abbr title="Viewer">V</abbr></td><td>View a project and the environments in it.</td></tr>
+<tr><th scope="row" class="mono nowrap">project.create</th><td class="nowrap">project</td><td class="nowrap">team</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Create a project in a team.</td></tr>
+<tr><th scope="row" class="mono nowrap">project.update</th><td class="nowrap">project</td><td class="nowrap">project</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Rename a project or change its settings.</td></tr>
+<tr><th scope="row" class="mono nowrap">project.delete</th><td class="nowrap">project</td><td class="nowrap">project</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Delete a project and everything in it.</td></tr>
+<tr><th scope="row" class="mono nowrap">environment.read</th><td class="nowrap">environment</td><td class="nowrap">environment</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr> <abbr title="Developer">D</abbr> <abbr title="Viewer">V</abbr></td><td>View an environment and what runs in it.</td></tr>
+<tr><th scope="row" class="mono nowrap">environment.create</th><td class="nowrap">environment</td><td class="nowrap">project</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Create an environment in a project.</td></tr>
+<tr><th scope="row" class="mono nowrap">environment.update</th><td class="nowrap">environment</td><td class="nowrap">environment</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Change an environment&#x27;s settings, including its branch and its staging password protection.</td></tr>
+<tr><th scope="row" class="mono nowrap">environment.delete</th><td class="nowrap">environment</td><td class="nowrap">environment</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Delete an environment and everything in it.</td></tr>
+<tr><th scope="row" class="mono nowrap">site.read</th><td class="nowrap">site</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr> <abbr title="Developer">D</abbr> <abbr title="Viewer">V</abbr></td><td>View a site&#x27;s configuration, status and domains.</td></tr>
+<tr><th scope="row" class="mono nowrap">site.create</th><td class="nowrap">site</td><td class="nowrap">environment</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Create a site in an environment from a Git repository.</td></tr>
+<tr><th scope="row" class="mono nowrap">site.update</th><td class="nowrap">site</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Change a site&#x27;s repository, branch, root and output directories, redirects, headers and uptime checks.</td></tr>
+<tr><th scope="row" class="mono nowrap">site.delete</th><td class="nowrap">site</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Delete a site, its releases and its configuration on the host.</td></tr>
+<tr><th scope="row" class="mono nowrap">site.restart</th><td class="nowrap">site</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr></td><td>Restart the site&#x27;s service.</td></tr>
+<tr><th scope="row" class="mono nowrap">site.build_command.write</th><td class="nowrap">site</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Set the build and install commands. They run as the site&#x27;s Linux user and can run any code, which is why this is separate from deploying.</td></tr>
+<tr><th scope="row" class="mono nowrap">site.run_command</th><td class="nowrap">site</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Run a one-off command for the site, as the site&#x27;s Linux user.</td></tr>
+<tr><th scope="row" class="mono nowrap">site.read_logs</th><td class="nowrap">site</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr> <abbr title="Developer">D</abbr></td><td>Read the site&#x27;s application logs, including live tail.</td></tr>
+<tr><th scope="row" class="mono nowrap">site.read_metrics</th><td class="nowrap">site</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr> <abbr title="Developer">D</abbr> <abbr title="Viewer">V</abbr></td><td>View the site&#x27;s CPU, memory and request metrics.</td></tr>
+<tr><th scope="row" class="mono nowrap">site.manage_runtime</th><td class="nowrap">site</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>Change the Node or Bun version pinned to the site.</td></tr>
+<tr><th scope="row" class="mono nowrap">site.manage_resource_limits</th><td class="nowrap">site</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>Change the site&#x27;s sandboxing and its memory, CPU and task limits.</td></tr>
+<tr><th scope="row" class="mono nowrap">site.manage_deploy_triggers</th><td class="nowrap">site</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Configure push-to-deploy: which branch deploys, and the webhook that triggers it.</td></tr>
+<tr><th scope="row" class="mono nowrap">release.read</th><td class="nowrap">release</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr> <abbr title="Developer">D</abbr> <abbr title="Viewer">V</abbr></td><td>View the releases kept on the host for a site.</td></tr>
+<tr><th scope="row" class="mono nowrap">release.delete</th><td class="nowrap">release</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Release Manager">R</abbr></td><td>Delete a retained release, which removes it as a rollback target.</td></tr>
+<tr><th scope="row" class="mono nowrap">deployment.read</th><td class="nowrap">deployment</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr> <abbr title="Developer">D</abbr> <abbr title="Viewer">V</abbr></td><td>View deployment history and the status of a running deployment.</td></tr>
+<tr><th scope="row" class="mono nowrap">deployment.read_logs</th><td class="nowrap">deployment</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Release Manager">R</abbr> <abbr title="Developer">D</abbr></td><td>Read a deployment&#x27;s build logs, live and archived.</td></tr>
+<tr><th scope="row" class="mono nowrap">deployment.create_nonproduction</th><td class="nowrap">deployment</td><td class="nowrap">environment</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Release Manager">R</abbr> <abbr title="Developer">D</abbr></td><td>Deploy to a staging or preview environment.</td></tr>
+<tr><th scope="row" class="mono nowrap">deployment.create_production</th><td class="nowrap">deployment</td><td class="nowrap">environment</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Release Manager">R</abbr></td><td>Deploy to a production environment.</td></tr>
+<tr><th scope="row" class="mono nowrap">deployment.rollback_nonproduction</th><td class="nowrap">deployment</td><td class="nowrap">environment</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Release Manager">R</abbr> <abbr title="Developer">D</abbr></td><td>Roll a staging or preview environment back to an earlier release.</td></tr>
+<tr><th scope="row" class="mono nowrap">deployment.rollback_production</th><td class="nowrap">deployment</td><td class="nowrap">environment</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Release Manager">R</abbr></td><td>Roll a production environment back to an earlier release.</td></tr>
+<tr><th scope="row" class="mono nowrap">deployment.cancel</th><td class="nowrap">deployment</td><td class="nowrap">environment</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr> <abbr title="Developer">D</abbr></td><td>Cancel a deployment that is still running.</td></tr>
+<tr><th scope="row" class="mono nowrap">secret.read_name</th><td class="nowrap">secret</td><td class="nowrap">environment</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr> <abbr title="Developer">D</abbr></td><td>See that a secret exists and what it is called. Never its value.</td></tr>
+<tr><th scope="row" class="mono nowrap">secret.read_value</th><td class="nowrap">secret</td><td class="nowrap">environment</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Reveal a secret&#x27;s value in plaintext.</td></tr>
+<tr><th scope="row" class="mono nowrap">secret.create</th><td class="nowrap">secret</td><td class="nowrap">environment</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Add a secret to an environment.</td></tr>
+<tr><th scope="row" class="mono nowrap">secret.update</th><td class="nowrap">secret</td><td class="nowrap">environment</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Replace a secret&#x27;s value with a new one.</td></tr>
+<tr><th scope="row" class="mono nowrap">secret.delete</th><td class="nowrap">secret</td><td class="nowrap">environment</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Delete a secret from an environment.</td></tr>
+<tr><th scope="row" class="mono nowrap">secret.read_history</th><td class="nowrap">secret</td><td class="nowrap">environment</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr> <abbr title="Developer">D</abbr></td><td>See who changed a secret and when. The history never holds values.</td></tr>
+<tr><th scope="row" class="mono nowrap">domain.read</th><td class="nowrap">domain</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr> <abbr title="Developer">D</abbr> <abbr title="Viewer">V</abbr></td><td>View the domains attached to a site and whether they are verified.</td></tr>
+<tr><th scope="row" class="mono nowrap">domain.create</th><td class="nowrap">domain</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>Attach a custom domain to a site and verify it through DNS.</td></tr>
+<tr><th scope="row" class="mono nowrap">domain.delete</th><td class="nowrap">domain</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>Detach a domain from a site.</td></tr>
+<tr><th scope="row" class="mono nowrap">certificate.read</th><td class="nowrap">certificate</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr> <abbr title="Developer">D</abbr> <abbr title="Viewer">V</abbr></td><td>View a domain&#x27;s certificate, its issuer and its expiry.</td></tr>
+<tr><th scope="row" class="mono nowrap">certificate.upload</th><td class="nowrap">certificate</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>Upload a custom certificate and its private key.</td></tr>
+<tr><th scope="row" class="mono nowrap">certificate.renew</th><td class="nowrap">certificate</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>Renew a certificate now, rather than waiting for automatic renewal.</td></tr>
+<tr><th scope="row" class="mono nowrap">scheduled_job.read</th><td class="nowrap">scheduled_job</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr> <abbr title="Developer">D</abbr> <abbr title="Viewer">V</abbr></td><td>View a site&#x27;s scheduled jobs and when they run.</td></tr>
+<tr><th scope="row" class="mono nowrap">scheduled_job.create</th><td class="nowrap">scheduled_job</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Create a scheduled job. It runs as the site&#x27;s Linux user, so this carries the same power as setting a build command.</td></tr>
+<tr><th scope="row" class="mono nowrap">scheduled_job.update</th><td class="nowrap">scheduled_job</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Change a scheduled job&#x27;s schedule or what it runs.</td></tr>
+<tr><th scope="row" class="mono nowrap">scheduled_job.delete</th><td class="nowrap">scheduled_job</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Delete a scheduled job.</td></tr>
+<tr><th scope="row" class="mono nowrap">scheduled_job.run_now</th><td class="nowrap">scheduled_job</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Release Manager">R</abbr></td><td>Run a scheduled job immediately, outside its schedule.</td></tr>
+<tr><th scope="row" class="mono nowrap">scheduled_job.read_output</th><td class="nowrap">scheduled_job</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr> <abbr title="Developer">D</abbr></td><td>Read the captured output of a scheduled job&#x27;s runs.</td></tr>
+<tr><th scope="row" class="mono nowrap">host.read</th><td class="nowrap">host</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr></td><td>View a host, its inventory and its health.</td></tr>
+<tr><th scope="row" class="mono nowrap">host.create</th><td class="nowrap">host</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>Add a host and install the Ratline agent onto it.</td></tr>
+<tr><th scope="row" class="mono nowrap">host.update</th><td class="nowrap">host</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>Change a host&#x27;s settings and its alert thresholds.</td></tr>
+<tr><th scope="row" class="mono nowrap">host.delete</th><td class="nowrap">host</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>Remove a host from Ratline.</td></tr>
+<tr><th scope="row" class="mono nowrap">host.read_metrics</th><td class="nowrap">host</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr></td><td>View a host&#x27;s disk, load and memory metrics.</td></tr>
+<tr><th scope="row" class="mono nowrap">host.manage_stack</th><td class="nowrap">host</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>Install and configure the host&#x27;s web server and its available runtimes.</td></tr>
+<tr><th scope="row" class="mono nowrap">host.manage_updates</th><td class="nowrap">host</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>Toggle unattended security upgrades and apply pending ones.</td></tr>
+<tr><th scope="row" class="mono nowrap">host.upgrade_agent</th><td class="nowrap">host</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>Update the Ratline agent on a host, with rollback.</td></tr>
+<tr><th scope="row" class="mono nowrap">firewall.read</th><td class="nowrap">firewall</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>View a host&#x27;s firewall rules and its intrusion-blocking policy.</td></tr>
+<tr><th scope="row" class="mono nowrap">firewall.update</th><td class="nowrap">firewall</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>Change a host&#x27;s firewall rules and its intrusion-blocking policy.</td></tr>
+<tr><th scope="row" class="mono nowrap">backup.read</th><td class="nowrap">backup</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr></td><td>View the backups taken of a site&#x27;s files and configuration.</td></tr>
+<tr><th scope="row" class="mono nowrap">backup.create</th><td class="nowrap">backup</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr></td><td>Take a backup of a site now.</td></tr>
+<tr><th scope="row" class="mono nowrap">backup.restore</th><td class="nowrap">backup</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>Restore a backup over a site&#x27;s live files.</td></tr>
+<tr><th scope="row" class="mono nowrap">backup.delete</th><td class="nowrap">backup</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>Delete a backup.</td></tr>
+<tr><th scope="row" class="mono nowrap">backup.manage_policy</th><td class="nowrap">backup</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>Set the backup schedule and the object storage backups are written to.</td></tr>
+<tr><th scope="row" class="mono nowrap">terminal.open</th><td class="nowrap">terminal</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>Open a web terminal on a host. Off by default for every role except Infrastructure.</td></tr>
+<tr><th scope="row" class="mono nowrap">terminal.read_recording</th><td class="nowrap">terminal</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Play back a recorded terminal session, including everything typed and printed during it.</td></tr>
+<tr><th scope="row" class="mono nowrap">ssh_grant.read</th><td class="nowrap">ssh_grant</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>See who has SSH access to which sites and hosts, and when it expires.</td></tr>
+<tr><th scope="row" class="mono nowrap">ssh_grant.create</th><td class="nowrap">ssh_grant</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>Grant SSH access to a site or host, optionally time-bound.</td></tr>
+<tr><th scope="row" class="mono nowrap">ssh_grant.revoke</th><td class="nowrap">ssh_grant</td><td class="nowrap">resource</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>Revoke SSH access and terminate the sessions using it.</td></tr>
+<tr><th scope="row" class="mono nowrap">ssh_key.manage_own</th><td class="nowrap">ssh_key</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr> <abbr title="Release Manager">R</abbr> <abbr title="Developer">D</abbr></td><td>Upload, rotate and remove your own SSH public keys.</td></tr>
+<tr><th scope="row" class="mono nowrap">ssh_key.read_any</th><td class="nowrap">ssh_key</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>View every member&#x27;s SSH keys, with fingerprint, age and last use.</td></tr>
+<tr><th scope="row" class="mono nowrap">ssh_key.revoke_any</th><td class="nowrap">ssh_key</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>Remove another member&#x27;s SSH key, or force them to rotate it.</td></tr>
+<tr><th scope="row" class="mono nowrap">ssh_authority.read</th><td class="nowrap">ssh_authority</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>View the SSH certificate authority&#x27;s fingerprint and when it was last rotated.</td></tr>
+<tr><th scope="row" class="mono nowrap">ssh_authority.rotate</th><td class="nowrap">ssh_authority</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Infrastructure">I</abbr></td><td>Rotate the SSH certificate authority and redistribute it to every host.</td></tr>
+<tr><th scope="row" class="mono nowrap">audit_log.read</th><td class="nowrap">audit_log</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr></td><td>Read the audit log, including the decisions that were denied.</td></tr>
+<tr><th scope="row" class="mono nowrap">billing.read</th><td class="nowrap">billing</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Billing">B</abbr></td><td>View invoices, the current plan and the payment method.</td></tr>
+<tr><th scope="row" class="mono nowrap">billing.update</th><td class="nowrap">billing</td><td class="nowrap">organization</td><td class="mono nowrap"><abbr title="Owner">O</abbr> <abbr title="Admin">A</abbr> <abbr title="Billing">B</abbr></td><td>Change the plan or the payment method.</td></tr>
+          </tbody>
+        </table>
+        <p class="filter__empty" id="action-empty" hidden></p>
+      </div>
+
+      <h2 id="roles">The seven default roles</h2>
+
+      <p>A role is a named composition of raw actions. Nothing about the defaults is structurally
+      privileged — every list is expressible as toggles in the role editor, and storing an edited or custom
+      role is M5 work.</p>
+
+      <div class="note" data-status="working">
+        <span class="note__label">Why every role's actions are written out rather than derived</span>
+        <p><code>actions: ALL_ACTIONS</code> would be shorter, correct today, and would quietly destroy the
+        completeness check. If any role holds every action by construction, then “every action is mapped to at
+        least one role” is true of any catalogue — including one with an action nobody thought about — and the
+        test that is supposed to fail can never fail. So the lists are written out, Admin's included, even
+        though Admin is defined as a subtraction. The duplication is the mechanism.</p>
+      </div>
+
+      <div class="scroller">
+        <table>
+          <caption class="skip">The seven default roles with their action counts</caption>
+          <thead>
+            <tr>
+              <th scope="col">Role</th>
+              <th scope="col" class="num">Actions</th>
+              <th scope="col">Intent, as the role editor renders it</th>
+              <th scope="col">Last holder protected</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">Owner</th><td class="num">106</td><td>Everything, including deleting the organization and transferring ownership. At least one Owner always exists.</td><td>yes</td></tr>
+            <tr><th scope="row">Admin</th><td class="num">104</td><td>Everything except deleting the organization and transferring ownership.</td><td>no</td></tr>
+            <tr><th scope="row">Infrastructure</th><td class="num">53</td><td>Add and remove hosts, manage the host stack, firewall and SSH access. Cannot read secret values.</td><td>no</td></tr>
+            <tr><th scope="row">Release Manager</th><td class="num">32</td><td>Deploy and roll back in production. Cannot change host or site configuration, and cannot read secret values.</td><td>no</td></tr>
+            <tr><th scope="row">Developer</th><td class="num">23</td><td>Deploy to staging and preview environments, read logs, manage their own SSH keys, and see secret names but never values.</td><td>no</td></tr>
+            <tr><th scope="row">Viewer</th><td class="num">12</td><td>Read-only on sites, deployment history and metrics. No raw logs, no secret values, and no changes of any kind.</td><td>no</td></tr>
+            <tr><th scope="row">Billing</th><td class="num">2</td><td>Invoices, plan and payment method. Nothing else, and no view of the infrastructure.</td><td>no</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Admin is Owner minus exactly two actions: <code>organization.delete</code> and
+      <code>organization.transfer_ownership</code>. Billing is the one role that holds no navigation of any
+      kind — §6.3 gives it “no infrastructure visibility whatsoever”, and a test asserts the property (every
+      action it holds has <code>resource === "billing"</code>) rather than comparing against a copy of the
+      list, so an action added later cannot pass review by also being added to the expectation.</p>
+
+      <h3>The judgement calls, written down</h3>
+
+      <p><span class="pathref">src/authz/roles.ts</span> records seven deviations so that a reviewer can argue
+      with the rule rather than with ninety individual lines. The four that change what a role can do:</p>
+
+      <dl class="facts">
+        <dt>D1</dt>
+        <dd><strong>Infrastructure and Release Manager hold no <code>secret.read_value</code> at all.</strong>
+        §6.3 says Infrastructure “cannot read <em>production</em> secret values” — the narrower wording — while
+        the task's acceptance says “provably cannot read secret values”, with no qualifier. The stricter reading
+        is implemented. The narrower one is still reachable without editing the file, because
+        <code>secret.read_value</code> is environment-scoped: an operator who wants staging values but not
+        production grants a custom role at the staging environment. Flagged because the two documents genuinely
+        disagree.</dd>
+
+        <dt>D2</dt>
+        <dd><strong>Infrastructure holds <code>terminal.open</code> but not
+        <code>terminal.read_recording</code>.</strong> A recording contains everything typed and printed in
+        someone else's session, including anything pasted — the most likely place a role denied
+        <code>secret.read_value</code> would meet one. The action carries no “own session” qualifier, so
+        holding it means reading everyone's. Owner and Admin only.</dd>
+
+        <dt>D3</dt>
+        <dd><strong><code>grant.break_glass</code> is held by Infrastructure, Release Manager and Developer,
+        and by nobody else.</strong> Break-glass grants temporary Admin, so it defeats every restriction by
+        design; its control is detection, not prevention. The question is only who is trusted to trip the
+        alarm, and the answer is the roles that get paged. Viewer and Billing cannot self-elevate.</dd>
+
+        <dt>D4</dt>
+        <dd><strong>Viewer holds only actions whose verb begins with <code>read</code>.</strong> No mutation of
+        any kind, not even <code>api_token.manage_own</code>. The cost is that a Viewer cannot script against
+        the API; the benefit is that “Viewer changes nothing” is a mechanical property a test can check.</dd>
+      </dl>
+
+      <div class="note" data-status="attention">
+        <span class="note__label">Known gaps, recorded rather than worked around</span>
+        <p><strong>Nothing but deployment is split by environment class.</strong> The catalogue splits
+        <code>deployment.create</code> and <code>deployment.rollback</code> into production and
+        non-production, and the argument for it — a project-scoped grant inherits into every environment
+        underneath, so an unqualified action conveys production — applies unchanged to
+        <code>site.restart</code>, <code>site.run_command</code>, <code>secret.create</code>/<code>update</code>/<code>delete</code>,
+        <code>scheduled_job.*</code> and <code>backup.restore</code>, none of which are split. The visible
+        cost is Developer: it cannot restart its own staging app, manage staging secrets or own a staging cron
+        job, because each would arrive with the production equivalent attached.</p>
+        <p><strong><code>terminal.open</code> is not scoped to a site</strong> — it is declared at resource
+        scope on a host, and whether the resource is the host or the site decides whether a terminal grant on
+        one site leaks the whole box. M6 has to answer that.</p>
+        <p><strong>There is no “read own audit trail”</strong>, so every role below Admin is opaque to itself:
+        a Developer cannot see why they were denied.</p>
+      </div>
+
+      <div class="note" data-status="fail">
+        <span class="note__label">One gap note is out of date</span>
+        <p>The same list in <span class="pathref">src/authz/roles.ts</span> ends with “There is no action for
+        revoking a member's active sessions”. There is: <code>member.revoke_sessions</code> is in the
+        catalogue, held by Owner and Admin, and <code>POST /members/:userId/revoke-sessions</code> is one of
+        the twelve bound routes. The note was not updated when RL-M1-018 landed.</p>
+      </div>
+
+      <h2 id="can">can() — one decision function</h2>
+
+      <p><span class="pathref">src/authz/can.ts</span> is the only place an authorization question is
+      answered. Every branch in it denies except one: the function has a single path to
+      <code>allowed: true</code>, and everything else, including every error, arrives at a denial. An unmapped
+      action, an unknown scope, a disabled account, a database that will not answer — all deny.</p>
+
+<pre><code><span class="t-com">// The single path to true, written as an equality against one literal rather</span>
+<span class="t-com">// than as a list of denials, so a reason added later denies until someone</span>
+<span class="t-com">// deliberately says otherwise.</span>
+<span class="t-key">return</span> {
+  allowed: reason <span class="t-pun">===</span> <span class="t-str">"granted"</span>,
+  reason,
+  action,
+  scopeNodeId: scope.scopeNodeId,
+  resourceId: scope.resourceId,
+};</code></pre>
+
+      <h3>The six steps, in order</h3>
+
+      <ol>
+        <li><strong>An action not in the catalogue is a denial, not an error.</strong> A name arriving from a
+        request body, a stored custom role or a token's scope list is untrusted until checked here.</li>
+        <li><strong>No role carries it.</strong> With the built-in roles the completeness test makes this
+        unreachable, but a custom role set can leave an action carried by nobody, and asking the database to
+        decide with an empty role list is a round trip whose answer is already known.</li>
+        <li><strong>May this actor act at all?</strong> One question per request, not one per hierarchy node.
+        A disabled account is the shape a compromised one is put into, so intact grants must not save it.</li>
+        <li><strong>Does the scope node exist?</strong> A node that does not exist and one belonging to another
+        tenant are indistinguishable here, because row-level security means the query cannot see the
+        difference either. That is what makes indistinguishability structural rather than a matching pair of
+        code paths.</li>
+        <li><strong>Precedence, inheritance and expiry, decided in the database.</strong> Three objects, each
+        with one job: <code>live_grants</code> owns the expiry predicate,
+        <code>effective_grants()</code> owns inheritance direction, <code>grant_decision()</code> owns
+        precedence — denies first, then allows, else deny.</li>
+        <li><strong>An API token holds the intersection of its own grants and its issuing user's current
+        ones.</strong> Asked only once the token's own grants have already allowed, so the shape on the page is
+        the shape of the rule: an intersection can only narrow, never widen.</li>
+      </ol>
+
+      <p>A denial is then explained with a second query that <em>ignores denies on purpose</em>, so it can only
+      ever explain a decision already taken above and must never decide anything. The distinction matters to
+      whoever reads the audit log, because the remedies differ: one is “ask someone for access”, the other is
+      “someone deliberately took it away”.</p>
+
+      <h3>The eleven decision reasons</h3>
+
+      <div class="scroller">
+        <table>
+          <caption class="skip">Decision reasons from src/authz/can.ts</caption>
+          <thead><tr><th scope="col">Reason</th><th scope="col">Outcome</th><th scope="col">What it means</th></tr></thead>
+          <tbody>
+            <tr><th scope="row" class="mono">granted</th><td><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">●</span> allow</span></td><td>The only reason that allows.</td></tr>
+            <tr><th scope="row" class="mono">no-grant</th><td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> deny</span></td><td>Nothing grants it. Ask someone for access.</td></tr>
+            <tr><th scope="row" class="mono">explicit-deny</th><td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> deny</span></td><td>An allowing grant exists and a deny beat it. Someone took it away deliberately.</td></tr>
+            <tr><th scope="row" class="mono">unknown-action</th><td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> deny</span></td><td>The name is not in the catalogue.</td></tr>
+            <tr><th scope="row" class="mono">unknown-scope</th><td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> deny</span></td><td>The scope node does not exist, or belongs to another tenant. The two are the same answer.</td></tr>
+            <tr><th scope="row" class="mono">actor-disabled</th><td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> deny</span></td><td>The account is disabled. Grants do not save it.</td></tr>
+            <tr><th scope="row" class="mono">actor-not-in-tenant</th><td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> deny</span></td><td>The actor is not a member of this tenant.</td></tr>
+            <tr><th scope="row" class="mono">no-role-carries-action</th><td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> deny</span></td><td>No role carries the action at all.</td></tr>
+            <tr><th scope="row" class="mono">exceeds-issuer</th><td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> deny</span></td><td>API tokens only. The token's grants were enough and its issuer's were not.</td></tr>
+            <tr><th scope="row" class="mono">issuer-disabled</th><td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> deny</span></td><td>API tokens only. The person behind the token is disabled.</td></tr>
+            <tr><th scope="row" class="mono">issuer-not-in-tenant</th><td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> deny</span></td><td>API tokens only. The issuer has left the tenant.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>The decision carries a reason because three consumers need it and none can be given a bare boolean:
+      the audit log records <em>why</em>, not just what; the role editor's live preview must explain a denial
+      to whoever is toggling permissions, and must call this same function rather than reimplement it; and an
+      operator at 2am needs to know whether they lack a grant or are being actively denied, because the
+      remedies differ.</p>
+
+      <h3>What the module deliberately does not do</h3>
+
+      <ul>
+        <li><strong>Cache.</strong> Role changes must take effect immediately, including on active sessions. A
+        cache here is the obvious optimisation and would break that requirement silently.</li>
+        <li><strong>Know about routes, HTTP, or the shape of a request.</strong></li>
+        <li><strong>Own precedence, inheritance or expiry.</strong> Those live in the database; duplicating them
+        here would give one question two answers.</li>
+      </ul>
+
+      <h3>Two entry points, and why they differ</h3>
+
+      <p><code>can(action: string)</code> accepts anything, because the name may have come from a request body
+      or a stored custom role — it is untrusted, and step 1 denies what the catalogue does not know.
+      <code>require(action: Action)</code> takes the narrow type, because every caller is the project's own
+      repository code asking for a permission it wrote into the source.</p>
+
+      <p>What the narrow type buys is concrete: an invented permission used to fail closed but silently.
+      <code>requirePermission(ctx, "audit_log.verify", …)</code> — a name written during RL-M1-043 — denied
+      every caller with <code>unknown-action</code>, which reads in the audit log exactly like a legitimate
+      refusal. Nothing was insecure, and nothing would have told anybody the feature was simply dead. It is now
+      a compile error.</p>
+
+      <p><code>require()</code> also checks re-authentication freshness, <em>after</em> permission. The order is
+      the whole of it: an actor who does not hold the action must be refused as not holding it, never asked to
+      prove a password they would then have proved for nothing — and asking first would turn the control into
+      an oracle, where “you were asked to re-authenticate” means “you hold this permission”.</p>
+
+      <h2 id="isolation">Three layers of tenant isolation</h2>
+
+      <p>C3 says an unscoped read must be impossible, not merely discouraged. “Impossible to call” rules out
+      the usual answers: a review convention is not impossible, a helper you are supposed to use is not
+      impossible, and even a lint rule is only impossible-in-CI — one <code>eslint-disable</code> away.</p>
+
+      <figure>
+        <div class="scroller">
+        <svg viewBox="0 0 880 290" width="880" height="290" role="img"
+             aria-label="Three gates a query must pass. Gate one: the raw handle is unreachable outside src/repo, enforced by lint. Gate two: every repository function requires a branded AuthzContext, enforced by the type system. Gate three: Postgres row-level security is enabled and forced, and the application connects as an unprivileged role. What comes out is rows the actor's own tenant owns and nothing else.">
+          <defs>
+            <marker id="arw-iso" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path class="dg-head" d="M0,0 L8,4 L0,8 z"/>
+            </marker>
+          </defs>
+
+          <text class="dg-zonelabel" x="20" y="18">A read, and the three things it must pass</text>
+
+          <path class="dg-arrow" d="M430,24 L430,38" marker-end="url(#arw-iso)"/>
+
+          <text class="dg-step" x="96" y="76" text-anchor="end">1</text>
+          <rect class="dg-box" x="120" y="42" width="620" height="58" rx="3"/>
+          <text class="dg-title" x="136" y="64">The raw handle is unreachable</text>
+          <text class="dg-sub" x="136" y="80">src/db/internal is the only module that opens a connection, and the only</text>
+          <text class="dg-sub" x="136" y="92">thing it exports for querying is scoped(), which cannot run without a tenant.</text>
+          <text class="dg-sub" x="728" y="64" text-anchor="end">lint</text>
+
+          <path class="dg-arrow" d="M430,100 L430,116" marker-end="url(#arw-iso)"/>
+
+          <text class="dg-step" x="96" y="152" text-anchor="end">2</text>
+          <rect class="dg-box" x="120" y="118" width="620" height="58" rx="3"/>
+          <text class="dg-title" x="136" y="140">Every repository function requires an AuthzContext</text>
+          <text class="dg-sub" x="136" y="156">A branded type whose constructor is not exported. There is no literal to write,</text>
+          <text class="dg-sub" x="136" y="168">no default value, and no cast that is not a deliberate lie visible in review.</text>
+          <text class="dg-sub" x="728" y="140" text-anchor="end">types</text>
+
+          <path class="dg-arrow" d="M430,176 L430,192" marker-end="url(#arw-iso)"/>
+
+          <text class="dg-step" x="96" y="228" text-anchor="end">3</text>
+          <rect class="dg-box" x="120" y="194" width="620" height="58" rx="3"/>
+          <text class="dg-title" x="136" y="216">Row-level security, enabled and FORCED</text>
+          <text class="dg-sub" x="136" y="232">Without FORCE the table owner is exempt. The application connects as ratline_app,</text>
+          <text class="dg-sub" x="136" y="244">which holds neither SUPERUSER nor BYPASSRLS; an unset tenant matches no rows.</text>
+          <text class="dg-sub" x="728" y="216" text-anchor="end">postgres</text>
+
+          <path class="dg-arrow" d="M430,252 L430,268" marker-end="url(#arw-iso)"/>
+          <text class="dg-sub" x="446" y="272">rows this tenant owns, and nothing else</text>
+        </svg>
+        </div>
+        <figcaption>Layer 3 already holds on its own. Layers 1 and 2 exist so that a scoping mistake is a lint
+        failure or a compile error at review time rather than a silent empty result at 2am.</figcaption>
+      </figure>
+
+      <p>The test that makes layer 3 real takes a repository function, <strong>deletes its application-level
+      predicate</strong>, runs it with a foreign tenant, and asserts it still returns zero rows. Every
+      isolation test connects as the unprivileged role, because a superuser bypasses policies unconditionally
+      and the tests would otherwise pass while exercising nothing.</p>
+
+      <p>Repository functions return <code>null</code> for both “does not exist” and “exists in another
+      tenant”, because the query cannot see the row and the caller therefore cannot tell the difference.
+      Genuinely cross-tenant work — instance administration, the audit chain verifier — needs an explicitly
+      constructed system context; that list is short, enumerated, individually justified, and a test asserts it
+      does not grow silently.</p>
+
+      <h2 id="no-middleware">Why there is no authorization middleware</h2>
+
+      <p>§9 lists as an anti-pattern: “Permission checks in route handlers instead of, <em>or in addition
+      to,</em> the data layer.” The owner ruled on that reading, and M1 shipped with no authorization
+      middleware in the HTTP layer at all. No route handler calls <code>can()</code>.</p>
+
+      <div class="note" data-status="fail">
+        <span class="note__label">What that reading found — R-29</span>
+        <p><strong>Nine repository reads resolved no permission at all.</strong> Among them
+        <code>listAudit</code>, <code>verifyAuditChain</code>, the two verification reads, and the
+        organization, member and project reads. <code>audit_log.read</code> is Owner and Admin only, so every
+        authenticated member of a tenant could read the entire audit log.</p>
+        <p>It went unnoticed because C3's three layers all <em>held</em>: an unreachable handle, a branded
+        context and forced row-level security, none of which has an opinion about <em>which</em> member of a
+        tenant is asking. That is the question <code>can()</code> answers, and these functions never asked it.
+        Row-level security still confined all nine to one tenant, so it was a within-tenant privilege gap
+        rather than a cross-tenant one, and nothing called them over HTTP because there was no server — the
+        only reason it was never live.</p>
+        <p>A middleware would have masked all nine and left the repositories exactly as wrong. The durable fix
+        is <span class="pathref">test/security/repository_gating.test.ts</span>: every exported repository
+        function either resolves a permission or carries a written argument for why not. Closed as
+        RL-M1-043.</p>
+      </div>
+
+      <p>Two figures differ between documents and both are in the repository: the M1 gate report says nine
+      ungated reads, and threat-model R-29 says six and then enumerates seven. Both are recorded on the
+      <a href="defects.html#contradictions">defects page</a>.</p>
+
+      <h2 id="routes">The route table</h2>
+
+      <p>§6.3 requires that the matrix be generated from the route table so a new endpoint without matrix
+      coverage fails CI. That sentence forces a shape. If routes are declared by calling a framework, the set
+      of routes is only knowable by running the framework, and the action each one requires is knowable only by
+      reading the handler — so “a new endpoint without coverage fails CI” becomes “someone notices in
+      review”.</p>
+
+      <p>So the route table is <strong>data</strong>, in <span class="pathref">src/api/routes.ts</span>, and
+      the HTTP framework binds to it rather than defining it:</p>
+
+<pre><code><span class="t-com">// A route that requires none. `publicReason` is mandatory, so an unguarded</span>
+<span class="t-com">// route is an argued decision rather than a forgotten annotation.</span>
+<span class="t-key">export type</span> <span class="t-fn">PublicRoute</span> = BaseRoute &amp; {
+  <span class="t-key">readonly</span> requires: <span class="t-key">null</span>;
+  <span class="t-key">readonly</span> publicReason: <span class="t-key">string</span>;
+};</code></pre>
+
+      <p>Three things follow. Every route names the action it requires in the same vocabulary the catalogue
+      uses, so an action outside the catalogue does not typecheck. The matrix generator reads the array, so
+      adding a route adds matrix rows automatically. And a route that genuinely needs no permission has to say
+      why — <code>requires: null</code> with no <code>publicReason</code> does not typecheck.</p>
+
+      <p>Thirty routes are declared. Twelve are bound by
+      <span class="pathref">src/api/server.ts</span> today; a route with no repository function behind it is
+      deliberately <em>absent</em> rather than stubbed, because a stub answers everybody identically and
+      reports itself as guarded.</p>
+
+      <div class="scroller">
+        <div class="filter">
+          <label class="skip" for="route-filter">Filter routes</label>
+          <input id="route-filter" type="search" placeholder="Filter — try secret, bound, unguarded"
+                 data-filter-for="route-table" data-filter-count="route-count" data-filter-empty="route-empty"
+                 autocomplete="off">
+          <span class="filter__count" id="route-count" aria-live="polite"></span>
+        </div>
+        <table id="route-table">
+          <caption class="skip">Every route declared in src/api/routes.ts, with the action it requires and whether the server binds it</caption>
+          <thead>
+            <tr>
+              <th scope="col">Route</th>
+              <th scope="col">Summary</th>
+              <th scope="col">Requires</th>
+              <th scope="col">Scope from</th>
+              <th scope="col">Transport</th>
+            </tr>
+          </thead>
+          <tbody>
+<!-- 30 routes; 12 bound -->
+<tr><th scope="row" class="mono nowrap">POST /auth/sign-in</th><td>Exchange an email and password for a session<br><span class="dim">Unguarded because: Signing in is how an actor comes to exist. Requiring a permission would need an actor to check it against, and there is not one yet — the pre-authentication context seam ADR 0014 records.</span></td><td class="nowrap"><span class="chip">unguarded</span></td><td class="nowrap">organization</td><td class="nowrap"><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">&#9679;</span> bound</span></td></tr>
+<tr><th scope="row" class="mono nowrap">POST /bootstrap</th><td>Claim an unclaimed installation: create the first organization and its owner<br><span class="dim">Unguarded because: Runs before any organization exists, so there is no tenant to scope a permission to and no grant that could convey one. What gates it instead is the single-use bootstrap token on the server&#x27;s filesystem — host access rather than network access, which is the right authority for claiming an installation, and which closes permanently once spent (RL-M1-030).</span></td><td class="nowrap"><span class="chip">unguarded</span></td><td class="nowrap">organization</td><td class="nowrap"><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">&#9679;</span> bound</span></td></tr>
+<tr><th scope="row" class="mono nowrap">GET /bootstrap</th><td>Whether this installation still needs claiming<br><span class="dim">Unguarded because: Reports one boolean an unauthenticated caller can already infer by trying to sign in to an installation with no accounts. Gating it would make the first-run screen unreachable for exactly the person it exists for.</span></td><td class="nowrap"><span class="chip">unguarded</span></td><td class="nowrap">organization</td><td class="nowrap"><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">&#9679;</span> bound</span></td></tr>
+<tr><th scope="row" class="mono nowrap">POST /auth/two-factor</th><td>Present a second factor and exchange a challenge for a session<br><span class="dim">Unguarded because: Reached with a challenge and no session, by somebody whose password was already accepted. There is no actor yet to check a permission against — the same seam ADR 0014 records for sign-in — and gating it would make the second factor unreachable for exactly the people who owe one.</span></td><td class="nowrap"><span class="chip">unguarded</span></td><td class="nowrap">organization</td><td class="nowrap"><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">&#9679;</span> bound</span></td></tr>
+<tr><th scope="row" class="mono nowrap">POST /auth/sign-out</th><td>End the current session<br><span class="dim">Unguarded because: Ending your own session must never be refused. A sign-out that can fail authorization is one an operator cannot use when they most need to.</span></td><td class="nowrap"><span class="chip">unguarded</span></td><td class="nowrap">organization</td><td class="nowrap"><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">&#9679;</span> bound</span></td></tr>
+<tr><th scope="row" class="mono nowrap">GET /health</th><td>Liveness, for a load balancer or an operator<br><span class="dim">Unguarded because: Reports only that the process is up. It reveals no tenant data, and gating it would make an outage indistinguishable from a permission error.</span></td><td class="nowrap"><span class="chip">unguarded</span></td><td class="nowrap">organization</td><td class="nowrap"><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">&#9679;</span> bound</span></td></tr>
+<tr><th scope="row" class="mono nowrap">GET /organization</th><td>Read the current organization</td><td class="nowrap"><code>organization.read</code></td><td class="nowrap">organization</td><td class="nowrap"><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">&#9679;</span> bound</span></td></tr>
+<tr><th scope="row" class="mono nowrap">PATCH /organization</th><td>Update the organization</td><td class="nowrap"><code>organization.update</code></td><td class="nowrap">organization</td><td class="nowrap"><span class="status" data-status="idle"><span class="status__glyph" aria-hidden="true">&#9675;</span> absent</span></td></tr>
+<tr><th scope="row" class="mono nowrap">DELETE /organization</th><td>Delete the organization</td><td class="nowrap"><code>organization.delete</code></td><td class="nowrap">organization</td><td class="nowrap"><span class="status" data-status="idle"><span class="status__glyph" aria-hidden="true">&#9675;</span> absent</span></td></tr>
+<tr><th scope="row" class="mono nowrap">PUT /organization/security-policy</th><td>Set organization-wide security policy</td><td class="nowrap"><code>organization.manage_security_policy</code></td><td class="nowrap">organization</td><td class="nowrap"><span class="status" data-status="idle"><span class="status__glyph" aria-hidden="true">&#9675;</span> absent</span></td></tr>
+<tr><th scope="row" class="mono nowrap">GET /members</th><td>List members</td><td class="nowrap"><code>member.read</code></td><td class="nowrap">organization</td><td class="nowrap"><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">&#9679;</span> bound</span></td></tr>
+<tr><th scope="row" class="mono nowrap">POST /members</th><td>Invite a member</td><td class="nowrap"><code>member.invite</code></td><td class="nowrap">organization</td><td class="nowrap"><span class="status" data-status="idle"><span class="status__glyph" aria-hidden="true">&#9675;</span> absent</span></td></tr>
+<tr><th scope="row" class="mono nowrap">DELETE /members/:userId</th><td>Remove a member</td><td class="nowrap"><code>member.remove</code></td><td class="nowrap">organization</td><td class="nowrap"><span class="status" data-status="idle"><span class="status__glyph" aria-hidden="true">&#9675;</span> absent</span></td></tr>
+<tr><th scope="row" class="mono nowrap">POST /members/:userId/revoke-sessions</th><td>Sign a member out everywhere</td><td class="nowrap"><code>member.revoke_sessions</code></td><td class="nowrap">organization</td><td class="nowrap"><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">&#9679;</span> bound</span></td></tr>
+<tr><th scope="row" class="mono nowrap">GET /grants</th><td>List grants</td><td class="nowrap"><code>grant.read</code></td><td class="nowrap">organization</td><td class="nowrap"><span class="status" data-status="idle"><span class="status__glyph" aria-hidden="true">&#9675;</span> absent</span></td></tr>
+<tr><th scope="row" class="mono nowrap">POST /grants</th><td>Create a grant or a deny</td><td class="nowrap"><code>grant.create</code></td><td class="nowrap">organization</td><td class="nowrap"><span class="status" data-status="idle"><span class="status__glyph" aria-hidden="true">&#9675;</span> absent</span></td></tr>
+<tr><th scope="row" class="mono nowrap">DELETE /grants/:grantId</th><td>Revoke a grant</td><td class="nowrap"><code>grant.revoke</code></td><td class="nowrap">organization</td><td class="nowrap"><span class="status" data-status="idle"><span class="status__glyph" aria-hidden="true">&#9675;</span> absent</span></td></tr>
+<tr><th scope="row" class="mono nowrap">GET /projects</th><td>List projects</td><td class="nowrap"><code>project.read</code></td><td class="nowrap">organization</td><td class="nowrap"><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">&#9679;</span> bound</span></td></tr>
+<tr><th scope="row" class="mono nowrap">POST /projects</th><td>Create a project</td><td class="nowrap"><code>project.create</code></td><td class="nowrap">organization</td><td class="nowrap"><span class="status" data-status="idle"><span class="status__glyph" aria-hidden="true">&#9675;</span> absent</span></td></tr>
+<tr><th scope="row" class="mono nowrap">GET /projects/:projectId</th><td>Read a project</td><td class="nowrap"><code>project.read</code></td><td class="nowrap">path-node</td><td class="nowrap"><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">&#9679;</span> bound</span></td></tr>
+<tr><th scope="row" class="mono nowrap">PATCH /projects/:projectId</th><td>Update a project</td><td class="nowrap"><code>project.update</code></td><td class="nowrap">path-node</td><td class="nowrap"><span class="status" data-status="idle"><span class="status__glyph" aria-hidden="true">&#9675;</span> absent</span></td></tr>
+<tr><th scope="row" class="mono nowrap">DELETE /projects/:projectId</th><td>Delete a project</td><td class="nowrap"><code>project.delete</code></td><td class="nowrap">path-node</td><td class="nowrap"><span class="status" data-status="idle"><span class="status__glyph" aria-hidden="true">&#9675;</span> absent</span></td></tr>
+<tr><th scope="row" class="mono nowrap">GET /environments/:environmentId</th><td>Read an environment</td><td class="nowrap"><code>environment.read</code></td><td class="nowrap">path-node</td><td class="nowrap"><span class="status" data-status="idle"><span class="status__glyph" aria-hidden="true">&#9675;</span> absent</span></td></tr>
+<tr><th scope="row" class="mono nowrap">GET /environments/:environmentId/secrets</th><td>List secret names</td><td class="nowrap"><code>secret.read_name</code></td><td class="nowrap">path-node</td><td class="nowrap"><span class="status" data-status="idle"><span class="status__glyph" aria-hidden="true">&#9675;</span> absent</span></td></tr>
+<tr><th scope="row" class="mono nowrap">GET /environments/:environmentId/secrets/:key/value</th><td>Reveal a secret value</td><td class="nowrap"><code>secret.read_value</code></td><td class="nowrap">path-node</td><td class="nowrap"><span class="status" data-status="idle"><span class="status__glyph" aria-hidden="true">&#9675;</span> absent</span></td></tr>
+<tr><th scope="row" class="mono nowrap">PUT /environments/:environmentId/secrets/:key</th><td>Set a secret</td><td class="nowrap"><code>secret.create</code></td><td class="nowrap">path-node</td><td class="nowrap"><span class="status" data-status="idle"><span class="status__glyph" aria-hidden="true">&#9675;</span> absent</span></td></tr>
+<tr><th scope="row" class="mono nowrap">GET /audit</th><td>Read the audit log</td><td class="nowrap"><code>audit_log.read</code></td><td class="nowrap">organization</td><td class="nowrap"><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">&#9679;</span> bound</span></td></tr>
+<tr><th scope="row" class="mono nowrap">GET /tokens</th><td>List every API token in the organization</td><td class="nowrap"><code>api_token.read_any</code></td><td class="nowrap">organization</td><td class="nowrap"><span class="status" data-status="idle"><span class="status__glyph" aria-hidden="true">&#9675;</span> absent</span></td></tr>
+<tr><th scope="row" class="mono nowrap">POST /tokens</th><td>Issue an API token for yourself</td><td class="nowrap"><code>api_token.manage_own</code></td><td class="nowrap">organization</td><td class="nowrap"><span class="status" data-status="idle"><span class="status__glyph" aria-hidden="true">&#9675;</span> absent</span></td></tr>
+<tr><th scope="row" class="mono nowrap">DELETE /tokens/:tokenId</th><td>Revoke anyone&#x27;s API token</td><td class="nowrap"><code>api_token.revoke_any</code></td><td class="nowrap">organization</td><td class="nowrap"><span class="status" data-status="idle"><span class="status__glyph" aria-hidden="true">&#9675;</span> absent</span></td></tr>
+          </tbody>
+        </table>
+        <p class="filter__empty" id="route-empty" hidden></p>
+      </div>
+
+      <h2 id="matrix">The authorization matrix</h2>
+
+      <p>Every role × every endpoint × own-resource / other-tenant-resource / nonexistent-resource. Thirty
+      routes, seven roles, three subjects: <strong>630 cells</strong>, all passing, run on every build.</p>
+
+      <p>The third subject is the one usually missed. <code>other-tenant</code> is the IDOR case — a real
+      resource belonging to somebody else, a valid identifier the caller should not reach.
+      <code>nonexistent</code> exists to be compared against it, because §6.3 requires the two to be
+      indistinguishable and that is only checkable if both are generated for every route.</p>
+
+      <p>The expectation for each cell is <em>derived</em> from the route and the role, never recorded by hand.
+      A hand-written expectation would be a second opinion about the permission model, and the whole point is
+      that there is only one. The rule is deliberately short — anything longer would be a reimplementation of
+      <code>can()</code>, and a matrix that reimplements the thing it tests agrees with it by construction,
+      including when both are wrong.</p>
+
+      <h3>Three verification layers, reported separately</h3>
+
+      <div class="scroller">
+        <table>
+          <caption class="skip">How the 630 matrix cells are verified, from .ratline/metrics.json</caption>
+          <thead><tr><th scope="col">Layer</th><th scope="col" class="num">Cells</th><th scope="col">What it proves</th></tr></thead>
+          <tbody>
+            <tr>
+              <th scope="row">Transport — a real HTTP request</th>
+              <td class="num">56</td>
+              <td>That a bound route actually consults the permission model, over a real request, through the CSRF guard.</td>
+            </tr>
+            <tr>
+              <th scope="row">Decision — <code>can()</code> with real grants and RLS</th>
+              <td class="num">448</td>
+              <td>That the permission model itself is right, against a real Postgres with row-level security on. Not that a route consults it.</td>
+            </tr>
+            <tr>
+              <th scope="row">Declaration — unguarded routes, checked structurally</th>
+              <td class="num">126</td>
+              <td>That a route declared public is reachable without a grant. Never counted as a permission check.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note" data-status="working">
+        <span class="note__label">Why one aggregate pass rate would be dishonest</span>
+        <p>“630 of 630 cells pass” is true and, on its own, misleading. It would let a reader believe 630
+        endpoint-level probes ran. What actually ran is 56 real requests, 448 decision-layer checks and 126
+        structural checks, and those three claims have different strengths. The decision layer proves the
+        permission model; only the transport layer proves that a route consults it.</p>
+        <p>Two things are not expressible as a request, which is why the transport number is not simply low
+        effort: <strong>a route the server does not bind</strong>, and <strong>a cross-tenant subject on a
+        route with no identifier in its path</strong> — the tenant comes from the session, so a URL cannot name
+        another. 12 of the 30 declared routes are bound, 6 guarded and 6 public, and only 6 of the 24 guarded
+        routes have repository functions behind them.</p>
+        <p>The M1 gate report's own recommendation for M2 follows from this: bind more routes before adding
+        features. Every route bound raises real end-to-end coverage, and the matrix already demands it.</p>
+      </div>
+
+      <p>Recorded as R-30 in the threat model — as a number rather than a caveat. The matrix report is written
+      to <span class="pathref">.ratline/authz-matrix.json</span> on every run, and a missing report means the
+      matrix did not execute: there is no arrangement under which yesterday's green matrix is reported as
+      today's.</p>
+
+      <section class="sources" aria-labelledby="sources-heading">
+        <h2 id="sources-heading" class="label" style="border:0;padding:0;margin:0 0 var(--space-xs)">Sources for this page</h2>
+        <ul>
+          <li><span class="pathref">src/authz/catalogue.ts</span> — 106 actions, 25 resource types, 5 scope levels, the splits (table generated from this file)</li>
+          <li><span class="pathref">src/authz/roles.ts</span> — the seven roles, D1–D7, the KNOWN GAPS note (counts generated from this file)</li>
+          <li><span class="pathref">src/authz/can.ts</span> — the six steps, the eleven reasons, <code>require()</code> versus <code>can()</code></li>
+          <li><span class="pathref">src/authz/matrix.ts</span>, <span class="pathref">src/api/routes.ts</span>, <span class="pathref">src/api/server.ts</span> — generation, the table, <code>boundRouteKeys()</code></li>
+          <li><span class="pathref">src/db/internal/handle.ts</span> and <span class="pathref">README.md</span>, <span class="pathref">src/repo/README.md</span>, <span class="pathref">src/authz/README.md</span></li>
+          <li><span class="pathref">src/db/migrations/20260801000004_row_level_security.sql</span>, <span class="pathref">…005_grants_denies_expiry.sql</span></li>
+          <li><span class="pathref">.ratline/metrics.json</span> — 630 cells, 56 / 448 / 126</li>
+          <li><span class="pathref">docs/gates/M1.md</span>, <span class="pathref">docs/THREAT-MODEL.md</span> R-12, R-29, R-30</li>
+          <li><span class="pathref">docs/decisions/0003</span>, <span class="pathref">0012</span></li>
+        </ul>
+      </section>
+
+      <nav class="pager" aria-label="Section navigation">
+        <a href="architecture.html"><span class="label">Previous</span> Architecture</a>
+        <a href="agent.html"><span class="label">Next</span> The agent protocol</a>
+      </nav>
+    </main>
+
+    <footer class="page" style="padding-top:0">
+      <p class="dim" style="font-size:var(--text-xs)">Written from the repository at
+      <span class="pathref">/Users/ark/Desktop/FunProjects/moss-clone</span>. Design tokens copied from
+      <span class="pathref">src/web/lib/design/</span>; no font files or scripts are loaded from any external
+      origin.</p>
+    </footer>
+  </div>
+</div>
+</body>
+</html>

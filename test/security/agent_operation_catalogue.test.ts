@@ -1,7 +1,7 @@
 /**
  * The operation catalogue's security properties, control-plane side (RL-M2-002).
  *
- * The Go half is `agent/internal/protocol/catalogue_test.go`, and the two are not
+ * The Go half is `agent/internal/protocol/catalogue_security_test.go`, and the two are not
  * redundant. ADR 0004 requires the boundary's parties to validate independently —
  * "if it lived only in the agent, privd would be a confused deputy and the
  * boundary would be decorative" — so each side asserts its own checking. What this
@@ -10,7 +10,7 @@
  * vocabulary cannot express a command.
  *
  * The tracker declared the artefact as
- * `test/security/agent_operation_catalogue_test.go`. That path cannot work — Go
+ * `test/security/agent_operation_catalogue_security_test.go`. That path cannot work — Go
  * requires a `_test.go` file to live in the package it tests, and `test/` is
  * outside the agent module, so a file there would never be compiled or run. A
  * security suite that silently does nothing is worse than an inconvenient path, so

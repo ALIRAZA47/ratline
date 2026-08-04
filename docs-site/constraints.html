@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The six hard constraints — Ratline</title>
+<meta name="description" content="C1 to C6: what each constraint forbids, the failure it was written against, and where the code enforces it.">
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/site.css">
+<script defer src="assets/app.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<div class="shroud">
+
+  <nav class="rail" aria-label="Documentation sections">
+    <a class="rail__brand" href="index.html">
+      <span class="rail__wordmark display">RATLINE</span>
+    </a>
+    <div class="rail__group">
+      <p class="rail__group-label label">Reference</p>
+      <ul class="rail__list">
+        <li><a class="rail__link" href="index.html"><span class="rail__num">01</span> Overview</a></li>
+        <li><a class="rail__link" href="constraints.html"><span class="rail__num">02</span> Constraints</a></li>
+        <li><a class="rail__link" href="architecture.html"><span class="rail__num">03</span> Architecture</a></li>
+        <li><a class="rail__link" href="authorization.html"><span class="rail__num">04</span> Authorization</a></li>
+        <li><a class="rail__link" href="agent.html"><span class="rail__num">05</span> Agent protocol</a></li>
+        <li><a class="rail__link" href="threat-model.html"><span class="rail__num">06</span> Threat model</a></li>
+        <li><a class="rail__link" href="decisions.html"><span class="rail__num">07</span> Decisions</a></li>
+        <li><a class="rail__link" href="roadmap.html"><span class="rail__num">08</span> Roadmap</a></li>
+        <li><a class="rail__link" href="workflow.html"><span class="rail__num">09</span> Workflow</a></li>
+        <li><a class="rail__link" href="defects.html"><span class="rail__num">10</span> Defects</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="column">
+    <header class="topbar">
+      <div class="topbar__row">
+        <nav class="crumbs" aria-label="Breadcrumb">
+          <a href="index.html">ratline</a>
+          <span class="crumbs__sep" aria-hidden="true">/</span>
+          <span class="crumbs__here">constraints</span>
+        </nav>
+        <span class="topbar__spacer"></span>
+        <div class="search">
+          <label class="skip" for="site-search">Search the documentation</label>
+          <input class="search__input" id="site-search" type="search" placeholder="Search — press / or Ctrl-K"
+                 autocomplete="off" role="combobox" aria-expanded="false" aria-controls="site-search-results">
+          <ul class="search__results" id="site-search-results" hidden></ul>
+        </div>
+        <button class="themetoggle" id="theme-toggle" type="button">Theme: System</button>
+      </div>
+      <div class="tension" aria-hidden="true"></div>
+    </header>
+
+    <main class="page" id="main">
+      <h1>The six hard constraints</h1>
+      <p class="lede">These derive from studying how the incumbents fail. The brief calls them requirements
+      rather than preferences: violating one is grounds for rejecting the work regardless of how well it
+      functions. If a constraint blocks the work, the instruction is to stop and escalate, not to work
+      around it.</p>
+
+      <p>Each constraint below carries three things — what it forbids, the specific failure it was written
+      against, and where in this repository it is enforced today. The threat model keeps the same trace on
+      purpose, so that a future session cannot simplify a constraint whose reason has been forgotten.</p>
+
+      <h2 id="c1">C1 — The control plane must never require root SSH to managed hosts</h2>
+
+      <div class="grid grid--2">
+        <div class="card">
+          <p class="card__title">What it forbids</p>
+          <p>An SSH account on a managed host that must be root or in the <code>docker</code> group. Any
+          day-to-day operation that needs privilege by way of a general-purpose remote shell. Privileged
+          operations pass through a narrow, enumerated set of allowed actions with typed arguments, and
+          nothing else.</p>
+        </div>
+        <div class="card">
+          <p class="card__title">The failure it answers</p>
+          <p>Coolify's 2025–26 vulnerability class reached <strong>CVSS 10.0</strong> specifically because its
+          SSH account must be root or in the <code>docker</code> group. Every command-injection bug therefore
+          became instant host compromise plus container escape. The structural fix is not to be careful with
+          SSH; it is to remove the ability to express an arbitrary command at all.</p>
+        </div>
+      </div>
+
+      <h3>How the code enforces it</h3>
+
+      <p>Two mechanisms, and the second is the one that makes the first worth having.</p>
+
+      <ul>
+        <li><strong>The catalogue is closed.</strong> <span class="pathref">src/agent/catalogue.ts</span>
+          declares 13 operations and 13 argument kinds. No kind can express a free-form command, and
+          <code>operation()</code> returns <code>null</code> rather than a default, so there is no fall-through
+          branch. The Go side is generated from the same file into
+          <span class="pathref">agent/internal/protocol/catalogue_gen.go</span>, and CI runs
+          <code>./scripts/gen-agent-protocol --check</code> so drift fails the build.</li>
+        <li><strong>The agent is unprivileged and the root helper distrusts it.</strong>
+          <code>ratline-privd</code> runs as root, socket-activated, with no network access, accepts only the
+          enumerated privileged operations, identifies its caller by <code>SO_PEERCRED</code>, and
+          re-validates every argument independently. That is what makes C1 hold against a
+          <em>compromised agent</em> rather than only against a compromised control plane.</li>
+      </ul>
+
+      <div class="note" data-status="attention">
+        <span class="note__label">Built and not built</span>
+        <p>The operation catalogue and the signed envelope exist in TypeScript and Go today
+        (<span class="pathref">src/agent/catalogue.ts</span>,
+        <span class="pathref">src/agent/envelope.ts</span>,
+        <span class="pathref">agent/internal/protocol/</span>). <code>ratline-privd</code> is scaffolded as a
+        command (<span class="pathref">agent/cmd/ratline-privd/main.go</span>) but its socket-activated
+        implementation is <strong>RL-M2-008, still todo</strong>, as are SSH bootstrap (RL-M2-010) and the
+        check that no root SSH credential remains afterwards (RL-M2-029). C1 is designed and partly built,
+        not yet demonstrated on a host.</p>
+      </div>
+
+      <h2 id="c2">C2 — No shell command is ever constructed by string interpolation</h2>
+
+      <div class="grid grid--2">
+        <div class="card">
+          <p class="card__title">What it forbids</p>
+          <p>All remote execution uses argument vectors with explicit arguments. No <code>sh -c</code> with
+          any user-derived data, anywhere. No template-literal shell construction, however safe the input
+          looks — §9 lists it as automatic rejection.</p>
+        </div>
+        <div class="card">
+          <p class="card__title">The failure it answers</p>
+          <p>The same one as C1, one layer down: injection through any user-controllable field that can reach
+          a host. C1 removes the privilege; C2 removes the injection point. Either alone leaves the other
+          doing all the work.</p>
+        </div>
+      </div>
+
+      <h3>How the code enforces it</h3>
+
+      <ul>
+        <li><strong>The control plane executes no processes at all.</strong>
+          <span class="pathref">eslint.config.js</span> restricts imports of <code>child_process</code> and
+          <code>node:child_process</code> in control plane code, with fixtures at
+          <span class="pathref">test/fixtures/lint/process_spawning.ts</span> and
+          <span class="pathref">test/fixtures/lint/shell_template_literal.ts</span> proving the rules fire,
+          checked by <span class="pathref">test/security/lint_rules.test.ts</span>.</li>
+        <li><strong>The argument vocabulary cannot express a command.</strong> There is deliberately no
+          <code>text</code>, <code>string</code>, <code>args</code>, <code>command</code>, <code>flags</code>
+          or <code>env</code> argument kind, and
+          <span class="pathref">test/security/agent_operation_catalogue.test.ts</span> fails if one appears.
+          Patterns are RE2-compatible so Go and TypeScript cannot diverge on what they accept.</li>
+        <li><strong>Content blobs are inert until a parser vouches for them.</strong> A systemd unit or a
+          server block is text, so four kinds carry a named validator —
+          <code>systemd-analyze-verify</code>, <code>nginx-t</code>, <code>visudo-c</code>,
+          <code>x509</code>, <code>pkcs8</code> — and <code>privd</code> runs the parser and refuses on a
+          non-zero exit before installing anything.</li>
+      </ul>
+
+      <div class="note" data-status="fail">
+        <span class="note__label">Open conflict — R-02, owner</span>
+        <p>C2 and §6.5 disagree. §6.5 requires configurable build and install commands, which are shell
+        strings by nature (<code>npm ci &amp;&amp; npm run build</code>). Under a literal reading of C2 that
+        feature cannot exist. <a href="decisions.html#adr-0005">ADR 0005</a> proposes containment rather than
+        elimination: write the command to a file owned by the site's own Linux user, execute it by argument
+        vector as that user inside a resource-limited transient scope, and make setting it a distinct
+        permission. The conflict is recorded as <a href="threat-model.html#risks">R-02</a> and needs a ruling.
+        If the strict reading is intended, RL-M3-004 becomes fixed per-framework pipelines and the product is
+        materially smaller.</p>
+      </div>
+
+      <p>The fuzz corpus over every user-controllable field that reaches a host (RL-M2-027) and the build
+      check that fails on shell construction in the agent (RL-M2-028) are both <strong>todo</strong>.</p>
+
+      <h2 id="c3">C3 — Authorization is enforced at the data-access layer, not the route layer</h2>
+
+      <div class="grid grid--2">
+        <div class="card">
+          <p class="card__title">What it forbids</p>
+          <p>An unscoped <code>findById</code> anywhere in the codebase. Permission checks in route handlers
+          <em>instead of, or in addition to,</em> the data layer. The brief's wording is precise: make the
+          unscoped variant impossible to call rather than merely discouraged.</p>
+        </div>
+        <div class="card">
+          <p class="card__title">The failure it answers</p>
+          <p>The IDOR class that let Coolify users reach other teams' servers. A handler that forgets its
+          check must still return nothing.</p>
+        </div>
+      </div>
+
+      <h3>How the code enforces it</h3>
+
+      <p>Three layers that each fail closed on their own, described in full on the
+      <a href="authorization.html#isolation">authorization page</a>:</p>
+
+      <ol>
+        <li>The raw database handle is unreachable outside <span class="pathref">src/repo/</span> — one
+          module constructs the client and exports <code>scoped()</code>, and an ESLint
+          <code>no-restricted-imports</code> group blocks every other importer.</li>
+        <li>Every repository function takes a branded <code>AuthzContext</code> first. Its constructor is not
+          exported, so there is no literal to write and no default value.</li>
+        <li>Every tenant-scoped table has row-level security <strong>enabled and forced</strong>, and the
+          application connects as a role that is neither the table owner nor a superuser.</li>
+      </ol>
+
+      <p>The test that makes layer 3 real deletes a repository function's own <code>WHERE</code> clause and
+      asserts the query still returns zero rows
+      (<span class="pathref">test/security/rls_cross_tenant.test.ts</span> and neighbours). Every isolation
+      test connects as the unprivileged role, because a superuser bypasses policies unconditionally and the
+      tests would otherwise pass while exercising nothing.</p>
+
+      <div class="note" data-status="working">
+        <span class="note__label">The reading that found nine defects</span>
+        <p>§9 forbids a permission check “in addition to” the data layer, so M1 shipped
+        <strong>no authorization middleware at all</strong>. That reading immediately found nine repository
+        reads that resolved no permission — including the audit log, which every authenticated member of a
+        tenant could read in full. A middleware would have masked all nine and left the repositories exactly
+        as wrong. <a href="authorization.html#no-middleware">The full account</a>.</p>
+      </div>
+
+      <h2 id="c4">C4 — No default secrets</h2>
+
+      <div class="grid grid--2">
+        <div class="card">
+          <p class="card__title">What it forbids</p>
+          <p>No default signing key, cookie secret, encryption key or admin password. First run generates
+          them and the application refuses to boot without them.</p>
+        </div>
+        <div class="card">
+          <p class="card__title">The failure it answers</p>
+          <p>CloudPanel's <strong>CVE-2023-35885</strong> was exactly this: a file manager reachable by
+          forging a cookie signed with the shipped default key, exploited in the wild.</p>
+        </div>
+      </div>
+
+      <h3>How the code enforces it</h3>
+
+      <p><span class="pathref">src/crypto/secrets.ts</span> declares three secrets — <code>cookie</code>,
+      <code>kek</code> (the key-encryption key) and <code>instruction-signing</code> — and states three
+      properties in order of importance: nothing has a default; a secret that exists but is weak, truncated
+      or readable by other users on the host is treated as absent-and-worse and the process refuses to start;
+      values never reach a log, an error message or a JSON serialisation, so refusals name the file and the
+      reason and never the content.</p>
+
+      <p>There is deliberately no admin password in that file. The first owner is created by interactive
+      bootstrap, because generating a default administrator credential is the CloudPanel failure itself.
+      <code>./scripts/preflight</code> checks a host without starting anything, and
+      <span class="pathref">test/security/no_default_secrets.test.ts</span> plus the artifact grep in
+      RL-M1-022 back it.</p>
+
+      <p>The rule reaches further than the application's own secrets. Migration 2 creates the
+      <code>ratline_app</code> database role <code>NOLOGIN</code> and passwordless on purpose: a login role
+      with a shipped password is exactly the default credential C4 forbids. That choice is why CI's Postgres
+      service runs with <code>POSTGRES_HOST_AUTH_METHOD: trust</code> rather than giving the role a password
+      the product never uses.</p>
+
+      <div class="note" data-status="attention">
+        <span class="note__label">Two items still open</span>
+        <p><strong>RL-M1-054</strong> (todo) — check the cookie secret for entropy, not just length.
+        <strong>RL-M1-046</strong> (todo) — one intermittent failure in the no-default-secrets suite, seen
+        once and not reproduced in 31 runs; its assertion now names its own cause if it recurs.</p>
+      </div>
+
+      <h2 id="c5">C5 — The dashboard assumes it is not internet-exposed</h2>
+
+      <div class="grid grid--2">
+        <div class="card">
+          <p class="card__title">What it forbids</p>
+          <p>A public bind as the path of least resistance, and a warning an operator can dismiss. Bind to
+          loopback by default, ship documented VPN, Tailscale and IP-allowlist setup, detect public
+          reachability and show a loud, non-dismissable warning.</p>
+        </div>
+        <div class="card">
+          <p class="card__title">The failure it answers</p>
+          <p>Roughly <strong>52,000 Coolify instances</strong> were sitting on the public internet in January
+          2026, and almost none of those operators chose that deliberately.</p>
+        </div>
+      </div>
+
+      <h3>How the code enforces it</h3>
+
+      <p>The dashboard binds <code>127.0.0.1:7712</code>.
+      <span class="pathref">src/config/network.ts</span> classifies the configured bind address locally, with
+      no outbound call, into three exposure levels:</p>
+
+      <div class="scroller">
+        <table>
+          <caption class="skip">Bind address classification, from docs/NETWORK.md and src/config/network.ts</caption>
+          <thead><tr><th scope="col">Bind address</th><th scope="col">Level</th><th scope="col">Behaviour</th></tr></thead>
+          <tbody>
+            <tr><th scope="row" class="mono">127.0.0.1, ::1</th><td>contained</td><td>Starts silently. The default.</td></tr>
+            <tr><th scope="row" class="mono">10/8, 172.16/12, 192.168/16, fd00::/8</th><td>network</td><td>Starts silently. LAN or VPN.</td></tr>
+            <tr><th scope="row" class="mono">100.64.0.0/10</th><td>network</td><td>Starts silently. Tailscale.</td></tr>
+            <tr><th scope="row" class="mono">169.254/16, fe80::/10</th><td>network</td><td>Starts silently. Link-local.</td></tr>
+            <tr><th scope="row">Any globally routable address</th><td>exposed</td><td>Refuses to start without acknowledgement.</td></tr>
+            <tr><th scope="row" class="mono">0.0.0.0, ::</th><td>exposed</td><td>Refuses to start without acknowledgement.</td></tr>
+            <tr><th scope="row">Anything unparseable</th><td>—</td><td>Refuses to start. No guessing.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>A wildcard bind is refused even on a host with no public address today, because that is a fact about
+      this afternoon: a DHCP lease, an added interface or a cloud migration exposes it with no further
+      change, and nobody re-reads the boot log afterwards.
+      <code>RATLINE_ALLOW_PUBLIC_BIND=1</code> permits the bind and <strong>does not clear the
+      warning</strong> — C5 asks for a warning that cannot be dismissed, and an acknowledgement that silenced
+      it would be a dismissal with extra steps.</p>
+
+      <p>C5 also decides the type. All three faces are self-hosted from vendored packages
+      (<span class="pathref">src/web/lib/design/fonts.ts</span>) because the dashboard must work on an
+      air-gapped VPN with no external origin reachable, and a font CDN would break exactly when someone needs
+      the tool most.</p>
+
+      <div class="note" data-status="fail">
+        <span class="note__label">Known blind spot — R-11</span>
+        <p>Local classification cannot see a NAT port-forward, a cloud load balancer, or a reverse proxy on
+        the same host. A dashboard bound to <code>127.0.0.1</code> behind a public nginx is fully reachable
+        and Ratline reports <code>contained</code>. <a href="decisions.html#adr-0011">ADR 0011</a> refuses to
+        fix this with an outbound probe: a probe would phone home from every install, create a fleet-wide
+        correlation point, and fail on exactly the isolated networks C5 exists to protect. Every exposure
+        report therefore carries the caveat in its text, so <code>contained</code> is never presented as
+        <em>verified private</em>.</p>
+      </div>
+
+      <h2 id="c6">C6 — Every privileged action is auditable and attributable</h2>
+
+      <div class="grid grid--2">
+        <div class="card">
+          <p class="card__title">What it forbids</p>
+          <p>An action taken by “the system” with no recorded actor. Automation acts as a named service
+          identity with its own permissions, never anonymously.</p>
+        </div>
+        <div class="card">
+          <p class="card__title">The failure it answers</p>
+          <p>Unattributable changes. The control on a high-trust actor is auditability rather than
+          prevention — an Owner can do damage legitimately, so the record has to be trustworthy.</p>
+        </div>
+      </div>
+
+      <h3>How the code enforces it</h3>
+
+      <ul>
+        <li><strong>Append-only at the database level, not by convention.</strong> Migration 6 installs a
+          trigger before update or delete on <code>audit_entries</code> that raises
+          <code>audit_entries is append-only</code>. Each entry chains to its predecessor by hash, with a
+          separate truncation watermark, because a chain cannot detect removal of its own head.</li>
+        <li><strong>No audit write path without an actor</strong> (RL-M1-016), covered by
+          <span class="pathref">test/security/actor_attribution.test.ts</span>.</li>
+        <li><strong>A refusal cannot be obtained without the record of what really happened.</strong>
+          <code>refuse()</code> in <span class="pathref">src/api/refusal.ts</span> returns the wire response
+          <em>and</em> the audit record together. The wire response is a frozen constant and the
+          <code>Refusal</code> type is branded, so no module can hand-roll its own 404 with a helpful
+          message. That is what makes indistinguishability affordable: the operator loses nothing because the
+          whole truth is in the audit log, and only the caller is kept in the dark.</li>
+      </ul>
+
+      <div class="note" data-status="attention">
+        <span class="note__label">Two items still open</span>
+        <p><strong>RL-M1-050</strong> (todo) — make the audit half of a refusal impossible to drop. A
+        cross-tenant probe left no audit record; the fix is authorized (A-03) and has not landed.
+        <strong>RL-M1-053</strong> (todo) — give <code>audit.actor_id</code> referential integrity.</p>
+      </div>
+
+      <h2 id="trace">Constraint-to-threat trace</h2>
+
+      <p>The threat model keeps this table so a future session does not simplify a constraint whose purpose
+      was lost. Evidence names the task that proves it; a task marked todo means the constraint is designed
+      and not yet demonstrated.</p>
+
+      <div class="scroller">
+        <div class="filter">
+          <label class="skip" for="trace-filter">Filter the trace</label>
+          <input id="trace-filter" type="search" placeholder="Filter constraints" data-filter-for="trace-table"
+                 data-filter-count="trace-count" data-filter-empty="trace-empty" autocomplete="off">
+          <span class="filter__count" id="trace-count" aria-live="polite"></span>
+        </div>
+        <table id="trace-table">
+          <caption class="skip">Constraint to threat trace, from docs/THREAT-MODEL.md §4</caption>
+          <thead>
+            <tr>
+              <th scope="col">Constraint</th>
+              <th scope="col">Threat it defends against</th>
+              <th scope="col">Where it is enforced</th>
+              <th scope="col">Evidence</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row"><a href="#c1">C1</a> no root SSH</th>
+              <td>Command injection escalating to host compromise (Coolify, CVSS 10.0)</td>
+              <td>Enumerated operation catalogue (ADR 0002) plus an unprivileged agent with a distrusting root helper (ADR 0004)</td>
+              <td class="mono nowrap">RL-M2-002 <span class="badge badge--done">done</span><br>RL-M2-008 <span class="badge badge--todo">todo</span><br>RL-M2-029 <span class="badge badge--todo">todo</span></td>
+            </tr>
+            <tr>
+              <th scope="row"><a href="#c2">C2</a> no string-built shells</th>
+              <td>Injection through any user-controllable field</td>
+              <td>Argv-only execution; build-failing lint; schema-driven fuzz corpus (ADR 0005)</td>
+              <td class="mono nowrap">RL-M2-027 <span class="badge badge--todo">todo</span><br>RL-M2-028 <span class="badge badge--todo">todo</span><br>RL-M1-008 <span class="badge badge--done">done</span></td>
+            </tr>
+            <tr>
+              <th scope="row"><a href="#c3">C3</a> authorization at the data layer</th>
+              <td>Cross-tenant IDOR (Coolify)</td>
+              <td>Unreachable raw handle plus branded context plus forced row-level security (ADR 0003)</td>
+              <td class="mono nowrap">RL-M1-006 <span class="badge badge--done">done</span><br>RL-M1-007 <span class="badge badge--done">done</span><br>RL-M1-026 <span class="badge badge--done">done</span></td>
+            </tr>
+            <tr>
+              <th scope="row"><a href="#c4">C4</a> no default secrets</th>
+              <td>Forged cookie signed with a shipped key (CloudPanel CVE-2023-35885)</td>
+              <td>First-run generation, refusal to boot, artifact grep</td>
+              <td class="mono nowrap">RL-M1-022 <span class="badge badge--done">done</span></td>
+            </tr>
+            <tr>
+              <th scope="row"><a href="#c5">C5</a> not internet-exposed</th>
+              <td>~52,000 publicly exposed Coolify instances, January 2026</td>
+              <td>Loopback default, local reachability classification, separate agent listener</td>
+              <td class="mono nowrap">RL-M1-023 <span class="badge badge--done">done</span></td>
+            </tr>
+            <tr>
+              <th scope="row"><a href="#c6">C6</a> attributable actions</th>
+              <td>Unattributable “system” changes</td>
+              <td>No audit write path without an actor</td>
+              <td class="mono nowrap">RL-M1-016 <span class="badge badge--done">done</span></td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="filter__empty" id="trace-empty" hidden></p>
+      </div>
+
+      <p class="dim">Task statuses in the last column were read from
+      <span class="pathref">docs/tasks.yaml</span> on 2026-08-04. The tracker is the source of truth and
+      moves; <code>./scripts/tasks list --milestone M2 --risk high</code> prints the current state.</p>
+
+      <section class="sources" aria-labelledby="sources-heading">
+        <h2 id="sources-heading" class="label" style="border:0;padding:0;margin:0 0 var(--space-xs)">Sources for this page</h2>
+        <ul>
+          <li><span class="pathref">docs/BRIEF.md</span> §4 (C1–C6 verbatim), §6.5, §9</li>
+          <li><span class="pathref">docs/THREAT-MODEL.md</span> §4 — the trace table</li>
+          <li><span class="pathref">src/agent/catalogue.ts</span> — closed catalogue, argument kinds, validators</li>
+          <li><span class="pathref">eslint.config.js</span>, <span class="pathref">test/fixtures/lint/</span>, <span class="pathref">test/security/lint_rules.test.ts</span></li>
+          <li><span class="pathref">src/crypto/secrets.ts</span> — the three secrets and the refusal rules</li>
+          <li><span class="pathref">src/config/network.ts</span>, <span class="pathref">docs/NETWORK.md</span> — exposure classification</li>
+          <li><span class="pathref">src/db/migrations/20260801000006_audit_log.sql</span> — the append-only trigger</li>
+          <li><span class="pathref">src/api/refusal.ts</span> — the frozen refusal and its audit half</li>
+          <li><span class="pathref">docs/RISKS.md</span> R-02, R-11 · <span class="pathref">docs/AUTHORIZATIONS.md</span> A-03</li>
+          <li><span class="pathref">docs/tasks.yaml</span> — the task statuses in the trace table</li>
+        </ul>
+      </section>
+
+      <nav class="pager" aria-label="Section navigation">
+        <a href="index.html"><span class="label">Previous</span> Overview</a>
+        <a href="architecture.html"><span class="label">Next</span> Architecture</a>
+      </nav>
+    </main>
+
+    <footer class="page" style="padding-top:0">
+      <p class="dim" style="font-size:var(--text-xs)">Written from the repository at
+      <span class="pathref">/Users/ark/Desktop/FunProjects/moss-clone</span>. Design tokens copied from
+      <span class="pathref">src/web/lib/design/</span>; no font files or scripts are loaded from any external
+      origin.</p>
+    </footer>
+  </div>
+</div>
+</body>
+</html>
