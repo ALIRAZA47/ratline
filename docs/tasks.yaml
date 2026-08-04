@@ -4063,3 +4063,23 @@
     2026-08-04 — 2026-08-04 — VERIFIED END TO END on Ubuntu 24.04, aarch64, Node 22.22 and Postgres 17.10, all from distribution repositories: 13 migrations applied, token minted at 0600 in a 0700 directory, POST /bootstrap returned 201 with the organization id, restart, sign-in returned a session cookie plus an x-ratline-csrf header, GET /organization returned the tenant, GET /audit returned the hash-chained log with prevHash all zeroes on entry 1, and the same request with no cookie returned 401 unauthenticated. Nothing was published to the host; every request went through docker exec, so C5's localhost bind held throughout.
     2026-08-04 — 2026-08-04 — OBSERVED AND WORTH A LOOK: the session cookie carries Secure over http://127.0.0.1. curl does not care and a browser might, which is exactly ADR 0016's unverified assumption — the M1 gate report named it as the riskiest one in that design and it is still unverified. This container is now the place to settle it, since it serves real HTTP over loopback.
   acceptance_met: [1, 2, 3, 4]
+- id: RL-M1-056
+  title: Reconcile the remaining documentation contradictions a full read found
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: S
+  depends_on: []
+  blocks: []
+  risk: low
+  acceptance:
+    - Every stale closing condition in RISKS.md names a task that is not already done
+    - ADR 0001's Drizzle decision matches the code, or the deviation is recorded in the ADR
+    - PLAN section 7's paths match where the catalogue actually lives
+  artifacts: []
+  decisions: []
+  notes: |
+    2026-08-04 — 2026-08-04 — Found by a documentation pass that read every file in docs/ and src/ at once, which is the one vantage point no single file's tests have. Thirteen contradictions; four were fixed immediately because they were propagation failures rather than open questions, and the rest are here. FIXED ALREADY: THREAT-MODEL R-30 carried '56 of 567 cells' and '8 of 27 routes' — the same two wrong numbers the M1 gate report corrected in ITSELF and never propagated; R-29 said 'Six repository reads' and listed seven while RL-M1-043's own notes say nine; R-29's mitigation 'nothing called them over HTTP because there is no server' expired when RL-M1-042 built one and RL-M1-055 ran it; and src/authz/roles.ts still listed member.revoke_sessions as a gap when RL-M1-034 closed it and the route is bound.
+
+    2026-08-04 — 2026-08-04 — STILL OPEN. (1) ADR 0001 decides 'Drizzle behind a mandatory scoping layer' and src/db/internal/README.md says the directory constructs the Drizzle client; handle.ts imports Pool from pg and runs raw SQL, and drizzle-orm is not in package.json. The code is almost certainly right — a scoping layer over raw SQL is simpler to make unreachable — but an ADR that describes a library nobody installed is a design record that misleads, and ADR 0001 is still 'proposed' so the deviation belongs in it rather than in a commit message. (2) PLAN section 7 puts the catalogue in src/ops/ with generated Go in agent/internal/ops/; src/ops/ holds only a README and the real files are src/agent/catalogue.ts and agent/internal/protocol/catalogue_gen.go. (3) Stale closing conditions: R-12 says the API-token ceiling 'has not landed' (RL-M1-032 is done), R-17 is 'Open until two-factor ships (RL-M1-019)' (done), DESIGN section 10.1 ends 'the reserved hue does not exist yet' (RL-M1-040 is done and ENVIRONMENT.production exists). (4) THREAT-MODEL's own table disagrees about whether an HTTP layer exists: R-15 says 'nothing calls the limiter — there is no HTTP layer' and R-21 says 'Owed by whatever builds the HTTP layer', while R-23 three rows later says 'Closed by RL-M1-042'.
+    2026-08-04 — 2026-08-04 — NOT contradictions, checked and dismissed rather than left on the list: the gate report's 'green on all four jobs' reconciles with ci.yml's five, because the fifth only records the result and needs the other four. And brief section 6.3 ('cannot read PRODUCTION secret values') versus RL-M1-010's acceptance ('provably cannot read secret values') is a real disagreement that roles.ts D1 already flags in writing rather than hiding — which is the right handling, so there is nothing to fix.
