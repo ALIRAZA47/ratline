@@ -1588,13 +1588,14 @@
 - id: RL-M2-004
   title: Manage the control plane instruction signing key
   milestone: M2
-  status: in-progress
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M2-003]
   blocks: [RL-M2-005]
   risk: high
   started_at: 2026-08-04
+  done_at: 2026-08-04
   acceptance:
     - The signing key is generated on first run and never has a default
     - It is stored separately from the database with restrictive permissions
@@ -1603,7 +1604,7 @@
   artifacts:
     - test/security/instruction_key_rotation.test.ts
   decisions: [2, 6]
-  acceptance_met: [3, 4]
+  acceptance_met: [1, 2, 3, 4]
   notes: |
     2026-08-04 — 2026-08-04 — ROTATION LANDED. Three files: instruction-signing.pem is what signs now, instruction-signing.previous.pem is the outgoing key present only during an overlap, and instruction-signing.rotated-at records when. The deadline is derived from that stamp and NOT from the previous key's mtime — an mtime does not survive a copy, a restore, or a container rebuild, and every one of those would silently move the deadline in the direction of accepting a retired key for longer. A timestamp the rotation wrote is a fact; an mtime is an artefact of the filesystem.
 
