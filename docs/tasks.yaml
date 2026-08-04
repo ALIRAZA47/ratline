@@ -1557,21 +1557,33 @@
 - id: RL-M2-003
   title: Implement the signed instruction envelope
   milestone: M2
-  status: todo
+  status: in-progress
   owner: agent
   estimate: L
   depends_on: [RL-M2-002]
   blocks: [RL-M2-004, RL-M2-007]
   risk: high
+  started_at: 2026-08-04
   acceptance:
     - Envelopes carry operation, typed arguments, nonce, issue time, expiry and target host identity
     - Signature verification happens before any argument is interpreted
     - An envelope addressed to another host is refused
     - An expired or replayed envelope is refused
   artifacts:
-    - test/security/envelope_verification_test.go
+    - agent/internal/protocol/envelope_test.go
+    - test/security/envelope_encoding.test.ts
+    - agent/internal/protocol/testdata/envelope_vectors.json
   decisions: [2]
+  acceptance_met: [1, 2, 3, 4]
+  notes: |
+    2026-08-04 — 2026-08-04 — THE SIGNATURE IS NOT OVER THE JSON, and that is the decision the task turns on. JSON is not a canonical encoding: key order, whitespace, escaping form and number formatting all vary, so two implementations signing 'the same object' produce different bytes, and every protocol that tried to fix this with a canonical-JSON profile produced a second specification to disagree about. The signature covers a length-prefixed binary encoding with one legal form per instruction; JSON stays the transport and the agent re-derives the canonical bytes from the fields it parsed. A JSON quirk therefore cannot survive — it lands as a signature mismatch, which is a refusal rather than a divergence.
 
+    2026-08-04 — 2026-08-04 — Every field is length-prefixed because concatenation without lengths is ambiguous, and ambiguity in signed bytes is forgery: {a:'bc'} and {ab:'c'} both flatten to 'abc', so one signature would be valid for two different instructions. Asserted directly in the TypeScript suite rather than only pinned by a vector, because it is the property the encoding exists for. There is also a NUL-terminated domain separator carrying the version, so the same key cannot produce a signature valid in two contexts and a v2 envelope cannot be verified as v1.
+    2026-08-04 — 2026-08-04 — Acceptance 2 is tested as an ORDER, not as a refusal. A test that only checks 'refused' passes for every possible ordering including the dangerous ones, so each case presents an envelope wrong in TWO ways and asserts which failure is reported: signature before arguments (else every regexp and length check in the agent is reachable without a key), signature before target (else an unauthenticated caller learns this host's identity by sending guesses), target before expiry (else a valid-but-misaddressed envelope leaks the host's clock offset, which is what aims a replay), expiry before nonce (else flooding dead envelopes exhausts the bounded store — asserted by checking the store is still EMPTY after an expired envelope is refused). Mutation-verified: moving the argument check above the signature fails the first case with the argument error quoted.
+    2026-08-04 — 2026-08-04 — Cross-language agreement is proven by committed vectors both suites verify, not by review. Two independent implementations of a canonical encoding is exactly where both sides can be self-consistent and still disagree, and the failure would arrive on a host as 'the agent refuses every instruction', which reads as a transport problem. Six vectors chosen for what they distinguish: argument-order fails if either side iterates a map instead of sorting; ambiguous-concatenation pins the length prefixes; multibyte-content fails if either side counts characters instead of bytes. Mutation-verified: dropping one length prefix in Go named the differing byte offset. The vector file IS the drift check — no second mechanism to keep current.
+    2026-08-04 — 2026-08-04 — The key_id hint does NOT select the verification key. It is attacker-controlled, so letting it choose would mean naming a revoked key is enough to have it used, which is the whole of the vulnerability rotation exists to close. Every accepted key is tried, which also makes the refusal constant in the number of keys so timing cannot reveal which key a host holds. An agent holding no keys refuses explicitly rather than falling through an empty range.
+    2026-08-04 — 2026-08-04 — A real design defect the tests found: FileNonceStore called time.Now() internally while Verify takes an injected clock, so the two could disagree invisibly. The restart test failed because the store pruned against wall-clock time while the vectors carry fixed stamps — a symptom identical to the nonce never having been written. The clock is now injected. A hidden clock inside a security check is a hidden assumption about when that check applies. Also caught: my forgery helper flipped the LAST base64 character, which on a 64-byte signature is the '=' pad, so three tests got ErrMalformed where they asserted ErrBadSignature — a forgery test producing unparseable input is not testing forgery.
+    2026-08-04 — 2026-08-04 — The agent enforces MaxValidity itself rather than trusting the signer. A signed envelope claiming a one-year window would otherwise require a one-year nonce store, so how much replay memory a host holds would be decided by whoever signs instead of by the host. The store refuses when full rather than evicting: evicting the oldest would forget a nonce that is still live, letting an attacker who can flood choose which nonce gets forgotten. Refusing is a denial of service; evicting is a security failure dressed as availability.
 - id: RL-M2-004
   title: Manage the control plane instruction signing key
   milestone: M2
