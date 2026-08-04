@@ -1,0 +1,611 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Architecture — Ratline</title>
+<meta name="description" content="Components and their privilege, the two listeners, trust boundaries B1 to B8, the data model and the repository layout.">
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/site.css">
+<script defer src="assets/app.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<div class="shroud">
+
+  <nav class="rail" aria-label="Documentation sections">
+    <a class="rail__brand" href="index.html">
+      <span class="rail__wordmark display">RATLINE</span>
+    </a>
+    <div class="rail__group">
+      <p class="rail__group-label label">Reference</p>
+      <ul class="rail__list">
+        <li><a class="rail__link" href="index.html"><span class="rail__num">01</span> Overview</a></li>
+        <li><a class="rail__link" href="constraints.html"><span class="rail__num">02</span> Constraints</a></li>
+        <li><a class="rail__link" href="architecture.html"><span class="rail__num">03</span> Architecture</a></li>
+        <li><a class="rail__link" href="authorization.html"><span class="rail__num">04</span> Authorization</a></li>
+        <li><a class="rail__link" href="agent.html"><span class="rail__num">05</span> Agent protocol</a></li>
+        <li><a class="rail__link" href="threat-model.html"><span class="rail__num">06</span> Threat model</a></li>
+        <li><a class="rail__link" href="decisions.html"><span class="rail__num">07</span> Decisions</a></li>
+        <li><a class="rail__link" href="roadmap.html"><span class="rail__num">08</span> Roadmap</a></li>
+        <li><a class="rail__link" href="workflow.html"><span class="rail__num">09</span> Workflow</a></li>
+        <li><a class="rail__link" href="defects.html"><span class="rail__num">10</span> Defects</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="column">
+    <header class="topbar">
+      <div class="topbar__row">
+        <nav class="crumbs" aria-label="Breadcrumb">
+          <a href="index.html">ratline</a>
+          <span class="crumbs__sep" aria-hidden="true">/</span>
+          <span class="crumbs__here">architecture</span>
+        </nav>
+        <span class="topbar__spacer"></span>
+        <div class="search">
+          <label class="skip" for="site-search">Search the documentation</label>
+          <input class="search__input" id="site-search" type="search" placeholder="Search — press / or Ctrl-K"
+                 autocomplete="off" role="combobox" aria-expanded="false" aria-controls="site-search-results">
+          <ul class="search__results" id="site-search-results" hidden></ul>
+        </div>
+        <button class="themetoggle" id="theme-toggle" type="button">Theme: System</button>
+      </div>
+      <div class="tension" aria-hidden="true"></div>
+    </header>
+
+    <main class="page" id="main">
+      <h1>Architecture</h1>
+      <p class="lede">Two properties do the heavy lifting. The control plane can only ask an agent for a
+      catalogued operation, and there is no operation that carries a command. The agent is unprivileged, and
+      the root helper re-validates every argument independently rather than trusting it — so C1 holds against
+      a compromised agent, not only against a compromised control plane.</p>
+
+      <h2 id="components">Components and their privilege</h2>
+
+      <div class="scroller">
+        <table>
+          <caption class="skip">Components, what they run as, what they hold and what they reach</caption>
+          <thead>
+            <tr>
+              <th scope="col">Component</th>
+              <th scope="col">Runs as</th>
+              <th scope="col">Holds</th>
+              <th scope="col">Reaches</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">Control plane</th>
+              <td>Unprivileged service user, on the operator's own machine or a VPS</td>
+              <td>Instruction signing key, secret-wrapping key, SSH authority key, database credentials</td>
+              <td>Postgres; outbound to Git providers, notification destinations, ACME</td>
+            </tr>
+            <tr>
+              <th scope="row">Postgres</th>
+              <td>Its own user</td>
+              <td>Everything tenant-scoped, under forced row-level security</td>
+              <td>Nothing outbound</td>
+            </tr>
+            <tr>
+              <th scope="row" class="mono">ratline-agent</th>
+              <td><code>ratline-agent</code>, unprivileged, one per host</td>
+              <td>Its client certificate, the control plane's public keys, active secret values for sites on this host</td>
+              <td>Outbound to the control plane; the <code>privd</code> socket; site directories</td>
+            </tr>
+            <tr>
+              <th scope="row" class="mono">ratline-privd</th>
+              <td><code>root</code>, socket-activated, <strong>no network access at all</strong></td>
+              <td>Nothing persistent</td>
+              <td>Local filesystem, systemd, package manager, <code>visudo</code></td>
+            </tr>
+            <tr>
+              <th scope="row">Site process</th>
+              <td><code>rl-&lt;site-slug&gt;</code>, one user per site</td>
+              <td>Its own environment file</td>
+              <td>Whatever the application does</td>
+            </tr>
+            <tr>
+              <th scope="row" class="mono">ratline</th>
+              <td>The operator</td>
+              <td>A user API token</td>
+              <td>The control plane API</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="deployment-shape">Two listeners, two exposure policies</h2>
+
+      <p>The agent endpoint and the dashboard are separate listeners. Agents must reach the control plane, but
+      C5 says the dashboard assumes it is not internet-exposed, so the two cannot share one policy:</p>
+
+      <div class="grid grid--2">
+        <div class="card">
+          <p class="card__title">Dashboard</p>
+          <p>Binds to loopback by default. Reached over VPN, Tailscale or an address allowlist. Public
+          reachability is classified locally and warned about loudly, and the warning cannot be dismissed.</p>
+        </div>
+        <div class="card">
+          <p class="card__title">Agent endpoint</p>
+          <p>May face the internet. Requires a valid client certificate at the TLS handshake and rejects
+          everything else before any application code runs.</p>
+        </div>
+      </div>
+
+      <p>This distinction is easy for an operator to get wrong, so the plan requires it to be the default shape
+      of the shipped configuration rather than a documentation footnote.</p>
+
+      <h2 id="system">System diagram</h2>
+
+      <figure>
+        <div class="scroller">
+        <svg viewBox="0 0 880 430" width="880" height="430" role="img"
+             aria-label="Ratline components across three zones. The operator network holds a browser and the ratline CLI, which reach the dashboard listener. The control plane host holds the dashboard listener bound to loopback, the API and job workers running unprivileged, the agent endpoint requiring a client certificate, the three keys, and Postgres with forced row-level security. The managed host holds ratline-agent running unprivileged, ratline-privd running as root with no network, Caddy and two per-site users. The agent dials out to the agent endpoint; the control plane never dials in.">
+          <defs>
+            <marker id="arw-sys" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path class="dg-head" d="M0,0 L8,4 L0,8 z"/>
+            </marker>
+            <marker id="arw-sys-strong" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path class="dg-head--strong" d="M0,0 L8,4 L0,8 z"/>
+            </marker>
+          </defs>
+
+          <!-- zones -->
+          <rect class="dg-zone" x="8" y="34" width="176" height="300" rx="4"/>
+          <text class="dg-zonelabel" x="8" y="26">Operator network — VPN or Tailscale</text>
+
+          <rect class="dg-zone" x="208" y="34" width="290" height="300" rx="4"/>
+          <text class="dg-zonelabel" x="208" y="26">Control plane host</text>
+
+          <rect class="dg-zone" x="540" y="34" width="332" height="300" rx="4"/>
+          <text class="dg-zonelabel" x="540" y="26">Managed host</text>
+
+          <rect class="dg-zone" x="208" y="370" width="664" height="44" rx="4"/>
+          <text class="dg-zonelabel" x="208" y="364">External</text>
+
+          <!-- operator -->
+          <rect class="dg-box" x="20" y="50" width="152" height="46" rx="3"/>
+          <text class="dg-title" x="32" y="70">Browser</text>
+          <text class="dg-sub" x="32" y="85">session cookie</text>
+
+          <rect class="dg-box" x="20" y="112" width="152" height="46" rx="3"/>
+          <text class="dg-title svg-mono" x="32" y="132">ratline CLI</text>
+          <text class="dg-sub" x="32" y="147">a user API token</text>
+
+          <!-- control plane -->
+          <rect class="dg-box" x="220" y="50" width="266" height="46" rx="3"/>
+          <text class="dg-title" x="232" y="70">Dashboard listener</text>
+          <text class="dg-sub" x="232" y="85">loopback by default (C5)</text>
+
+          <rect class="dg-box" x="220" y="112" width="266" height="46" rx="3"/>
+          <text class="dg-title" x="232" y="132">API + job workers</text>
+          <text class="dg-sub" x="232" y="147">unprivileged service user</text>
+
+          <rect class="dg-box" x="220" y="174" width="266" height="46" rx="3"/>
+          <text class="dg-title" x="232" y="194">Agent endpoint</text>
+          <text class="dg-sub" x="232" y="209">client certificate required at the handshake</text>
+
+          <rect class="dg-box dg-box--data" x="220" y="240" width="128" height="52" rx="3"/>
+          <text class="dg-title" x="230" y="260">Keys (files)</text>
+          <text class="dg-sub" x="230" y="274">signing · wrapping</text>
+          <text class="dg-sub" x="230" y="286">SSH authority</text>
+
+          <rect class="dg-box dg-box--data" x="358" y="240" width="128" height="52" rx="3"/>
+          <text class="dg-title" x="368" y="260">Postgres</text>
+          <text class="dg-sub" x="368" y="274">forced row-level</text>
+          <text class="dg-sub" x="368" y="286">security</text>
+
+          <text class="dg-sub" x="220" y="312">Never hosts customer workloads.</text>
+
+          <!-- managed host -->
+          <rect class="dg-box" x="552" y="50" width="306" height="46" rx="3"/>
+          <text class="dg-title svg-mono" x="564" y="70">ratline-agent</text>
+          <text class="dg-sub" x="564" y="85">unprivileged · one per host</text>
+
+          <rect class="dg-box dg-box--root" x="552" y="118" width="306" height="46" rx="3"/>
+          <text class="dg-title svg-mono" x="564" y="138">ratline-privd</text>
+          <text class="dg-sub" x="564" y="153">root · socket-activated · no network</text>
+
+          <rect class="dg-box" x="552" y="188" width="94" height="40" rx="3"/>
+          <text class="dg-title" x="562" y="212">Caddy</text>
+
+          <rect class="dg-box" x="658" y="188" width="94" height="40" rx="3"/>
+          <text class="dg-title" x="668" y="206">Site A</text>
+          <text class="dg-sub svg-mono" x="668" y="219">rl-site-a</text>
+
+          <rect class="dg-box" x="764" y="188" width="94" height="40" rx="3"/>
+          <text class="dg-title" x="774" y="206">Site B</text>
+          <text class="dg-sub svg-mono" x="774" y="219">rl-site-b</text>
+
+          <text class="dg-sub" x="620" y="252">privd re-validates every argument independently.</text>
+          <text class="dg-sub" x="620" y="266">It does not trust the agent (ADR 0004).</text>
+          <text class="dg-sub" x="552" y="290">Caddy fronts every site on the host.</text>
+
+          <!-- external -->
+          <rect class="dg-box" x="222" y="378" width="150" height="28" rx="3"/>
+          <text class="dg-title" x="232" y="396">Git provider</text>
+
+          <rect class="dg-box" x="700" y="378" width="158" height="28" rx="3"/>
+          <text class="dg-title" x="710" y="396">ACME / Let's Encrypt</text>
+
+          <!-- arrows -->
+          <path class="dg-arrow" d="M172,70 L216,70" marker-end="url(#arw-sys)"/>
+          <path class="dg-arrow" d="M172,132 L200,132 L200,82 L216,82" marker-end="url(#arw-sys)"/>
+
+          <path class="dg-arrow" d="M353,96 L353,112"/>
+          <path class="dg-arrow" d="M353,158 L353,174"/>
+
+          <path class="dg-arrow" d="M284,158 L284,238" marker-end="url(#arw-sys)"/>
+          <path class="dg-arrow" d="M422,158 L422,238" marker-end="url(#arw-sys)"/>
+
+          <path class="dg-arrow" d="M220,136 L212,136 L212,392 L218,392" marker-end="url(#arw-sys)"/>
+          <text class="dg-edge" x="226" y="356">webhooks in, clone out</text>
+
+          <path class="dg-arrow dg-arrow--strong" d="M552,72 L520,72 L520,196 L490,196" marker-end="url(#arw-sys-strong)"/>
+          <text class="dg-edge" transform="rotate(-90 512 134)" x="512" y="134" text-anchor="middle">agent dials out · mTLS + signed envelopes</text>
+
+          <path class="dg-arrow" d="M600,96 L600,116" marker-end="url(#arw-sys)"/>
+          <text class="dg-edge" x="612" y="110">unix socket · SO_PEERCRED</text>
+
+          <path class="dg-arrow" d="M596,164 L596,186" marker-end="url(#arw-sys)"/>
+          <path class="dg-arrow dg-arrow--dashed" d="M700,164 L700,186" marker-end="url(#arw-sys)"/>
+          <path class="dg-arrow dg-arrow--dashed" d="M806,164 L806,186" marker-end="url(#arw-sys)"/>
+
+          <path class="dg-arrow" d="M570,228 L570,392 L696,392" marker-end="url(#arw-sys)"/>
+          <text class="dg-edge" x="578" y="356">ACME challenge</text>
+        </svg>
+        </div>
+        <figcaption>Redrawn from the mermaid diagram in <span class="pathref">docs/PLAN.md</span> §2. Note the
+        direction of the agent link: <strong>the host dials the control plane.</strong> No managed host listens
+        on a Ratline port, which an integration test asserts after provisioning (RL-M2-006, todo). Dashed
+        arrows from <code>privd</code> mark operations that create users and install units. The red outline
+        marks the only component running as root.</figcaption>
+      </figure>
+
+      <h2 id="boundaries">Trust boundaries</h2>
+
+      <p>Each boundary is a place where one side must not trust the other, and each has a test that proves the
+      distrust is real. B1 to B4 sit on the request path:</p>
+
+      <figure>
+        <div class="scroller">
+        <svg viewBox="0 0 880 210" width="880" height="210" role="img"
+             aria-label="The four request-path trust boundaries. B1 sits between the browser or CLI and the control plane. B2 sits between the control plane and Postgres. B3 sits between the control plane and ratline-agent. B4 sits between ratline-agent and ratline-privd, which runs as root and does not trust the agent.">
+          <defs>
+            <marker id="arw-bnd" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path class="dg-head" d="M0,0 L8,4 L0,8 z"/>
+            </marker>
+          </defs>
+
+          <rect class="dg-box" x="20" y="50" width="170" height="46" rx="3"/>
+          <text class="dg-title" x="32" y="70">Browser or CLI</text>
+          <text class="dg-sub" x="32" y="85">names a resource</text>
+
+          <rect class="dg-box" x="245" y="50" width="170" height="46" rx="3"/>
+          <text class="dg-title" x="257" y="70">Control plane</text>
+          <text class="dg-sub" x="257" y="85">resolves at the data layer</text>
+
+          <rect class="dg-box" x="470" y="50" width="170" height="46" rx="3"/>
+          <text class="dg-title svg-mono" x="482" y="70">ratline-agent</text>
+          <text class="dg-sub" x="482" y="85">verifies before it reads</text>
+
+          <rect class="dg-box dg-box--root" x="690" y="50" width="170" height="46" rx="3"/>
+          <text class="dg-title svg-mono" x="702" y="70">ratline-privd</text>
+          <text class="dg-sub" x="702" y="85">root · distrusts the agent</text>
+
+          <rect class="dg-box dg-box--data" x="245" y="140" width="170" height="42" rx="3"/>
+          <text class="dg-title" x="257" y="158">Postgres</text>
+          <text class="dg-sub" x="257" y="173">forced row-level security</text>
+
+          <path class="dg-arrow" d="M190,73 L241,73" marker-end="url(#arw-bnd)"/>
+          <text class="dg-bnd" x="215" y="42" text-anchor="middle">B1</text>
+
+          <path class="dg-arrow" d="M415,73 L466,73" marker-end="url(#arw-bnd)"/>
+          <text class="dg-bnd" x="440" y="42" text-anchor="middle">B3</text>
+
+          <path class="dg-arrow" d="M640,73 L686,73" marker-end="url(#arw-bnd)"/>
+          <text class="dg-bnd" x="663" y="42" text-anchor="middle">B4</text>
+
+          <path class="dg-arrow" d="M330,96 L330,136" marker-end="url(#arw-bnd)"/>
+          <text class="dg-bnd" x="340" y="120">B2</text>
+
+          <text class="dg-sub" x="470" y="150">B5 site user to site user · B6 operator SSH to sshd</text>
+          <text class="dg-sub" x="470" y="164">B7 git provider to control plane</text>
+          <text class="dg-sub" x="470" y="178">B8 control plane or agent to object storage</text>
+        </svg>
+        </div>
+        <figcaption>B4 is the boundary that distinguishes this design from the incumbents. Without it, C1 is a
+        statement about SSH configuration; with it, C1 survives agent compromise.</figcaption>
+      </figure>
+
+      <div class="scroller">
+        <div class="filter">
+          <label class="skip" for="bnd-filter">Filter the boundaries</label>
+          <input id="bnd-filter" type="search" placeholder="Filter boundaries" data-filter-for="bnd-table"
+                 data-filter-count="bnd-count" data-filter-empty="bnd-empty" autocomplete="off">
+          <span class="filter__count" id="bnd-count" aria-live="polite"></span>
+        </div>
+        <table id="bnd-table">
+          <caption class="skip">Trust boundaries B1 to B8, from docs/PLAN.md §3</caption>
+          <thead>
+            <tr>
+              <th scope="col">#</th>
+              <th scope="col">Boundary</th>
+              <th scope="col">What crosses</th>
+              <th scope="col">What the trusting side must not assume</th>
+              <th scope="col">Proof</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">B1</th>
+              <td>Browser or CLI → control plane</td>
+              <td>Session cookie or API token; form and API input</td>
+              <td>That the actor may see any resource they name. Authorization is resolved at the data layer, not here.</td>
+              <td class="mono nowrap">RL-M1-025 matrix<br>RL-M1-026 indistinguishability</td>
+            </tr>
+            <tr>
+              <th scope="row">B2</th>
+              <td>Control plane → Postgres</td>
+              <td>SQL, with a tenant set per transaction</td>
+              <td>That application predicates are present or correct. Row-level security holds independently.</td>
+              <td class="mono nowrap">RL-M1-006 — predicate removed, still zero rows</td>
+            </tr>
+            <tr>
+              <th scope="row">B3</th>
+              <td>Control plane → agent</td>
+              <td>Signed instruction envelopes over mTLS</td>
+              <td>That the channel implies authority. Signature, target, expiry and nonce are checked before any argument is read.</td>
+              <td class="mono nowrap">RL-M2-003, RL-M2-007</td>
+            </tr>
+            <tr>
+              <th scope="row">B4</th>
+              <td>Agent → <code>privd</code></td>
+              <td>Operation requests over a unix socket</td>
+              <td><strong>That the agent is honest.</strong> <code>privd</code> re-validates every argument from scratch and identifies its caller by peer credentials.</td>
+              <td class="mono nowrap">RL-M2-008 — a compromised agent cannot get arbitrary root</td>
+            </tr>
+            <tr>
+              <th scope="row">B5</th>
+              <td>Site user → site user</td>
+              <td>Nothing intended</td>
+              <td>That filesystem modes alone suffice. Per-site users plus systemd sandboxing plus directory modes.</td>
+              <td class="mono nowrap">RL-M3-006, RL-M6-005</td>
+            </tr>
+            <tr>
+              <th scope="row">B6</th>
+              <td>Operator → host <code>sshd</code></td>
+              <td>Short-lived certificate with principals</td>
+              <td>That a certificate implies current authorisation. Principals derive from live grants; a revocation list and session termination back it up.</td>
+              <td class="mono nowrap">RL-M6-003</td>
+            </tr>
+            <tr>
+              <th scope="row">B7</th>
+              <td>Git provider → control plane</td>
+              <td>Webhook deliveries</td>
+              <td>That a delivery is genuine. The signature is verified in constant time <em>before</em> parsing; replays are rejected.</td>
+              <td class="mono nowrap">RL-M3-002</td>
+            </tr>
+            <tr>
+              <th scope="row">B8</th>
+              <td>Control plane or agent → object storage</td>
+              <td>Backup archives</td>
+              <td>That the endpoint is trusted with plaintext. Archives are encrypted before leaving the host.</td>
+              <td class="mono nowrap">RL-M4-013</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="filter__empty" id="bnd-empty" hidden></p>
+      </div>
+
+      <div class="note" data-status="attention">
+        <span class="note__label">Which proofs exist today</span>
+        <p>B1 and B2 are proven: RL-M1-006, RL-M1-025 and RL-M1-026 are all <code>done</code>. B3 is partly
+        proven — RL-M2-003 (the signed envelope) is <code>done</code>, RL-M2-007 (the durable nonce store) is
+        <code>todo</code>. B4 to B8 name tasks that have not started. Read from
+        <span class="pathref">docs/tasks.yaml</span> on 2026-08-04.</p>
+      </div>
+
+      <h2 id="data-model">Data model</h2>
+
+      <p>Tenant-scoped tables carry <code>org_id</code> and are covered by forced row-level security.
+      <code>scope_path</code> on hierarchy nodes is materialised so an inheriting permission check resolves in
+      one indexed query.</p>
+
+      <div class="grid grid--3">
+        <div class="card">
+          <p class="card__title">Hierarchy</p>
+          <p class="mono" style="font-size:var(--text-sm)">ORGANIZATION → TEAM → PROJECT → ENVIRONMENT → SITE</p>
+          <p>Permissions inherit downward. A grant on a project applies to all its environments unless a
+          narrower deny exists, and denies always win.</p>
+        </div>
+        <div class="card">
+          <p class="card__title">Identity</p>
+          <p class="mono" style="font-size:var(--text-sm)">USER · MEMBERSHIP · TEAM_MEMBER · SERVICE_IDENTITY · API_TOKEN · SSH_KEY · SSH_CERTIFICATE</p>
+        </div>
+        <div class="card">
+          <p class="card__title">Authorization</p>
+          <p class="mono" style="font-size:var(--text-sm)">ROLE · ROLE_PERMISSION · GRANT · AUDIT_ENTRY</p>
+        </div>
+        <div class="card">
+          <p class="card__title">Hosts and sites</p>
+          <p class="mono" style="font-size:var(--text-sm)">HOST · HOST_INVENTORY · FIREWALL_RULE · SITE · RELEASE · DEPLOYMENT · DOMAIN · CERTIFICATE · SCHEDULED_JOB</p>
+        </div>
+        <div class="card">
+          <p class="card__title">Operations</p>
+          <p class="mono" style="font-size:var(--text-sm)">LOG_CHUNK · BACKUP · UPTIME_CHECK · TERMINAL_SESSION · JOB</p>
+        </div>
+        <div class="card">
+          <p class="card__title">Secrets</p>
+          <p class="mono" style="font-size:var(--text-sm)">SECRET · SECRET_VERSION</p>
+          <p>The name is plaintext so <code>secret.read_name</code> works without unwrapping.</p>
+        </div>
+      </div>
+
+      <h3>Notes on specific entities</h3>
+
+      <dl class="facts">
+        <dt class="mono">GRANT</dt>
+        <dd>Carries <code>subject_type</code> (user, service identity, API token), <code>subject_id</code>,
+        <code>role_id</code>, <code>scope_type</code>, <code>scope_id</code>, <code>expires_at</code>,
+        <code>granted_by</code> and <code>reason</code>. Denies share the shape with <code>effect: deny</code>
+        and always win. <code>expires_at</code> is evaluated at decision time <em>and</em> in the SQL
+        predicate, so an expired grant is dead the instant it expires. A cleanup job exists only for
+        hygiene — it is not in the enforcement path.</dd>
+
+        <dt class="mono">SECRET_VERSION</dt>
+        <dd>The value is sealed under a per-secret data key, itself wrapped by the key-encryption key. The
+        version row records actor and timestamp and <strong>never the value</strong>, including in audit
+        metadata.</dd>
+
+        <dt class="mono">AUDIT_ENTRY</dt>
+        <dd>Append-only, enforced at the database level rather than by convention: update and delete are
+        refused outright by a trigger. Each entry chains to its predecessor by hash. Records actor, action,
+        resource, decision, address, timestamp and request identifier. Denied decisions are recorded as
+        prominently as allowed ones.</dd>
+
+        <dt class="mono">RELEASE</dt>
+        <dd>Directory names are system-generated timestamps, never derived from user input (RL-M3-008).</dd>
+
+        <dt class="mono">HOST</dt>
+        <dd>Stores the agent's public key and certificate serial, so revocation is a row update.</dd>
+
+        <dt class="mono">JOB</dt>
+        <dd>A queue row, tenant-scoped like everything else, so a worker cannot claim a job it could not
+        read.</dd>
+      </dl>
+
+      <h3>Migrations landed so far</h3>
+
+      <p>Thirteen migrations, all plain SQL, each with a tested down path.
+      <code>./scripts/migrate cycle</code> applies every one up, down and up again — asserting a down path
+      exists is a parser check, but only the second <code>up</code> reveals a rollback that left something
+      behind.</p>
+
+      <div class="scroller">
+        <table>
+          <caption class="skip">Migration files in src/db/migrations</caption>
+          <thead><tr><th scope="col">#</th><th scope="col">File</th><th scope="col">What it adds</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">1</th><td class="mono nowrap">enable_citext</td><td>The case-insensitive text extension</td></tr>
+            <tr><th scope="row">2</th><td class="mono nowrap">identity</td><td>Organizations, users, memberships; the <code>ratline_app</code> role, created <code>NOLOGIN</code> and passwordless on purpose (C4)</td></tr>
+            <tr><th scope="row">3</th><td class="mono nowrap">hierarchy</td><td>Teams, projects, environments, scope ancestry</td></tr>
+            <tr><th scope="row">4</th><td class="mono nowrap">row_level_security</td><td>Layer 3 of C3: policies enabled <em>and forced</em> on every tenant-scoped table</td></tr>
+            <tr><th scope="row">5</th><td class="mono nowrap">grants_denies_expiry</td><td><code>live_grants</code>, <code>effective_grants()</code>, <code>grant_decision()</code></td></tr>
+            <tr><th scope="row">6</th><td class="mono nowrap">audit_log</td><td>The hash chain and the append-only trigger</td></tr>
+            <tr><th scope="row">7</th><td class="mono nowrap">api_tokens</td><td>Hashed tokens, expiry, last-used tracking</td></tr>
+            <tr><th scope="row">8</th><td class="mono nowrap">owner_floor_requires_a_person</td><td>The system refuses to remove the last Owner</td></tr>
+            <tr><th scope="row">9</th><td class="mono nowrap">audit_verification</td><td>Chain verification results and the truncation watermark</td></tr>
+            <tr><th scope="row">10</th><td class="mono nowrap">sessions</td><td>Sessions with rotation and an absolute lifetime</td></tr>
+            <tr><th scope="row">11</th><td class="mono nowrap">rate_limits</td><td>Per-account and per-address authentication budgets</td></tr>
+            <tr><th scope="row">12</th><td class="mono nowrap">two_factor</td><td>TOTP enrolment, envelope-encrypted secrets, recovery codes</td></tr>
+            <tr><th scope="row">13</th><td class="mono nowrap">reauthentication</td><td>Freshness for the highest-risk actions</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="layout">Repository layout</h2>
+
+      <p>The layout encodes the constraints. <span class="pathref">src/db/internal</span> is import-restricted
+      by lint; <span class="pathref">src/authz/</span> is the only place permission logic exists; the
+      operation catalogue is the single source both sides generate from, so the control plane and the agent
+      cannot drift.</p>
+
+<pre><code><span class="t-com">src/</span>
+  db/internal/       <span class="t-com"># the only module that constructs the client; exports scoped()</span>
+  db/migrations/     <span class="t-com"># plain SQL, every one with a tested down path</span>
+  repo/              <span class="t-com"># the only importer of db/internal; every function takes AuthzContext first</span>
+  authz/             <span class="t-com"># can(), permission catalogue, roles, grant resolution — 100% covered</span>
+  auth/              <span class="t-com"># passwords, sessions, TOTP. Holds no database handle</span>
+  api/               <span class="t-com"># Hono routes as data; refusal; CSRF; the server</span>
+  jobs/              <span class="t-com"># queue workers</span>
+  crypto/            <span class="t-com"># secret loading, weak-secret detection</span>
+  config/            <span class="t-com"># bind-address classification (C5)</span>
+  agent/             <span class="t-com"># the operation catalogue and the signed envelope, control-plane side</span>
+  ops/               <span class="t-com"># README only — see the note below</span>
+  web/lib/design/    <span class="t-com"># tokens from DESIGN.md; no hard-coded colour anywhere else</span>
+  web/lib/shell/     <span class="t-com"># navigation, palette, audit view model — all data, no JSX</span>
+  web/app/           <span class="t-com"># the React shell that arranges them</span>
+<span class="t-com">agent/</span>
+  cmd/ratline-agent/ cmd/ratline-privd/
+  internal/protocol/ <span class="t-com"># catalogue_gen.go, envelope.go, validate.go, nonces.go</span>
+  internal/build/ internal/cli/
+<span class="t-com">test/</span>
+  authz/             <span class="t-com"># matrix, roles, grants, coverage gate</span>
+  security/          <span class="t-com"># injection, cross-tenant, leakage, CSRF, rate limits, refusals</span>
+  integration/       <span class="t-com"># real database only — nothing mocked</span>
+  toolchain/         <span class="t-com"># design tokens, migrations, repository hygiene, shell structure</span>
+</code></pre>
+
+      <div class="note" data-status="attention">
+        <span class="note__label">Two places the tree has drifted from the plan</span>
+        <p><span class="pathref">docs/PLAN.md</span> §7 puts the operation catalogue in
+        <span class="pathref">src/ops/</span> and its generated Go copy in
+        <span class="pathref">agent/internal/ops/</span>. On disk, <span class="pathref">src/ops/</span> holds
+        only a README, the catalogue lives at <span class="pathref">src/agent/catalogue.ts</span>, and the
+        generated file is <span class="pathref">agent/internal/protocol/catalogue_gen.go</span>. The behaviour
+        is what the plan describes; the paths are not.</p>
+        <p>The plan and three README files also describe the data-access layer as
+        “Drizzle behind a mandatory scoping layer”.
+        <span class="pathref">src/db/internal/handle.ts</span> uses <code>pg</code> directly with raw SQL, and
+        <code>drizzle-orm</code> is not a dependency in <span class="pathref">package.json</span>. The three
+        C3 layers hold either way, but the documents name a library the code does not use.</p>
+      </div>
+
+      <h2 id="stack">Stack, and where it was argued</h2>
+
+      <div class="scroller">
+        <table>
+          <caption class="skip">Stack choices from ADR 0001, checked against package.json</caption>
+          <thead><tr><th scope="col">Layer</th><th scope="col">Choice</th><th scope="col">Where it was argued</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Control plane language</th><td>TypeScript, strict, no <code>any</code> in application code</td><td>ADR 0001</td></tr>
+            <tr><th scope="row">Runtime</th><td>Node 22 LTS. Type stripping, so most of the tree needs no build step</td><td>ADR 0001; <code>.node-version</code>, <code>engines.node &gt;= 22.6</code></td></tr>
+            <tr><th scope="row">API framework</th><td>Hono, not NestJS — guard-and-interceptor culture pushes authorization into the route layer, the §9 anti-pattern C3 exists to prevent</td><td>ADR 0001, <span class="pathref">docs/gates/M0.md</span></td></tr>
+            <tr><th scope="row">Database</th><td>Postgres 17 in development; 16 is the floor, because C3 needs forced row-level security</td><td>ADR 0001, <span class="pathref">README.md</span></td></tr>
+            <tr><th scope="row">Queue</th><td>Postgres, not Redis — one fewer stateful service for a self-hosting operator, and a deploy job can be enqueued in the same transaction as the deployment row</td><td>ADR 0007</td></tr>
+            <tr><th scope="row">Front end</th><td>React. ADR 0001 recommended SvelteKit; the owner ruled React on 2026-08-02, closing R-03</td><td>ADR 0001, <span class="pathref">docs/RISKS.md</span> R-03</td></tr>
+            <tr><th scope="row">Agent and privileged helper</th><td>Go, static binaries, no module dependencies — a test asserts the module stays dependency-free</td><td>ADR 0001, ADR 0004, <span class="pathref">.github/workflows/ci.yml</span></td></tr>
+            <tr><th scope="row">Assets</th><td>All self-hosted: fonts, icons, scripts. No external origin at runtime</td><td>ADR 0001, DESIGN.md §3</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>The React ruling had a consequence ADR 0001 did not anticipate: JSX is not erasable, so
+      <code>node --experimental-strip-types</code> refuses a <code>.tsx</code> file and Vite became the
+      project's first build step. It is paid for by keeping everything decidable in <code>.ts</code> — the
+      rail, breadcrumb, chip, tension states, palette and audit view model are all data, and the components
+      only arrange them.</p>
+
+      <section class="sources" aria-labelledby="sources-heading">
+        <h2 id="sources-heading" class="label" style="border:0;padding:0;margin:0 0 var(--space-xs)">Sources for this page</h2>
+        <ul>
+          <li><span class="pathref">docs/PLAN.md</span> §1–§4, §7 — components, deployment shape, diagrams, boundaries, data model, layout</li>
+          <li><span class="pathref">docs/decisions/0001-stack-choice.md</span>, <span class="pathref">0003</span>, <span class="pathref">0004</span>, <span class="pathref">0007</span></li>
+          <li><span class="pathref">src/db/internal/handle.ts</span>, <span class="pathref">src/db/internal/README.md</span> — the handle and its rules</li>
+          <li><span class="pathref">src/db/migrations/</span> — the thirteen files listed above</li>
+          <li><span class="pathref">src/ops/README.md</span> vs <span class="pathref">src/agent/catalogue.ts</span> — the path drift</li>
+          <li><span class="pathref">package.json</span> — runtime, dependencies, scripts</li>
+          <li><span class="pathref">docs/gates/M0.md</span>, <span class="pathref">docs/gates/M1.md</span> — the stack departures and the React consequence</li>
+          <li><span class="pathref">docs/tasks.yaml</span> — the boundary-proof statuses</li>
+        </ul>
+      </section>
+
+      <nav class="pager" aria-label="Section navigation">
+        <a href="constraints.html"><span class="label">Previous</span> The six hard constraints</a>
+        <a href="authorization.html"><span class="label">Next</span> The authorization model</a>
+      </nav>
+    </main>
+
+    <footer class="page" style="padding-top:0">
+      <p class="dim" style="font-size:var(--text-xs)">Written from the repository at
+      <span class="pathref">/Users/ark/Desktop/FunProjects/moss-clone</span>. Design tokens copied from
+      <span class="pathref">src/web/lib/design/</span>; no font files or scripts are loaded from any external
+      origin.</p>
+    </footer>
+  </div>
+</div>
+</body>
+</html>
