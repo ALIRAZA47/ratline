@@ -72,13 +72,13 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 
 | Suite | Passing | Rate |
 | --- | ---: | ---: |
-| Unit | 445 / 445 | 100% |
+| Unit | 456 / 456 | 100% |
 | Integration | not measured | — |
 | Authorization matrix | 191 / 191 | 100% |
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | 100% | must be 100% |
 
-Measured 2026-08-04T17:31:23.449Z.
+Measured 2026-08-04T17:51:37.178Z.
 
 ### Authorization matrix (role × endpoint × subject)
 

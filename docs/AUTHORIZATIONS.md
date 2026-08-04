@@ -79,3 +79,33 @@ RL-M1-049 (no CSRF guard on `POST /auth/sign-out`) and RL-M1-050 (a cross-tenant
 probe leaving no audit record) were surfaced under §2.10's stop condition for a
 security issue in already-merged work. The owner heard them and authorized the
 fixes, which is what that stop condition exists to obtain.
+
+## A-04 — Transport authentication becomes an Ed25519 challenge, not a client certificate (2026-08-04)
+
+> "go with option 3"
+
+Ruling on the three-way conflict recorded under RL-M2-005: ADR 0002 asked for a
+per-host X.509 client certificate, ADR 0005 and C2 forbid the control plane
+executing any process, and §6.7 prefers the standard library. Node's crypto can
+verify X.509 and cannot mint it, so those three could not all hold.
+
+**Granted: amend ADR 0002's mechanism.** The agent proves its identity with an
+Ed25519 signature over a challenge the control plane issued, rather than with a
+client certificate. Mintable entirely in Node's standard library, and the agent
+already verifies Ed25519 for instruction envelopes, so no new primitive enters the
+system.
+
+This also amends RL-M2-005's acceptance criteria, which said "client certificate"
+in as many words. Rewritten to describe the mechanism the owner chose — which is a
+ruling being applied, not a goalpost being moved, and is recorded here so the
+difference is visible.
+
+**What this costs, stated rather than discovered later.** Standard mTLS tooling no
+longer applies: a terminating reverse proxy that authenticates clients by
+certificate cannot authenticate a Ratline agent, and neither can anything else that
+expects the identity to be in the TLS handshake. The proof moves up a layer, so it
+is Ratline's own code that must get it right — which is the trade the ruling accepts.
+
+**ADR 0002 stays `proposed`.** §2.6 reserves acceptance for the owner, and a ruling
+on one mechanism inside an ADR is not acceptance of the ADR.
+

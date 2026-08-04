@@ -53,10 +53,40 @@ over SSH". That is a false choice: those answer different questions.
 **Agent-initiated mTLS, carrying independently signed instruction envelopes over
 an enumerated operation catalogue.** SSH is used exactly once, for bootstrap.
 
-**Transport.** The agent dials the control plane over HTTP/2 with TLS, mutually
-authenticated. Each host holds its own client certificate, issued at enrolment
-via a single-use short-lived token, and individually revocable. No managed host
-listens on a Ratline port; an integration test asserts this after provisioning.
+**Transport.** The agent dials the control plane over HTTP/2 with TLS. The server
+is authenticated by its certificate as usual; the AGENT proves who it is with an
+Ed25519 signature over a challenge the control plane issued, not with a client
+certificate. Each host holds its own signing key, registered at enrolment via a
+single-use short-lived token, and individually revocable. No managed host listens
+on a Ratline port; an integration test asserts this after provisioning.
+
+> **Amended 2026-08-04 (A-04), still `proposed`.** This paragraph originally
+> specified a per-host X.509 **client certificate** over mutual TLS. That could not
+> be built: Node's `crypto` can verify X.509 and cannot mint it, so issuing
+> certificates needed either a subprocess — which ADR 0005 and C2 forbid the control
+> plane entirely, enforced by a lint rule, because that is what makes command
+> injection structurally impossible rather than merely unlikely — or a dependency,
+> and the available one pulls a dependency-injection container and requires a global
+> prototype-patching polyfill into the supply chain of the key that authorises every
+> instruction to every host.
+>
+> The owner ruled for the challenge instead. It is mintable entirely in the standard
+> library, and the agent already verifies Ed25519 for envelopes, so no new primitive
+> enters the system.
+>
+> **The cost, so it is not discovered later:** standard mTLS tooling no longer
+> applies. A terminating reverse proxy that authenticates clients by certificate
+> cannot authenticate a Ratline agent, and neither can anything else expecting the
+> identity to be in the TLS handshake. The proof moves up a layer, so Ratline's own
+> code has to get it right.
+>
+> **Two properties the certificate version got for free and this must supply
+> explicitly.** A challenge signature must be bound to the connection that requested
+> it, or a signature captured once is replayable on another connection — so the
+> challenge is issued per connection, held server-side, and single-use. And it must
+> carry a domain separator distinct from the instruction envelope's, or a host's
+> signed challenge and a signed instruction could be confused for one another by the
+> same key. Both are asserted by `test/security/host_identity.test.ts`.
 
 **Instructions.** Every instruction is an envelope:
 
