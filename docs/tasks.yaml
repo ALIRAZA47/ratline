@@ -4133,4 +4133,29 @@
     2026-08-04 — 2026-08-04 — The probe is GET /organization, not a dedicated /session endpoint, deliberately. A session endpoint would be a second source of truth about authorization, and one saying 'you are signed in' while the endpoint you actually need refuses you is worse than no answer — the interface would then show a shell it cannot fill. organization.read is held by all seven roles, so a 200 means there is a session AND it can do the minimum. A 404 is treated as signed-out rather than investigated, because §6.3 makes unauthorized and nonexistent indistinguishable on purpose and the dashboard must not try to guess which.
     2026-08-04 — 2026-08-04 — 'unreachable' is a THIRD state, not folded into signed-out, and this is the one design decision here I would defend hardest. Rendering a sign-in form when the server cannot be reached invites an operator to type a password into a page that cannot deliver it — which is how a transient outage becomes a credential typed into something unknown. It renders an explicit failure naming what broke instead.
     2026-08-04 — 2026-08-04 — ACCEPTANCES 1 AND 4 NOT MET, left unchecked. The placeholder data is gone and the organization name is real, but Shell has no content components behind the rail: the panes are empty because RL-M1-022 built chrome and no screen was ever written. So 'each rail destination shows data the API returned' is half true — the frame is real and there is nothing in it. And acceptance 4 is untested: sign-in is a public route needing no CSRF token, so nothing here has yet sent one on a guarded mutation. Both need screens to exist first. Also recorded: the environment chip is hardcoded to production because no endpoint reports which environment an installation is — defaulted that way because the chip reserves its hue for production, so being wrong in this direction over-warns rather than under-warns.
-  acceptance_met: [2, 3]
+    2026-08-04 — 2026-08-04 — Acceptance 1 now met by RL-M1-059, which wrote the screens. Acceptance 4 (CSRF on unsafe methods) remains unmet: every screen so far is a read, so nothing has yet sent a token on a guarded mutation. It becomes testable when the first write lands.
+  acceptance_met: [1, 2, 3]
+- id: RL-M1-059
+  title: Write the screens behind the rail
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: []
+  blocks: []
+  risk: low
+  acceptance:
+    - Audit, Team and Sites render data the API returned
+    - A destination with no endpoint says so rather than showing an empty list
+    - Loading, empty, refused and failed are four distinguishable states
+    - Rail navigation works, and a bookmark to a destination loads it directly
+  artifacts: []
+  decisions: []
+  acceptance_met: [1, 2, 3, 4]
+  notes: |
+    2026-08-04 — 2026-08-04 — VERIFIED IN A BROWSER, all five destinations. Audit shows the real hash-chained entry from claiming: seq 1, organization.update, actor user, decision allow, reason installation-claimed, chain cf3917af. Team shows the real owner from GET /members. Hosts shows the not-built state naming RL-M2-005. Rail navigation works — the breadcrumb and the active marker both follow — and Shell's main element rendered {null} from RL-M1-022 until this commit, which is why every destination was an empty frame.
+
+    2026-08-04 — 2026-08-04 — TWO DESTINATIONS DELIBERATELY DO NOT SHOW AN EMPTY LIST. Hosts and Deploys have no bound endpoint, and an empty table under 'Hosts' would claim there are no hosts when the truth is that Ratline cannot manage one yet. A claim about the world is worse than an admission about the software, so each says there is no endpoint behind it, explains why that differs from an empty list, and names the task. §291 asks empty states to invite action rather than apologise.
+    2026-08-04 — 2026-08-04 — SITES SHOWS PROJECTS AND SAYS SO. The rail says Sites; the only bound read is GET /projects. A project contains sites and sites arrive in M3, so rendering projects under a heading that says Sites would be a quiet mislabelling of the data model — the kind that survives because it looks plausible. The heading reads Projects and the note explains the difference.
+    2026-08-04 — 2026-08-04 — FOUR OUTCOMES, not two. Loading, empty, refused and failed each get a different sentence, because collapsing 'the server refused you' into 'there is nothing here' is the specific mistake that makes a permissions problem look like an empty account — and an operator then hunts for data that was never missing. The refused text is honest that it CANNOT tell which: §6.3 makes unauthorized and nonexistent indistinguishable on purpose, so the screen says so rather than guessing. A 401 is deliberately NOT handled per-pane; it means the session ended, and the right response is re-probing the whole app rather than one pane showing an error while four others still render as signed in.
+    2026-08-04 — 2026-08-04 — Routing is history.pushState and popstate, not a router library: five destinations and no nested routes do not earn a dependency (§6.7), and the browser already implements back and bookmarking correctly. dashboard.ts serving index.html for any unclaimed path is what makes a cold load of /audit work. Clicks are intercepted in App rather than in Rail, so the rail stays a presentation of data with no opinion about history, and a click with a modifier key is left alone — an operator opening a destination in a new tab is being reasonable and a router that swallows that is one people fight.

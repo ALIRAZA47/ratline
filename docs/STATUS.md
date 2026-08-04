@@ -8,7 +8,7 @@ Generated 2026-08-04.
 | Milestone | Progress | Done | Total | Open high-risk |
 | --- | --- | ---: | ---: | ---: |
 | **M0** Plan | `########################` 100% | 26 | 26 | 0 |
-| **M1** Control plane skeleton | `##################------` 76% | 44 | 58 | 6 |
+| **M1** Control plane skeleton | `##################------` 75% | 44 | 59 | 6 |
 | **M2** Agent and first host | `####--------------------` 17% | 5 | 29 | 16 |
 | **M3** Static sites end to end | `------------------------` 0% | 0 | 27 | 18 |
 | **M4** Node and Bun apps | `------------------------` 0% | 0 | 15 | 10 |
@@ -114,8 +114,8 @@ CI: **green** at `18cca248` (2026-08-03T19:25:43Z)
 
 | Status | Count |
 | --- | ---: |
-| todo | 105 |
+| todo | 106 |
 | in-progress | 1 |
 | review | 4 |
 | done | 75 |
-| **all** | **185** |
+| **all** | **186** |
