@@ -73,6 +73,41 @@ export type Dashboard = {
   readonly index: Asset;
 };
 
+/**
+ * What the server tells the page about its own exposure (RL-M1-058).
+ *
+ * INJECTED into the HTML rather than fetched, and that placement is the decision. C5
+ * wants a warning that cannot be dismissed, so it must survive the two cases a fetch
+ * would not: before anyone signs in, and when the API is failing. A warning that needs
+ * a working session to appear is absent exactly when somebody is most likely to be
+ * poking at an exposed dashboard.
+ */
+export type ExposureNotice = {
+  readonly level: string;
+  readonly warning: string | null;
+  readonly caveat: string | null;
+};
+
+/**
+ * The index with the exposure notice inlined.
+ *
+ * `JSON.stringify` inside a `<script type="application/json">` block, with `<` escaped.
+ * The notice is server-authored and contains no user input, but escaping it anyway is
+ * the difference between "this string happens to be safe" and "this cannot inject" —
+ * and the second is the only one that survives somebody later putting a hostname in it.
+ */
+export function indexWithExposure(index: Asset, notice: ExposureNotice): Asset {
+  const payload = JSON.stringify(notice).replaceAll("<", "\\u003c");
+  const html = index.body
+    .toString("utf8")
+    .replace(
+      "</head>",
+      `<script type="application/json" id="ratline-exposure">${payload}</script></head>`,
+    );
+
+  return { ...index, body: Buffer.from(html, "utf8") };
+}
+
 export class DashboardUnavailable extends Error {
   constructor(directory: string, cause: string) {
     super(

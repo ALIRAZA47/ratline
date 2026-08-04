@@ -31,7 +31,12 @@ import { serve } from "@hono/node-server";
 import { preflight, BindRefusal } from "./boot.ts";
 import { createServer } from "./api/server.ts";
 import { mintBootstrapToken, tokenPath } from "./api/bootstrap_token.ts";
-import { loadDashboard, DashboardUnavailable, type Dashboard } from "./api/dashboard.ts";
+import {
+  loadDashboard,
+  indexWithExposure,
+  DashboardUnavailable,
+  type Dashboard,
+} from "./api/dashboard.ts";
 import { secretsDir, SecretRefusal } from "./crypto/secrets.ts";
 
 /**
@@ -202,8 +207,26 @@ async function main(): Promise<void> {
   let dashboard: Dashboard | undefined;
   const dashboardDir = process.env["RATLINE_DASHBOARD_DIR"] ?? "dist/web";
   try {
-    dashboard = loadDashboard(dashboardDir);
-    process.stderr.write(`dashboard loaded from ${dashboardDir} (${String(dashboard.assets.size)} files)\n`);
+    const built = loadDashboard(dashboardDir);
+    // The exposure notice is inlined into the index here, so the interface can show
+    // it before any request and even when the API is failing (C5, RL-M1-058).
+    // Replaced in the map too, not only as the fallback: `assetFor` returns the map
+    // entry for an exact path, so a browser asking for /index.html directly would
+    // otherwise get the version WITHOUT the warning — the one case where the notice
+    // silently disappears.
+    const withNotice = indexWithExposure(built.index, {
+      level: ready.exposure.level,
+      warning: ready.exposure.warning,
+      caveat: ready.exposure.caveat,
+    });
+    const assets = new Map(built.assets);
+    assets.set("/index.html", withNotice);
+
+    dashboard = {
+      assets,
+      index: withNotice,
+    };
+    process.stderr.write(`dashboard loaded from ${dashboardDir} (${String(built.assets.size)} files)\n`);
   } catch (error) {
     if (error instanceof DashboardUnavailable) {
       process.stderr.write(`\n${error.message}\n\n`);
