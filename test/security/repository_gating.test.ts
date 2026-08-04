@@ -52,6 +52,28 @@ const EXEMPT: Readonly<Record<string, string>> = {
     "audited unless the denied actor could read audit, which inverts C6.",
 
   // --- pre-authentication, where there is no actor to check -----------------
+  redeemEnrolment:
+    "Redeems an enrolment token, and the caller is a host that has not been " +
+    "authenticated yet — the whole point of the call is to register the key that will " +
+    "authenticate it later. The token stands in for a permission, and it is single use " +
+    "and short lived (RL-M2-005): the UPDATE carries `where spent_at is null` so two " +
+    "agents presenting the same token concurrently cannot both win, which a select-then- " +
+    "update would let them do.",
+
+  registeredKeyFor:
+    "Looks up the key that authenticates a connection, so it runs BEFORE there is an " +
+    "actor — finding out who is connecting is what it is for. Same seam as sign-in " +
+    "(ADR 0014). What limits it is its shape rather than a grant: it takes a " +
+    "fingerprint and returns the one row matching it, and there is no variant that " +
+    "lists keys or accepts a host id. A caller holding a fingerprint already holds the " +
+    "public key it hashes.",
+
+  recordHostSeen:
+    "Records that a host connected, called by the connection handler acting for the " +
+    "host that has just authenticated. There is no actor beyond that one, and the " +
+    "address written is OBSERVED on the connection rather than supplied by anybody — " +
+    "an address somebody sends is a claim, an address a connection came from is not.",
+
   createInstallation:
     "Builds the first AuthzContext there has ever been on this installation — not " +
     "'no session yet' but 'no tenant yet'. There is no grant to check and nobody to " +
