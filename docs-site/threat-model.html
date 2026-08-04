@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Threat model and risks — Ratline</title>
+<meta name="description" content="Ranked assets, actors, the three compromise scenarios, crown-jewel key handling, the attack surface and the live risk register.">
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/site.css">
+<script defer src="assets/app.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<div class="shroud">
+
+  <nav class="rail" aria-label="Documentation sections">
+    <a class="rail__brand" href="index.html">
+      <span class="rail__wordmark display">RATLINE</span>
+    </a>
+    <div class="rail__group">
+      <p class="rail__group-label label">Reference</p>
+      <ul class="rail__list">
+        <li><a class="rail__link" href="index.html"><span class="rail__num">01</span> Overview</a></li>
+        <li><a class="rail__link" href="constraints.html"><span class="rail__num">02</span> Constraints</a></li>
+        <li><a class="rail__link" href="architecture.html"><span class="rail__num">03</span> Architecture</a></li>
+        <li><a class="rail__link" href="authorization.html"><span class="rail__num">04</span> Authorization</a></li>
+        <li><a class="rail__link" href="agent.html"><span class="rail__num">05</span> Agent protocol</a></li>
+        <li><a class="rail__link" href="threat-model.html"><span class="rail__num">06</span> Threat model</a></li>
+        <li><a class="rail__link" href="decisions.html"><span class="rail__num">07</span> Decisions</a></li>
+        <li><a class="rail__link" href="roadmap.html"><span class="rail__num">08</span> Roadmap</a></li>
+        <li><a class="rail__link" href="workflow.html"><span class="rail__num">09</span> Workflow</a></li>
+        <li><a class="rail__link" href="defects.html"><span class="rail__num">10</span> Defects</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="column">
+    <header class="topbar">
+      <div class="topbar__row">
+        <nav class="crumbs" aria-label="Breadcrumb">
+          <a href="index.html">ratline</a>
+          <span class="crumbs__sep" aria-hidden="true">/</span>
+          <span class="crumbs__here">threat model</span>
+        </nav>
+        <span class="topbar__spacer"></span>
+        <div class="search">
+          <label class="skip" for="site-search">Search the documentation</label>
+          <input class="search__input" id="site-search" type="search" placeholder="Search — press / or Ctrl-K"
+                 autocomplete="off" role="combobox" aria-expanded="false" aria-controls="site-search-results">
+          <ul class="search__results" id="site-search-results" hidden></ul>
+        </div>
+        <button class="themetoggle" id="theme-toggle" type="button">Theme: System</button>
+      </div>
+      <div class="tension" aria-hidden="true"></div>
+    </header>
+
+    <main class="page" id="main">
+      <h1>Threat model and risks</h1>
+      <p class="lede">Ratline manages hosts an organization already owns. There is no multi-tenancy across
+      untrusted customers, and that shapes what counts as a finding: a Developer reaching production secrets is
+      a serious defect; a Developer being able to see that a production project <em>exists</em> is not.</p>
+
+      <p>Assumed out of scope for v1: physical access to hosts, a malicious Linux distribution package, a
+      compromised Git provider, and a hostile hypervisor.</p>
+
+      <div class="note" data-status="attention">
+        <span class="note__label">A tradeoff the project raised about this document</span>
+        <p>The M1 gate report carries a candour warning about its own threat model:
+        <span class="pathref">docs/THREAT-MODEL.md</span> names the crown jewels and states plainly that
+        concentrating all three on the control plane is the biggest structural risk in the design. That is what
+        a threat model should do. It is also a roadmap for anyone attacking a real deployment, and the
+        repository is now public. Whether it stays public is one of the five things the gate report asks the
+        owner to rule on, and it has not been ruled on.</p>
+      </div>
+
+      <h2 id="assets">Assets, ranked</h2>
+
+      <div class="scroller">
+        <table>
+          <caption class="skip">Assets in rank order, from docs/THREAT-MODEL.md §2</caption>
+          <thead><tr><th scope="col">#</th><th scope="col">Asset</th><th scope="col">Why it ranks here</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">1</th><td><strong>SSH certificate authority key</strong></td><td>Mints a certificate with any principal for any host — a shell as any site user, fleet-wide. Strictly worse than #2 because it grants a shell rather than a fixed operation set.</td></tr>
+            <tr><th scope="row">2</th><td><strong>Instruction signing key</strong></td><td>Commands any agent, but only within the enumerated catalogue. Unprivileged code execution fleet-wide, not root.</td></tr>
+            <tr><th scope="row">3</th><td><strong>Secret-wrapping key</strong></td><td>Unwraps every secret in the installation.</td></tr>
+            <tr><th scope="row">4</th><td>Database contents</td><td>Grants, audit chain, configuration, wrapped secrets.</td></tr>
+            <tr><th scope="row">5</th><td>Per-host agent client certificates</td><td>Impersonates one host.</td></tr>
+            <tr><th scope="row">6</th><td>Site data and releases</td><td>The customer-facing product.</td></tr>
+            <tr><th scope="row">7</th><td>Audit log integrity</td><td>The ability to reconstruct what happened.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Assets 1 to 3 are the crown jewels and all live on the control plane. That concentration is the single
+      biggest structural risk in the design, and it is carried as <a href="#risks">R-08</a> with the owner as
+      its owner.</p>
+
+      <h2 id="actors">Actors</h2>
+
+      <div class="scroller">
+        <table>
+          <caption class="skip">Actors and their trust level</caption>
+          <thead><tr><th scope="col">Actor</th><th scope="col">Trust</th><th scope="col">Notes</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Owner / Admin</th><td>High</td><td>Can do damage legitimately; the control is auditability, not prevention.</td></tr>
+            <tr><th scope="row">Infrastructure</th><td>Medium-high</td><td>Manages hosts and SSH grants. <strong>Cannot read production secret values.</strong></td></tr>
+            <tr><th scope="row">Release Manager</th><td>Medium</td><td>Deploys and rolls back production. No host configuration, no secret values.</td></tr>
+            <tr><th scope="row">Developer</th><td>Medium-low</td><td>Non-production deploys, logs, own keys, secret <em>names</em> only.</td></tr>
+            <tr><th scope="row">Viewer / Billing</th><td>Low</td><td>Read-only, or billing with no infrastructure visibility at all.</td></tr>
+            <tr><th scope="row">Service identity</th><td>Scoped</td><td>Automation. Never anonymous — C6.</td></tr>
+            <tr><th scope="row">External unauthenticated</th><td>None</td><td>Reaches the agent endpoint and any published site.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="agent-compromise">Compromise scenario 1 — a compromised agent</h2>
+
+      <p>An attacker fully controls <code>ratline-agent</code> on one host, as the unprivileged
+      <code>ratline-agent</code> user.</p>
+
+      <div class="grid grid--2">
+        <div class="card">
+          <p class="card__title">They can</p>
+          <ul>
+            <li>read and write inside site directories that agent manages;</li>
+            <li>read the active secret values for sites on that host — it writes the environment files;</li>
+            <li>lie to the control plane about that host's inventory and health;</li>
+            <li>request catalogued privileged operations for that host, which <code>privd</code> performs if
+            the arguments validate: create a site user, install a <em>validated</em> unit or virtual host,
+            restart a Ratline-namespaced service;</li>
+            <li>disrupt service on that host.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <p class="card__title">They cannot</p>
+          <ul>
+            <li>obtain arbitrary root — <code>privd</code> accepts only enumerated operations, re-validates
+            every argument independently, and identifies its caller by peer credentials;</li>
+            <li>touch units, files or services outside the Ratline namespace;</li>
+            <li>reach any other host — no lateral network path, and the client certificate authenticates one
+            host only;</li>
+            <li>forge an instruction — they hold no signing key;</li>
+            <li>read the control plane database;</li>
+            <li>erase their tracks — <code>privd</code> writes its own root-owned append-only log before
+            acting, and ships it.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="note" data-status="fail">
+        <span class="note__label">Residual — R-07</span>
+        <p>Secrets for sites on that host are exposed. That is inherent: a process running the site must have
+        its environment. The mitigation is blast-radius limitation (per-host, per-site) and detection, not
+        prevention — and <strong>detection is currently weak</strong>. A compromised agent reporting
+        plausible-but-false inventory would not be caught. Nothing cross-checks an agent's claims about its own
+        host in v1.</p>
+      </div>
+
+      <h2 id="control-plane-compromise">Compromise scenario 2 — a compromised control plane</h2>
+
+      <p><strong>They can</strong> issue any catalogued operation to every host in the fleet; unwrap every
+      secret; mint SSH certificates with any principals, which is a shell as any site user on any host; read
+      and write all data; issue and forge sessions. Because they hold the signing key, agents will obey
+      them — correctly, since from the agent's perspective these are legitimate instructions.</p>
+
+      <p><strong>They cannot</strong> — and this is the C1 payoff — run an arbitrary command on a host
+      directly. The catalogue is closed. They can, however, create a site with a chosen build command and
+      deploy it, which yields code execution as that site's user. So control plane compromise means
+      unprivileged code execution fleet-wide plus a shell via the certificate authority, not instant root.</p>
+
+      <p>The threat model then says something most documents of its kind would leave out: with the SSH
+      authority key in hand, the distinction narrows considerably. Root still requires a local privilege
+      escalation from a site user, which is a real barrier but not one to lean on.</p>
+
+      <h3>Mitigations, and which are v1</h3>
+
+      <div class="scroller">
+        <table>
+          <caption class="skip">Mitigations for control plane compromise and whether they are in v1</caption>
+          <thead><tr><th scope="col">Mitigation</th><th scope="col">In v1</th></tr></thead>
+          <tbody>
+            <tr><td>Keys are files outside the database, so a database backup leak is not key compromise</td><td><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">●</span> yes — ADR 0006</span></td></tr>
+            <tr><td>No core dumps; no heap-snapshot endpoint</td><td><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">●</span> yes — ADR 0001</span></td></tr>
+            <tr><td>C5 keeps the dashboard off the public internet, which is the main route in</td><td><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">●</span> yes — RL-M1-023</span></td></tr>
+            <tr><td>An external key manager</td><td><span class="status" data-status="idle"><span class="status__glyph" aria-hidden="true">○</span> a seam, not implemented</span></td></tr>
+            <tr><td>Second-human approval for the highest-risk operations — adding a host, installing a sudoers fragment, authority operations</td><td><span class="status" data-status="attention"><span class="status__glyph" aria-hidden="true">▲</span> not in v1; raised as a scope question rather than added unilaterally</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="account-compromise">Compromise scenario 3 — a compromised low-privilege account</h2>
+
+      <p>A Developer's account or session is taken over. <strong>They can</strong> deploy to non-production;
+      read logs, redacted; see secret names; manage their own SSH keys; see project and site structure.
+      <strong>They cannot</strong> read secret values, deploy to production, change host configuration, open a
+      web terminal, or reach another tenant's resources.</p>
+
+      <div class="note" data-status="fail">
+        <span class="note__label">The sharpest finding in the model — R-05</span>
+        <p>The real risk is lateral. If a Developer can set a build command on a non-production site, they get
+        code execution as that site's Linux user. If that host also runs production sites, they are then
+        <strong>one sandbox escape away from production data</strong> — and the sandbox is Linux users plus
+        systemd, not a namespace, because containers are out of scope for v1.</p>
+        <p>Controls: <code>site.build_command.write</code> is a distinct permission, so this is an explicit
+        grant rather than a side effect of Developer; per-site users and directory modes; systemd sandboxing;
+        and an adversarial escape test (RL-M3-006, todo). <strong>The structural mitigation is not to co-locate
+        production and non-production sites.</strong> The interface should warn when an operator does, and the
+        documentation should recommend against it. Not eliminable within v1 scope.</p>
+      </div>
+
+      <h2 id="keys">Crown-jewel key handling</h2>
+
+      <div class="scroller">
+        <table>
+          <caption class="skip">How each crown-jewel key is generated, stored, rotated and recovered</caption>
+          <thead>
+            <tr>
+              <th scope="col"></th>
+              <th scope="col">SSH authority key</th>
+              <th scope="col">Instruction signing key</th>
+              <th scope="col">Secret-wrapping key</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">Generated</th><td>First use of SSH features</td><td>First run</td><td>First run</td></tr>
+            <tr><th scope="row">Stored</th><td>File, control plane, restrictive mode, outside the database</td><td>Same</td><td>Same</td></tr>
+            <tr><th scope="row">In backups</th><td>Excluded from database backups</td><td>Excluded</td><td>Excluded</td></tr>
+            <tr><th scope="row">Rotation</th><td>New authority, distribute, remove old, revoke outstanding</td><td>Overlap window — agents accept both</td><td>Rewrap data keys only</td></tr>
+            <tr><th scope="row">If compromised</th><td>See below</td><td>Rotate; audit every instruction in the window</td><td>Rotate; treat every secret as disclosed and force rotation of all of them</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>SSH authority compromise recovery.</strong> Generate a new authority. Distribute the new
+      trusted-authority file to every host. Remove the old authority. Revoke every outstanding certificate.
+      <em>Any host unreachable during this process still trusts the compromised authority</em> — which is why
+      the procedure must be exercised, and why the set of unreachable hosts must be reported loudly rather than
+      skipped over. Carried as R-06.</p>
+
+      <h2 id="surface">Attack surface inventory</h2>
+
+      <div class="scroller">
+        <table>
+          <caption class="skip">Attack surface inventory from docs/THREAT-MODEL.md §7</caption>
+          <thead>
+            <tr>
+              <th scope="col">Surface</th>
+              <th scope="col">Exposure</th>
+              <th scope="col">Pre-auth reachable</th>
+              <th scope="col">Primary control</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">Dashboard listener</th><td>Loopback by default</td><td>No</td><td>C5, session auth, rate limits, a CSRF token on every unsafe method</td></tr>
+            <tr><th scope="row">Agent endpoint</th><td>May be public</td><td>TLS handshake only</td><td>Client certificate required before application code runs</td></tr>
+            <tr><th scope="row">Webhook receiver</th><td>Public</td><td>Signature check</td><td>Constant-time verify before parse; replay rejection</td></tr>
+            <tr><th scope="row">Published sites</th><td>Public</td><td>Yes</td><td>Not Ratline's code; isolation is per-site users</td></tr>
+            <tr><th scope="row"><code>privd</code> unix socket</th><td>Local, agent user</td><td>No</td><td>Peer credentials plus independent argument re-validation</td></tr>
+            <tr><th scope="row">Host <code>sshd</code></th><td>Per firewall policy</td><td>Certificate check</td><td>Short-lived certificates, principals, revocation list</td></tr>
+            <tr><th scope="row">Object storage</th><td>Outbound only</td><td>No</td><td>Client-side encryption before upload</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h2 id="risks">Risk register</h2>
+
+      <p>Two files hold risks and they hold different ones. <span class="pathref">docs/RISKS.md</span> is the
+      live register for planning risks and blocked tasks, and carries owners.
+      <span class="pathref">docs/THREAT-MODEL.md</span> §8 lists residual security risks that are accepted
+      rather than fixed. Both are reproduced below, merged and marked with which file each came from.</p>
+
+      <p>Owner <strong>human</strong> means it needs a decision or a resource the agent cannot create. Those
+      are repeated in the gate report under “what I need from you”.</p>
+
+      <div class="scroller">
+        <div class="filter">
+          <label class="skip" for="risk-filter">Filter risks</label>
+          <input id="risk-filter" type="search" placeholder="Filter — try open, human, closed, secret"
+                 data-filter-for="risk-table" data-filter-count="risk-count" data-filter-empty="risk-empty" autocomplete="off">
+          <span class="filter__count" id="risk-count" aria-live="polite"></span>
+        </div>
+        <table id="risk-table">
+          <caption class="skip">The merged risk register from docs/RISKS.md and docs/THREAT-MODEL.md §8</caption>
+          <thead>
+            <tr>
+              <th scope="col">ID</th>
+              <th scope="col">Risk</th>
+              <th scope="col">Status</th>
+              <th scope="col">Owner</th>
+              <th scope="col">Where it stands</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th scope="row">R-01</th>
+              <td>No integration test host</td>
+              <td><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">●</span> closed 2026-08-03</span></td>
+              <td>human</td>
+              <td>Closed on evidence, not on the offer. <code>./scripts/host start &amp;&amp; verify</code> brings up a Debian 12.15 container and asserts three things: SSH accepts <code>deployer</code> at uid 1000, non-root, with working <code>sudo -n</code>; <code>systemctl is-system-running</code> returns <strong>running</strong> with systemd 252 as PID 1 and five active socket units; and root SSH is refused by the image's default rather than by a test arranging it.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-02</th>
+              <td>C2 versus user-authored build commands</td>
+              <td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> open</span></td>
+              <td><strong>human</strong></td>
+              <td>The conflict exists in the brief as written. ADR 0005 proposes containment. If the strict reading is intended, RL-M3-004 becomes fixed per-framework pipelines and the product is materially smaller.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-03</th>
+              <td>Front-end framework chosen without knowing the team</td>
+              <td><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">●</span> closed 2026-08-02</span></td>
+              <td>human</td>
+              <td>React. ADR 0001 recommended SvelteKit on runtime size and reactivity grounds; the team's daily language beat both arguments. The residual — a larger bundle on a box the operator pays for — is carried as a requirement to server-render the M1 screens where possible.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-04</th>
+              <td>Response <em>timing</em> may distinguish nonexistent from unauthorized even when status and body match</td>
+              <td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> open</span></td>
+              <td>agent</td>
+              <td>Body-level indistinguishability is tested byte-for-byte; timing is not. Full equalisation costs a fixed delay on every refusal. To revisit at the M5 gate as a deliberate decision rather than an assumption.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-05</th>
+              <td>Production and non-production sites on one host are separated by user plus systemd, not a namespace</td>
+              <td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> open</span></td>
+              <td>agent, then <strong>human</strong> for the policy call</td>
+              <td>The sharpest finding in the threat model. Containers are out of scope. Mitigated by warning in the interface, recommending against it in documentation, and an adversarial escape test (RL-M3-006).</td>
+            </tr>
+            <tr>
+              <th scope="row">R-06</th>
+              <td>A host unreachable during authority rotation keeps trusting the old authority</td>
+              <td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> open</span></td>
+              <td>agent</td>
+              <td>Inherent to offline hosts. The rotation procedure must report unreachable hosts loudly and refuse to declare success. Covered by RL-M6-001.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-07</th>
+              <td>A compromised agent reporting false inventory would not be detected</td>
+              <td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> open</span></td>
+              <td>agent</td>
+              <td>No cross-checking of agent claims in v1. <code>privd</code>'s independent root-owned audit log gives a partial cross-check for privileged operations. To revisit at the M2 gate.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-08</th>
+              <td>All three crown-jewel keys live on one machine</td>
+              <td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> open</span></td>
+              <td><strong>human</strong></td>
+              <td>A structural property, not a likelihood. The external key manager is a seam, not v1 scope. Mitigation candidate, not yet scoped: require second-human approval for the highest-risk operations. The gate report names this as the one it would most want ruled on before M2 hardens around it.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-09</th>
+              <td>Build resource contention is bounded by limits but not eliminated</td>
+              <td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> open</span></td>
+              <td>agent</td>
+              <td><code>CPUQuota</code> and <code>MemoryMax</code> bound a build; page cache pressure and disk I/O are not partitioned. Mitigated by lower default build limits than runtime limits, per-host concurrency caps, and showing build load separately from application load.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-10</th>
+              <td>No remote repository yet</td>
+              <td><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">●</span> closed 2026-08-04</span></td>
+              <td>human</td>
+              <td>Closed on evidence: <code>origin</code> exists, a pull request is open against <code>main</code>, and CI is green on all four checking jobs for commit <code>18cca24</code>. It cost five runs and every failure was a real defect — the return on an acceptance that says “runs clean in CI” rather than “runs clean locally”.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-11</th>
+              <td>A reverse proxy, NAT port-forward or load balancer in front of the dashboard makes it public while the C5 check reports <code>contained</code></td>
+              <td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> open</span></td>
+              <td>agent</td>
+              <td>Detection is local by decision (ADR 0011). Mitigated by stating the blind spot in every report and in <span class="pathref">docs/NETWORK.md</span>, not by detection. Reading the host's listening sockets for a proxy on 80/443 is a candidate, but it guesses at intent and would produce false positives on any host that also serves sites, which is most of them.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-12</th>
+              <td>An <code>api_token</code> grant can be written directly, with no intersection against the permissions of the user who issued it</td>
+              <td><span class="status" data-status="attention"><span class="status__glyph" aria-hidden="true">▲</span> entry is stale</span></td>
+              <td>agent</td>
+              <td>The threat model says the ceiling “is enforced in RL-M1-032, which has not landed”. RL-M1-032 is now <code>done</code>, and <code>can()</code> evaluates the intersection on <em>every</em> decision. The mechanism exists; the register entry was not updated.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-13</th>
+              <td>A disabled user's grants still resolve to allow</td>
+              <td><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">●</span> answered in <code>can()</code></span></td>
+              <td>agent</td>
+              <td>Recorded so the omission does not read as an oversight: “may this actor act at all” is one question per request, not one per hierarchy node, so <code>users.disabled_at</code> belongs in <code>can()</code> rather than in grant resolution. It is step 3.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-14</th>
+              <td>Managed databases change the product's failure story</td>
+              <td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> open — highest impact in the register</span></td>
+              <td><strong>human</strong></td>
+              <td>Every workload Ratline manages today is reconstructible; a site comes back from git. A database does not. Adding managed databases moves the product from “if it breaks, redeploy” to “if it breaks, the company may have lost its data”, and two accepted decisions — ADR 0009 (build on the target host) and ADR 0005 (build commands contained, not eliminated) — both put user-authored code next to the data. M7 is ordered so backup and verified restore land before create and delete are exposed.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-15</th>
+              <td>The sign-in path derives a 128 MiB scrypt hash per attempt, including for accounts that do not exist</td>
+              <td><span class="status" data-status="attention"><span class="status__glyph" aria-hidden="true">▲</span> open; entry partly stale</span></td>
+              <td>agent</td>
+              <td>Deriving unconditionally is correct — it is what stops timing revealing whether an account exists. Memory is bounded by the libuv threadpool width; what is unbounded is the <em>queue</em> of pending derivations, so it is an availability lever more than a memory-exhaustion one. The entry says “nothing calls the limiter — there is no HTTP layer”; RL-M1-042 has since bound the server, and RL-M1-020 is still in <code>review</code> because two of its four authentication paths have no endpoints yet.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-16</th>
+              <td>The constant-time password comparison is enforced structurally, not behaviourally</td>
+              <td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> open</span></td>
+              <td>agent</td>
+              <td>No functional test can distinguish <code>secretEquals</code> from <code>===</code> or <code>Buffer.equals</code>: all three accept the same passwords and differ only in rejection timing. A source-level assertion catches the mutation someone actually makes; it does not catch every possible one, and says so.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-17</th>
+              <td>An administrative password reset is an account <em>transfer</em></td>
+              <td><span class="status" data-status="attention"><span class="status__glyph" aria-hidden="true">▲</span> rewritten, residual accepted</span></td>
+              <td>agent</td>
+              <td>Between the reset and the member's next sign-in, the operator holds a working credential for somebody else, and every action taken with it is attributed to that person. Closed as far as a password alone permits: <code>member.reset_password</code> is Owner and Admin only, the reset is audited against the operator before the credential can be used, and every session the member held is revoked so they notice. The residual — the impersonation window — cannot be closed by any arrangement of the reset.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-18</th>
+              <td>Rate-limit counters are tenant-scoped, so an attacker who knows N organization ids gets N address budgets</td>
+              <td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> open</span></td>
+              <td>agent</td>
+              <td>Forced by row-level security and the non-nullable <code>org_id</code> rule; an untenanted table would need a second, unscoped data-access primitive, which C3 forbids. Small on a self-hosted install, real.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-19</th>
+              <td>Per-account rate limiting is itself a denial of service against a named account</td>
+              <td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> open</span></td>
+              <td>agent</td>
+              <td>Inherent to per-account limiting. The window is fixed rather than sliding so it releases on time, and a proven success clears it — neither release needs an administrator.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-20</th>
+              <td>The limiter's own overload mode is row-lock contention, pool exhaustion, then a fail-closed refusal for everyone</td>
+              <td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> open</span></td>
+              <td>agent</td>
+              <td>Bounded, loud and self-healing, traded deliberately against an unbounded memory failure. The fix if the ceiling is reached is admission control in front of the auth handlers, not a larger limit.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-21</th>
+              <td>The address dimension is only as strong as the derivation of the source address</td>
+              <td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> open</span></td>
+              <td>agent</td>
+              <td>Trusting a forwarded-for header from an untrusted hop makes evasion free <em>and</em> lets an attacker exhaust someone else's budget. The single easiest way to make the rate limiter decorative. Owed by whatever builds the HTTP layer.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-22</th>
+              <td>The CSRF token is derived from the session id, so it is constant for the life of a session</td>
+              <td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> open</span></td>
+              <td>agent</td>
+              <td>A token that escapes — into an access log, a <code>Referer</code>, a crash report — stays valid until the session ends. Per-request tokens need server state whose only purpose is to be kept in step with the session, which is the synchronisation nobody maintains. Mitigated by keeping the token out of cookies and URLs entirely, refusing one presented in a query string rather than ignoring it, and by an absolute, short session lifetime. Not eliminated.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-23</th>
+              <td>Nothing calls the CSRF guard</td>
+              <td><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">●</span> closed by RL-M1-042</span></td>
+              <td>agent</td>
+              <td><code>createServer</code> runs <code>guardCsrf</code> on every unsafe method, and the authorization matrix drives real POSTs through it — a request without a token is refused, which the matrix caught the first time by failing three cells.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-24</th>
+              <td>An abandoned but open browser tab keeps a usable session for up to the absolute lifetime</td>
+              <td><span class="status" data-status="attention"><span class="status__glyph" aria-hidden="true">▲</span> deliberate</span></td>
+              <td>agent</td>
+              <td>Not an omission. An idle timeout measured on <code>last_seen_at</code> records the last <em>request</em>, not the last human: a dashboard polling for deploy status writes it on a timer, so the rule would fire only when the tab is closed — which the absolute lifetime already covers — and never for the abandoned open tab, which is the whole scenario. Mitigated by the eight-hour absolute lifetime, made shortenable per organization; the operating system's screen lock, stated plainly in the interface; and re-authentication for the highest-risk actions, which polling does not defeat. Two-factor does <em>not</em> mitigate it — the walked-away case has already passed both factors.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-25</th>
+              <td>The TOTP shared secret is a symmetric credential the control plane can impersonate its holder with</td>
+              <td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> open</span></td>
+              <td>agent</td>
+              <td>Inherent to TOTP; the scheme that removes it is WebAuthn, where the verifier stores only a public key. Mitigated by envelope encryption, so the database alone is not enough, and by the key file being excluded from database backups. Scoped out rather than overlooked.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-26</th>
+              <td>An administrative reset of a second factor removes the bound that makes R-17 survivable</td>
+              <td><span class="status" data-status="attention"><span class="status__glyph" aria-hidden="true">▲</span> capability closed, residual accepted</span></td>
+              <td>agent</td>
+              <td>Whoever holds both resets can take an account outright. Bounded the same three ways as R-17, and the two actions are deliberately held by the same roles with a test asserting they move together — splitting them would suggest the pair is safer than either, and it is the opposite. The residual is the pair itself, which no arrangement of either action can close: it is the definition of an administrator.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-27</th>
+              <td>Beginning a re-enrolment makes the existing enrolment pending, so somebody holding a stolen session can strip a victim's second factor</td>
+              <td><span class="status" data-status="fail"><span class="status__glyph" aria-hidden="true">✕</span> open</span></td>
+              <td>agent</td>
+              <td>Bounded: the attacker already holds a session that passed the factor, so it costs the victim a re-enrolment rather than access, and a password-only challenge cannot do it at all — that path is refused outright. Closing it means staging the new secret beside the old one, which is two more columns; named in migration 12 so the omission reads as a decision.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-28</th>
+              <td>Two-factor verification is not rate limited in effect</td>
+              <td><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">●</span> closed</span></td>
+              <td>agent</td>
+              <td><code>POST /auth/two-factor</code> spends its budget before it verifies anything, proven by a test that drives the endpoint past its limit and reads the counter. The bucket keys on the challenge token, and a fresh challenge cannot buy fresh attempts, because minting one requires a successful sign-in and sign-in is limited on the account and the address — so the two budgets multiply.</td>
+            </tr>
+            <tr>
+              <th scope="row">R-29</th>
+              <td>Repository reads that resolved no permission at all</td>
+              <td><span class="status" data-status="healthy"><span class="status__glyph" aria-hidden="true">●</span> closed by RL-M1-043</span></td>
+              <td>agent</td>
+              <td>Row-level security still confined all of them to one tenant, so it was a within-tenant privilege gap rather than a cross-tenant one, and nothing called them over HTTP because there was no server. The durable fix is <span class="pathref">test/security/repository_gating.test.ts</span>: every exported repository function resolves a permission or carries a written argument for why not. <em>The count differs between documents — see the defects page.</em></td>
+            </tr>
+            <tr>
+              <th scope="row">R-30</th>
+              <td>Only a minority of matrix cells are verified end to end</td>
+              <td><span class="status" data-status="attention"><span class="status__glyph" aria-hidden="true">▲</span> accepted; entry has stale numbers</span></td>
+              <td>agent</td>
+              <td>Not a defect, and reported as a number rather than a caveat. The remainder is verified against <code>can()</code> with real grants and forced row-level security, which proves the permission model and not that a route consults it. Every route gains transport coverage as its repository function is written. <em>The entry says “56 of 567 cells” and “8 of 27 declared routes”; the generated metrics say 630 cells and 12 of 30 routes.</em></td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="filter__empty" id="risk-empty" hidden></p>
+      </div>
+
+      <div class="note" data-status="working">
+        <span class="note__label">Threat model diff at the M1 gate</span>
+        <p>R-22 through R-30 were added. R-01, R-03, R-10 and R-23 closed. R-17 and R-26 were rewritten rather
+        than closed, because an administrative password or second-factor reset is an account transfer and the
+        residual is the pair itself, which no arrangement of either action can close. Still open and the
+        owner's: R-02, R-05, R-08 and R-14.</p>
+      </div>
+
+      <section class="sources" aria-labelledby="sources-heading">
+        <h2 id="sources-heading" class="label" style="border:0;padding:0;margin:0 0 var(--space-xs)">Sources for this page</h2>
+        <ul>
+          <li><span class="pathref">docs/THREAT-MODEL.md</span> §1–§9 — assets, actors, the three scenarios, key handling, surface, residual risks</li>
+          <li><span class="pathref">docs/RISKS.md</span> — R-01 to R-14 with owners and closure evidence</li>
+          <li><span class="pathref">docs/gates/M1.md</span> — the threat model diff and the candour warning</li>
+          <li><span class="pathref">.ratline/metrics.json</span> — the current matrix numbers that R-30 predates</li>
+          <li><span class="pathref">docs/tasks.yaml</span> — RL-M1-032 and RL-M1-042 statuses cited in R-12 and R-15</li>
+        </ul>
+      </section>
+
+      <nav class="pager" aria-label="Section navigation">
+        <a href="agent.html"><span class="label">Previous</span> The agent protocol</a>
+        <a href="decisions.html"><span class="label">Next</span> Decision records</a>
+      </nav>
+    </main>
+
+    <footer class="page" style="padding-top:0">
+      <p class="dim" style="font-size:var(--text-xs)">Written from the repository at
+      <span class="pathref">/Users/ark/Desktop/FunProjects/moss-clone</span>. Design tokens copied from
+      <span class="pathref">src/web/lib/design/</span>; no font files or scripts are loaded from any external
+      origin.</p>
+    </footer>
+  </div>
+</div>
+</body>
+</html>

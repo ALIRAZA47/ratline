@@ -29,7 +29,9 @@ Auth, org/team/project model, the can() function with 100% branch coverage, hash
 
 ## In progress
 
-_None._
+| Task | Age | Owner | Risk | Acceptance | Title |
+| --- | ---: | --- | --- | ---: | --- |
+| `RL-M2-028` | 0d | agent | **high** | 3/3 | Add a build check that fails on shell construction in the agent |
 
 ## Blocked
 
@@ -77,7 +79,7 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | 100% | must be 100% |
 
-Measured 2026-08-04T08:56:14.242Z.
+Measured 2026-08-04T09:13:14.804Z.
 
 ### Authorization matrix (role × endpoint × subject)
 
@@ -112,7 +114,8 @@ CI: **green** at `18cca248` (2026-08-03T19:25:43Z)
 
 | Status | Count |
 | --- | ---: |
-| todo | 104 |
+| todo | 103 |
+| in-progress | 1 |
 | review | 4 |
 | done | 73 |
 | **all** | **181** |

@@ -48,6 +48,12 @@ func buildFor(t *testing.T, command, goos, goarch string) string {
 	t.Helper()
 
 	out := filepath.Join(t.TempDir(), command)
+	// The package path is built by concatenation, which RL-M2-028's C2 check reports —
+	// correctly, and this was the first thing it found in real code. It is safe here for
+	// a reason worth stating rather than assuming: `command` comes from the fixed
+	// `commands` slice in this file, not from an argument, a file or a network. There is
+	// also no shell in the picture, so argv carries nothing to inject into.
+	//ratline:allow-formatted-arg command comes from this file's fixed `commands` slice, never from input
 	cmd := exec.Command("go", "build", "-trimpath", "-o", out, "./cmd/"+command)
 	cmd.Dir = moduleRoot
 	// Appended to the inherited environment so a stray GOFLAGS or CC in the

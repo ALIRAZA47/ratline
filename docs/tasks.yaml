@@ -2073,20 +2073,31 @@
 - id: RL-M2-028
   title: Add a build check that fails on shell construction in the agent
   milestone: M2
-  status: todo
+  status: in-progress
   owner: agent
   estimate: M
   depends_on: [RL-M2-001]
   blocks: []
   risk: high
+  started_at: 2026-08-04
   acceptance:
     - Any invocation of a shell interpreter with a constructed string fails the build
     - Formatting a string into a process argument fails the build unless explicitly annotated and reviewed
     - The check has fixtures proving it fires
   artifacts:
-    - test/security/no_shell_construction_test.go
+    - agent/internal/shellcheck/shellcheck_security_test.go
+    - agent/internal/shellcheck/testdata/violations.go.txt
+    - agent/internal/shellcheck/testdata/clean.go.txt
   decisions: [5]
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-04 — 2026-08-04 — An AST walk, not a grep, and the reason is the same one RL-M1-041 settled on the TypeScript side four separate times: a grep fires on the word 'bash' inside a comment explaining that bash is forbidden. go/ast gives that for free — comments are not expressions, so a walk over expressions never sees them. A grep is also weaker in the other direction: it cannot tell an exec call from a string that mentions one.
 
+    2026-08-04 — 2026-08-04 — Two rules with deliberately different severity. Naming a shell interpreter is refused OUTRIGHT with no annotation that permits it, because the agent has no legitimate reason to run one: privileged work goes to privd as an enumerated request and unprivileged work is a syscall or a file write. A FORMATTED argument is refused unless annotated with a reason, because argv carries no shell to inject into — '--port=8080' is formatted and is not an injection. What makes it dangerous is the reviewer's attention rather than the runtime, so the annotation buys attention and grep lists every one. A rule forbidding all formatting would be worked around by building the string one statement earlier; a rule allowing all of it would be no rule.
+    2026-08-04 — 2026-08-04 — A bare annotation permits nothing, which is acceptance 2's 'and reviewed'. If it did, the escape hatch would be 'add a magic comment' — exactly the quiet workaround the rule exists to prevent. Tested with four spellings including whitespace-only.
+    2026-08-04 — 2026-08-04 — THE FIXTURES FOUND TWO REAL THINGS on the first run, which is the argument for acceptance 3 existing at all. (1) The check missed exec.Command('/usr/bin/env', 'sh', '-c', x): it inspected only the program argument, and the shell was one slot further along. nice, setsid, timeout and sudo all have that shape. Now every argument position is scanned, which closes a family of bypasses rather than one instance. (2) It fired on real code — agent/internal/build/artifact_test.go concatenates './cmd/'+command — which is safe because command comes from a fixed slice in that file, and now says so in an annotation. A scanner nobody has proven fires is a scanner nobody has tested, and this repository already shipped one of those.
+    2026-08-04 — 2026-08-04 — KNOWN LIMITATION, recorded in the source rather than glossed: a shell named through a VARIABLE is not caught, because a bare identifier is not evidence of anything and flagging every identifier would put an annotation on every exec call, at which point nobody reads them. Closing it needs type-and-flow analysis that go/ast alone does not provide. What limits the damage is that the agent has no exec calls outside its own build test and the clean-source test fails the build if one appears, so the gap is reachable only by somebody deliberately routing a shell name through a variable — which is no longer a mistake.
+    2026-08-04 — 2026-08-04 — There is also a test that the SCAN REACHES THE MODULE: a wrong relative path would walk an empty tree, find nothing, and report the agent clean. That vacuous-pass shape has bitten this project twice, most memorably in scripts/host verify concluding 'root ssh: refused (C1 holds)' because no key file existed. It asserts a floor on the number of .go files seen rather than an exact count, so it does not need editing every time a file is added.
 - id: RL-M2-029
   title: Verify zero root SSH remains after bootstrap
   milestone: M2
