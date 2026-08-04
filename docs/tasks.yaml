@@ -1530,13 +1530,14 @@
 - id: RL-M2-002
   title: Define the enumerated operation catalogue shared by both sides
   milestone: M2
-  status: in-progress
+  status: done
   owner: agent
   estimate: L
   depends_on: [RL-M2-001]
   blocks: [RL-M2-003, RL-M2-008]
   risk: high
   started_at: 2026-08-04
+  done_at: 2026-08-04
   acceptance:
     - Every operation the agent will ever perform is declared with typed arguments in one schema
     - Control plane and agent types are generated from that schema so they cannot drift
