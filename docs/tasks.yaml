@@ -2073,13 +2073,14 @@
 - id: RL-M2-028
   title: Add a build check that fails on shell construction in the agent
   milestone: M2
-  status: in-progress
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M2-001]
   blocks: []
   risk: high
   started_at: 2026-08-04
+  done_at: 2026-08-04
   acceptance:
     - Any invocation of a shell interpreter with a constructed string fails the build
     - Formatting a string into a process argument fails the build unless explicitly annotated and reviewed

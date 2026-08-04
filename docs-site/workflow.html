@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Development workflow — Ratline</title>
+<meta name="description" content="The tracking CLI, the local Postgres and Debian container scripts, the CI pipeline's five jobs, the coverage gates that fail on absent coverage, and the mutation-testing practice.">
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/site.css">
+<script defer src="assets/app.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<div class="shroud">
+
+  <nav class="rail" aria-label="Documentation sections">
+    <a class="rail__brand" href="index.html">
+      <span class="rail__wordmark display">RATLINE</span>
+    </a>
+    <div class="rail__group">
+      <p class="rail__group-label label">Reference</p>
+      <ul class="rail__list">
+        <li><a class="rail__link" href="index.html"><span class="rail__num">01</span> Overview</a></li>
+        <li><a class="rail__link" href="constraints.html"><span class="rail__num">02</span> Constraints</a></li>
+        <li><a class="rail__link" href="architecture.html"><span class="rail__num">03</span> Architecture</a></li>
+        <li><a class="rail__link" href="authorization.html"><span class="rail__num">04</span> Authorization</a></li>
+        <li><a class="rail__link" href="agent.html"><span class="rail__num">05</span> Agent protocol</a></li>
+        <li><a class="rail__link" href="threat-model.html"><span class="rail__num">06</span> Threat model</a></li>
+        <li><a class="rail__link" href="decisions.html"><span class="rail__num">07</span> Decisions</a></li>
+        <li><a class="rail__link" href="roadmap.html"><span class="rail__num">08</span> Roadmap</a></li>
+        <li><a class="rail__link" href="workflow.html"><span class="rail__num">09</span> Workflow</a></li>
+        <li><a class="rail__link" href="defects.html"><span class="rail__num">10</span> Defects</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="column">
+    <header class="topbar">
+      <div class="topbar__row">
+        <nav class="crumbs" aria-label="Breadcrumb">
+          <a href="index.html">ratline</a>
+          <span class="crumbs__sep" aria-hidden="true">/</span>
+          <span class="crumbs__here">workflow</span>
+        </nav>
+        <span class="topbar__spacer"></span>
+        <div class="search">
+          <label class="skip" for="site-search">Search the documentation</label>
+          <input class="search__input" id="site-search" type="search" placeholder="Search — press / or Ctrl-K"
+                 autocomplete="off" role="combobox" aria-expanded="false" aria-controls="site-search-results">
+          <ul class="search__results" id="site-search-results" hidden></ul>
+        </div>
+        <button class="themetoggle" id="theme-toggle" type="button">Theme: System</button>
+      </div>
+      <div class="tension" aria-hidden="true"></div>
+    </header>
+
+    <main class="page" id="main">
+      <h1>Development workflow</h1>
+      <p class="lede">The tracking artifacts are treated as production code: they are reviewed, they are kept
+      accurate, and a milestone with a stale tracker is not done. The CLI exists so that tracking is mechanical
+      rather than a chore, and it refuses things rather than reminding people.</p>
+
+      <h2 id="tracking">The tracking system</h2>
+
+      <p><span class="pathref">docs/tasks.yaml</span> is the source of truth for all work. Every unit of work
+      exists there before it is worked on. Task ids are immutable and never reused, in the form
+      <code>RL-&lt;milestone&gt;-&lt;3-digit sequence&gt;</code>.</p>
+
+      <div class="grid grid--2">
+        <div class="card">
+          <p class="card__title">The Definition of Ready</p>
+          <p>A task cannot enter <code>in-progress</code> unless every <code>depends_on</code> is
+          <code>done</code> and it has at least one <code>acceptance</code> line. <code>XL</code> is not a valid
+          resting state — split it before starting. A dropped task is never deleted: set
+          <code>status: dropped</code> and add a note explaining why.</p>
+        </div>
+        <div class="card">
+          <p class="card__title">The security rule</p>
+          <p>Any task touching authorization, secrets, remote execution or TLS is <code>risk: high</code> and
+          requires a matching entry in the security test suite before it can go to <code>done</code>. The
+          dashboard lists high-risk tasks that name no security artifact, so the rule is visible rather than
+          remembered.</p>
+        </div>
+      </div>
+
+      <h3>The CLI</h3>
+
+      <p>Zero dependencies and no build step. Node 22.6 or later runs the TypeScript directly by type
+      stripping, so the tracker works on a stock Node with nothing installed. The wrapper script finds a
+      suitable Node and gets out of the way.</p>
+
+      <div class="scroller">
+        <table>
+          <caption class="skip">Subcommands of ./scripts/tasks</caption>
+          <thead><tr><th scope="col">Command</th><th scope="col">What it does</th></tr></thead>
+          <tbody>
+            <tr><th scope="row" class="mono nowrap">tasks list</th><td>Filter by <code>--milestone</code>, <code>--status</code>, <code>--owner</code>, <code>--risk</code>, or emit <code>--json</code></td></tr>
+            <tr><th scope="row" class="mono nowrap">tasks next</th><td>Tasks whose dependencies are met</td></tr>
+            <tr><th scope="row" class="mono nowrap">tasks add</th><td>Create a task with a milestone, title, estimate, risk and owner</td></tr>
+            <tr><th scope="row" class="mono nowrap">tasks start</th><td>Enforces the Definition of Ready, sets status, stamps time</td></tr>
+            <tr><th scope="row" class="mono nowrap">tasks check</th><td>Mark acceptance line <em>n</em> met, or <code>--uncheck</code> it</td></tr>
+            <tr><th scope="row" class="mono nowrap">tasks note</th><td>Append a dated note</td></tr>
+            <tr><th scope="row" class="mono nowrap">tasks review</th><td>Built and locally verified; needs outside confirmation</td></tr>
+            <tr><th scope="row" class="mono nowrap">tasks block</th><td>Also writes <span class="pathref">docs/RISKS.md</span></td></tr>
+            <tr><th scope="row" class="mono nowrap">tasks unblock</th><td>With an optional reason and target status</td></tr>
+            <tr><th scope="row" class="mono nowrap">tasks done</th><td>Requires every acceptance line met <em>and</em> green CI. <code>--no-ci "&lt;reason&gt;"</code> records why the gate was bypassed</td></tr>
+            <tr><th scope="row" class="mono nowrap">tasks sync-blocks</th><td>Derives <code>blocks</code> from <code>depends_on</code>, because maintaining both by hand does not survive 181 tasks</td></tr>
+            <tr><th scope="row" class="mono nowrap">tasks validate</th><td>Schema, enums, id format, dangling references, <code>depends_on</code>/<code>blocks</code> symmetry, dependency cycles, and the brief's own rules. <strong>Runs in CI.</strong></td></tr>
+            <tr><th scope="row" class="mono nowrap">tasks render</th><td>Regenerates <span class="pathref">docs/STATUS.md</span>. <code>--check</code> fails if it is stale</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p>Two schema additions were made because the brief's rules could not otherwise be enforced:
+      <code>acceptance_met</code>, holding the indices of satisfied acceptance lines so <code>done</code> can
+      actually refuse; and <code>tasks sync-blocks</code>.</p>
+
+      <h3>The other two artifacts</h3>
+
+      <dl class="facts">
+        <dt><span class="pathref">docs/STATUS.md</span></dt>
+        <dd>Generated, never hand-edited. Milestone progress, the current milestone and which exit criteria are
+        met, everything in progress and blocked with age in days, open high-risk tasks not covered by a security
+        test, test health, and the count of open critical and high security findings — a number that must be
+        zero at every gate.</dd>
+        <dt><span class="pathref">docs/PROGRESS.md</span></dt>
+        <dd>Append-only session log, newest entry at top, never edited afterwards. Each entry records the goal,
+        what completed, what is in progress, what is blocked, decisions made, surprises, deviations from the
+        brief, and what the next session should start with.</dd>
+      </dl>
+
+      <p>The session protocol is fixed at both ends. Before writing any code: read
+      <span class="pathref">STATUS.md</span>, the top three <span class="pathref">PROGRESS.md</span> entries and
+      the tracker filtered to <code>in-progress</code> and <code>blocked</code>; run <code>tasks validate</code>
+      and the full test suite; report anything already red <em>before</em> touching it. At the end: update the
+      tracker, append the log entry, re-render the dashboard, and commit the tracking updates as their own
+      commit.</p>
+
+      <h2 id="local">Running it locally</h2>
+
+      <p>Node 22.6 or later is required and <span class="pathref">.node-version</span> pins it. The code runs
+      TypeScript directly through type stripping, so most of the tree has no build step; the exception is the
+      React front end, because JSX is not erasable, and Vite covers that alone.</p>
+
+      <h3>A project-local Postgres</h3>
+
+      <p>The development cluster lives inside <span class="pathref">.ratline/pgdata</span> on port
+      <strong>55432</strong>, so it neither collides with nor disturbs whatever Postgres is already on the
+      machine, and the whole thing is disposable.</p>
+
+<pre><code><span class="t-fn">./scripts/pg</span> start        <span class="t-com"># initdb if needed, then run</span>
+<span class="t-fn">./scripts/pg</span> psql         <span class="t-com"># a shell on it</span>
+<span class="t-fn">./scripts/pg</span> reset        <span class="t-com"># throw the cluster away and rebuild</span>
+
+<span class="t-fn">./scripts/migrate</span> up      <span class="t-com"># apply migrations</span>
+<span class="t-fn">./scripts/migrate</span> cycle   <span class="t-com"># up, down, up — the gate a new migration must pass</span></code></pre>
+
+      <p><code>cycle</code> is the interesting one. Asserting that a down path <em>exists</em> is a parser
+      check; only the second <code>up</code> reveals a rollback that dropped the wrong object or left something
+      behind. CI runs it as its own job against a real Postgres 17, because §9 forbids mocking the thing under
+      test and a migration runner tested against a fake proves nothing about whether the SQL applies.</p>
+
+      <h3>Checking a host before serving anything</h3>
+
+<pre><code><span class="t-fn">./scripts/preflight</span>          <span class="t-com"># generates secrets on first run; refuses on</span>
+                             <span class="t-com"># anything missing, weak or publicly bound</span></code></pre>
+
+      <p>That is C4 and C5 in one command: it generates the three secrets — cookie, key-encryption key,
+      instruction signing — on first run, refuses to proceed if one is missing, weak, truncated or readable by
+      other users on the host, and classifies the bind address, refusing an exposed one without an explicit
+      acknowledgement.</p>
+
+      <h3>A real Debian host in a container</h3>
+
+      <p>§6.7 rules out mocks for anything that touches a host. <code>./scripts/host</code> brings up a real one
+      reproducibly, so a test run does not depend on a pile of Docker flags somebody remembered:</p>
+
+<pre><code><span class="t-fn">./scripts/host</span> start      <span class="t-com"># build if needed, run, wait for sshd, print the port</span>
+<span class="t-fn">./scripts/host</span> verify     <span class="t-com"># assert the three things R-01 actually requires</span>
+<span class="t-fn">./scripts/host</span> ssh        <span class="t-com"># a shell as the bootstrap account</span>
+<span class="t-fn">./scripts/host</span> stop</code></pre>
+
+      <p>The container needs <code>--privileged</code> and a writable cgroup mount because it runs systemd as
+      PID 1, and the script supplies both. <code>verify</code> asserts that SSH accepts the non-root
+      <code>deployer</code> account with working <code>sudo -n</code>, that
+      <code>systemctl is-system-running</code> returns <strong>running</strong> rather than degraded, and that
+      <strong>root SSH is refused</strong> — by the image's default rather than by a test arranging it.</p>
+
+      <div class="note" data-status="working">
+        <span class="note__label">One vacuous pass, caught in the verifier itself</span>
+        <p>It first reported “root ssh: refused (C1 holds)” on a machine with no key file — passing because it
+        could not connect at all. It now refuses to conclude anything until the <code>deployer</code>
+        connection works. Recorded in R-01 rather than quietly fixed, because it is the same class of failure as
+        a test suite that passes while exercising nothing.</p>
+      </div>
+
+      <h3>The agent binaries</h3>
+
+<pre><code><span class="t-fn">./scripts/agent</span> build [version]   <span class="t-com"># both binaries, both architectures</span>
+<span class="t-fn">./scripts/agent</span> verify            <span class="t-com"># everything CI checks, in CI's order</span>
+<span class="t-fn">./scripts/agent</span> test              <span class="t-com"># go test ./... on its own</span></code></pre>
+
+      <p>Two binaries because the agent is unprivileged and <code>ratline-privd</code> is the root helper that
+      distrusts it. Two architectures because an arm64 host is a normal thing to manage, and a build that only
+      ever ran on amd64 discovers its cgo dependency on somebody else's server. <code>verify</code> is gofmt,
+      <code>go vet</code>, <code>go test</code>, and a reproducibility check that builds the same tree twice and
+      compares the bytes — which is the claim the checksum-before-execute bootstrap depends on.</p>
+
+      <h3>Everything CI runs</h3>
+
+<pre><code><span class="t-fn">npm run check</span>    <span class="t-com"># lint, typecheck, test, tasks validate</span></code></pre>
+
+      <h2 id="ci">The CI pipeline</h2>
+
+      <p>Five jobs. Four of them check something; the fifth records the result and runs only if all four
+      succeeded.</p>
+
+      <div class="scroller">
+        <table>
+          <caption class="skip">The five jobs in .github/workflows/ci.yml</caption>
+          <thead><tr><th scope="col">Job</th><th scope="col">What it runs</th><th scope="col">Why it is separate</th></tr></thead>
+          <tbody>
+            <tr>
+              <th scope="row">Tracker</th>
+              <td><code>./scripts/tasks validate</code> and <code>./scripts/tasks render --check</code></td>
+              <td>A malformed tracker fails the build on its own merits, and a red test suite must not hide a stale dashboard or vice versa. <code>--check</code> compares only the tracker-derived sections, because test health and build status legitimately change every run.</td>
+            </tr>
+            <tr>
+              <th scope="row">Lint, typecheck, test</th>
+              <td><code>npm run lint</code>, <code>npm run typecheck</code>, <code>./scripts/ci-metrics</code>, against a real Postgres 17 service</td>
+              <td>Writes <span class="pathref">.ratline/metrics.json</span> and <span class="pathref">.ratline/security-findings.json</span>, which the dashboard reports, and exits non-zero if any test failed.</td>
+            </tr>
+            <tr>
+              <th scope="row">Migrations up, down, up</th>
+              <td><code>./scripts/migrate cycle</code>, then <code>./scripts/ci-metrics --integration</code></td>
+              <td>A real Postgres, not a mock. Integration tests run here rather than in the code job.</td>
+            </tr>
+            <tr>
+              <th scope="row">Agent binaries</th>
+              <td><code>./scripts/gen-agent-protocol --check</code>, <code>./scripts/agent verify</code>, then a release build with checksums</td>
+              <td>The drift check is what makes “the two sides cannot disagree” true rather than promised. A stale generated catalogue would mean the control plane signs instructions the agent refuses, which presents as a broken host rather than as a stale file.</td>
+            </tr>
+            <tr>
+              <th scope="row">Record CI status</th>
+              <td>Writes <span class="pathref">.ratline/ci-status.json</span></td>
+              <td><code>tasks done</code> refuses to close a task unless this file reports green, and it is written only when all four jobs above succeeded. Nothing outside CI writes it — a local run that minted its own green light would defeat the gate.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note" data-status="attention">
+        <span class="note__label">Two configuration choices that look wrong and are not</span>
+        <p><strong>Postgres runs with <code>POSTGRES_HOST_AUTH_METHOD: trust</code>.</strong> The fixtures
+        connect as <code>ratline_app</code>, which migration 2 creates <code>NOLOGIN</code> and passwordless
+        deliberately — a login role with a shipped password is the default credential C4 forbids. Giving the role
+        a password for CI only would make the pipeline test a configuration production never uses. It is safe
+        here in a way it would not be anywhere else: an ephemeral container, on loopback, inside one job,
+        destroyed with it.</p>
+        <p><strong>The workflow triggers on <code>push</code> only.</strong> A <code>pull_request</code> trigger
+        alongside it meant every push to a branch with an open PR started two full pipelines, because
+        <code>github.ref</code> differs between the events so the concurrency group does not collapse them and
+        neither cancels the other. The comment in the workflow says plainly what to restore it for: a fork's
+        pull request would otherwise arrive with no CI at all, and unlike the merge-result question, that gap is
+        silent.</p>
+      </div>
+
+      <p>The <code>DATABASE_URL</code> is set in CI on purpose, because skipping is the dangerous shape rather
+      than failing. The test support layer skips database suites only when the variable is <em>unset</em> and
+      throws when it is set and unreachable — so a pipeline cannot report a green security suite that never
+      touched a database. The first run of the workflow proved what that costs: 320 of 592 tests passed, the
+      authorization matrix reported that it had not run and was therefore unknown rather than green, and both
+      coverage gates refused at 71%. The gates were right and the workflow was wrong.</p>
+
+      <h2 id="gates">Gates that fail on absent coverage</h2>
+
+      <p>Two coverage gates, and nothing else is gated. A blanket coverage target buys percentage-chasing on
+      code that does not need it:</p>
+
+      <div class="scroller">
+        <table>
+          <caption class="skip">The two coverage gates in scripts/ci-metrics.ts</caption>
+          <thead><tr><th scope="col">Gate</th><th scope="col">Required</th><th scope="col">Current</th></tr></thead>
+          <tbody>
+            <tr><th scope="row"><code>can()</code> branch coverage</th><td>100%</td><td>100%</td></tr>
+            <tr><th scope="row"><code>src/authz/**</code> line coverage</th><td>100%</td><td>100%</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p><strong>A gate whose value is <code>null</code> fails.</strong> “Not measured” is a failure, not a
+      pass — because otherwise renaming a file, or breaking coverage collection, would switch the gate off
+      silently, which is the failure mode the gate exists to prevent. That has already happened once for a
+      different reason: a change to the coverage event shape made the collection branch unreachable, both gates
+      reported “not measured”, and the build failed for a reason that had nothing to do with coverage. The type
+      checker caught it.</p>
+
+      <p>The same principle runs through the metrics collector. The authorization matrix writes its own report
+      file on every run, and a <em>missing</em> report means the matrix did not execute — reported as unknown
+      rather than as green. There is no arrangement under which yesterday's green matrix is reported as
+      today's. Failures are recorded by <strong>name</strong> and not merely counted, because the first two CI
+      failures were undiagnosable without local reproduction when only counts were written.</p>
+
+      <div class="note" data-status="attention">
+        <span class="note__label">A known hole in the coverage gate</span>
+        <p><strong>RL-M1-051</strong> (todo) — “Fail the coverage gate for an authz file no test ever loads”. A
+        file inside <span class="pathref">src/authz/</span> that no test imports contributes nothing to the
+        aggregate rather than dragging it down, so the current gate would not notice it.</p>
+      </div>
+
+      <h2 id="mutation">Mutation testing as a practice, not a tool</h2>
+
+      <p>Every security-critical change in M1 was mutation-tested by hand: a property was broken deliberately,
+      the resulting failure confirmed, and the source restored from a copy. There is no mutation-testing
+      dependency — this is a discipline, applied per change.</p>
+
+      <p>The part worth copying is what happens when a mutation <em>escapes</em>. Three did, and each is
+      recorded rather than omitted, because each exposed a test asserting the right thing for the wrong reason.
+      One of those cases is written up as a residual risk in its own right: no functional test can distinguish a
+      constant-time comparison from <code>===</code> or <code>Buffer.equals</code>, because all three accept the
+      same passwords and differ only in rejection timing — so the assertion is made at source level, and it
+      catches the mutation someone actually makes rather than every possible one, and says so.</p>
+
+      <div class="note" data-status="working">
+        <span class="note__label">The sentence the M1 gate report draws from all of this</span>
+        <p><strong>A test suite measures correctness, not its own health.</strong> Four defects in M1 were
+        invisible while every test was green, and all four were found by timing or stress rather than by
+        running. <a href="defects.html#invisible-defects">What they were</a>.</p>
+      </div>
+
+      <h2 id="conventions">Commit and branch conventions</h2>
+
+      <ul>
+        <li>Branch per task: <code>m2/RL-M2-014-caddy-vhost-templating</code>.</li>
+        <li>Commit subject: <code>RL-M2-014: generate caddy vhost from template with escaped values</code>.</li>
+        <li>Every commit references exactly one task id. No mixed commits.</li>
+        <li>The commit body includes the <code>Acceptance:</code> lines checked off, and <code>Risk:</code> for
+        high-risk tasks.</li>
+        <li>Never commit directly to <code>main</code>. Never force-push a reviewed branch.</li>
+        <li>Tracking updates are their own commit: <code>chore(tracking): session 7</code>.</li>
+        <li>Every dependency added requires a one-line justification in the commit body, and the standard
+        library is preferred. The three font packages carry theirs in
+        <span class="pathref">src/web/lib/design/fonts.ts</span>.</li>
+      </ul>
+
+      <p>M0 deviated from branch-per-task deliberately and said so: twenty-six local branches with no remote and
+      no reviewer is ceremony rather than review, so M0 used one branch and resumed branch-per-task at M1, when
+      there was code, a remote and something to review against.</p>
+
+      <section class="sources" aria-labelledby="sources-heading">
+        <h2 id="sources-heading" class="label" style="border:0;padding:0;margin:0 0 var(--space-xs)">Sources for this page</h2>
+        <ul>
+          <li><span class="pathref">docs/BRIEF.md</span> §2.1–§2.9, §6.7, §9 — the tracking system, quality bar and anti-patterns</li>
+          <li><span class="pathref">scripts/tasks</span> and <span class="pathref">scripts/tasks.ts</span> — the subcommand list is its help output</li>
+          <li><span class="pathref">scripts/pg</span>, <span class="pathref">scripts/migrate</span>, <span class="pathref">scripts/preflight</span>, <span class="pathref">scripts/host</span>, <span class="pathref">scripts/agent</span></li>
+          <li><span class="pathref">scripts/ci-metrics.ts</span> — the two gates, the null-is-failure rule, named failures</li>
+          <li><span class="pathref">.github/workflows/ci.yml</span> — the five jobs and both configuration comments</li>
+          <li><span class="pathref">package.json</span> — <code>check</code>, <code>test</code>, <code>test:coverage</code></li>
+          <li><span class="pathref">README.md</span> — local development, requirements</li>
+          <li><span class="pathref">docs/gates/M0.md</span>, <span class="pathref">docs/gates/M1.md</span> — the process deviations and the mutation-testing account</li>
+          <li><span class="pathref">docs/RISKS.md</span> R-01 — the container verifier and its vacuous pass</li>
+        </ul>
+      </section>
+
+      <nav class="pager" aria-label="Section navigation">
+        <a href="roadmap.html"><span class="label">Previous</span> Roadmap and status</a>
+        <a href="defects.html"><span class="label">Next</span> Known defects and open questions</a>
+      </nav>
+    </main>
+
+    <footer class="page" style="padding-top:0">
+      <p class="dim" style="font-size:var(--text-xs)">Written from the repository at
+      <span class="pathref">/Users/ark/Desktop/FunProjects/moss-clone</span>. Design tokens copied from
+      <span class="pathref">src/web/lib/design/</span>; no font files or scripts are loaded from any external
+      origin.</p>
+    </footer>
+  </div>
+</div>
+</body>
+</html>
