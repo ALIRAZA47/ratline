@@ -3997,20 +3997,31 @@
 - id: RL-M1-052
   title: Catch a repository export that is not async
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: S
   depends_on: []
   blocks: []
   risk: high
+  started_at: 2026-08-04
+  done_at: 2026-08-04
   acceptance:
     - The repository-gating scan matches a non-async export
     - The scan reads code with comments stripped, via the shared helper from RL-M1-041
     - A synthetic non-async ungated repository export makes the suite fail
-  artifacts: []
+  artifacts:
+    - test/security/repository_gating.test.ts
+    - test/fixtures/repo_gating/ungated_reads.ts
+    - test/fixtures/repo_gating/nested/subdirectory_read.ts
   decisions: []
   notes: |
     2026-08-03 — 2026-08-04 — DEMONSTRATED against the real regexes: test/security/repository_gating.test.ts matches /export async function (\w+)\s*\(/g, so 'export function listSites(ctx: AuthzContext, ...)' is invisible to it while scoped_repository.test.ts does see it. All 45 current repository exports happen to be async, so nothing is broken today. M2 adding 'export function listHosts(ctx, id) { return scoped(ctx, ...) }' — non-async because it just returns the promise — would need no requirePermission, need no exemption entry, and leave every guard test green. That is the RL-M1-043 class of defect (nine ungated reads) reintroduced through the door the fix left open.
+    2026-08-04 — FIXED, and the fix is proved by a fixture rather than by reading the regex. The pattern is now /export\s+(?:async\s+)?function\s+(\w+)\s*\(/g and the scan runs over codeOf() output via the RL-M1-041 helper. The scan takes a directory parameter so it can be pointed at test/fixtures/repo_gating/ and watched to FIRE — src/repo is correctly clean, and a clean scan proves nothing about what the scan can SEE, which is the whole defect.
+    2026-08-04 — TWO MORE DOORS OF THE SAME KIND, found while fixing the named one. (1) The scan globbed src/repo/*.ts while scoped_repository.test.ts globbed src/repo/**/*.ts, so a repository module in a subdirectory would have been made to take an AuthzContext by one scan and never asked for a permission by the other. Widened to ** and covered by a nested fixture, because there are no subdirectories in src/repo today and the change would otherwise be untested. (2) The gate is a string match for 'requirePermission(' in a function body, so BEFORE codeOf a body whose only mention was in a comment counted as gated — and these bodies are heavily commented precisely because their subject is what they may skip. No live instance of either; both latent.
+    2026-08-04 — THE CONST DOOR IS LEFT SHUT BY SHAPE, NOT BY REGEX. 'export const listSites = (ctx) => ...' is just as exported and just as ungatable, and chasing every callable-const form with a regex is the second parser RL-M1-041 argues against. So a new test asserts that no exported const in src/repo is callable, and the scan is complete by construction: if somebody writes one, that test fails loudly and tells them to use a function declaration. Mutation-proved — appending an ungated arrow export to src/repo/scope.ts left 'every exported repository function checks a permission or is exempted' GREEN and failed only the new completeness test, naming 'src/repo/scope.ts: listSitesAsAnArrow'. That is the door being real.
+    2026-08-04 — MUTATION-TESTED four ways, each restored from a copy afterwards. (1) Pattern back to 'export async function' -> 3 tests fail, reporting Reported: ["listSitesAsync"] with both non-async fixtures gone. (2) codeOf removed, raw source scanned -> 'a permission named only in a comment does not satisfy the gate' fails. (3) Glob back to ${dir}/*.ts -> 'the scan reaches a repository module in a subdirectory' fails. (4) Callable const appended to src/repo/scope.ts -> the completeness test fails and names it. Every mutation killed exactly the test written for it and no others.
+    2026-08-04 — closed without CI verification: CI has never executed for this repository — no remote (RISKS.md R-10). 641 tests green locally, both coverage gates at 100%.
+  acceptance_met: [1, 2, 3]
 - id: RL-M1-053
   title: Give audit actor_id referential integrity
   milestone: M1
