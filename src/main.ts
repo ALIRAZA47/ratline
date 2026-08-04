@@ -31,6 +31,7 @@ import { serve } from "@hono/node-server";
 import { preflight, BindRefusal } from "./boot.ts";
 import { createServer } from "./api/server.ts";
 import { mintBootstrapToken, tokenPath } from "./api/bootstrap_token.ts";
+import { loadDashboard, DashboardUnavailable, type Dashboard } from "./api/dashboard.ts";
 import { secretsDir, SecretRefusal } from "./crypto/secrets.ts";
 
 /**
@@ -190,7 +191,30 @@ async function main(): Promise<void> {
     );
   }
 
-  // 5. Serve.
+  // 5. The dashboard, if it has been built.
+  //
+  // A missing build DEGRADES rather than refuses: the API is fully usable without it,
+  // and an operator running from a checkout who has not run `npm run build:web` should
+  // get a working control plane and a clear sentence about the missing UI — not a
+  // refusal to start. This is the opposite call from the secrets check, and the
+  // difference is that a missing secret makes the server unsafe while a missing
+  // dashboard only makes it headless.
+  let dashboard: Dashboard | undefined;
+  const dashboardDir = process.env["RATLINE_DASHBOARD_DIR"] ?? "dist/web";
+  try {
+    dashboard = loadDashboard(dashboardDir);
+    process.stderr.write(`dashboard loaded from ${dashboardDir} (${String(dashboard.assets.size)} files)\n`);
+  } catch (error) {
+    if (error instanceof DashboardUnavailable) {
+      process.stderr.write(`\n${error.message}\n\n`);
+    } else {
+      // A COLLISION is not a degradation — a file shadowing an API route would make
+      // that endpoint silently vanish, so that one refuses.
+      throw error;
+    }
+  }
+
+  // 6. Serve.
   const app = createServer({
     cookieSecret: ready.secrets.cookie,
     sealingKey: ready.secrets.kek,
@@ -203,6 +227,7 @@ async function main(): Promise<void> {
     // above already assumes. A subdomain or a slug on the form is the alternative,
     // and ServerDeps injects this precisely because the choice is a deployment
     // question RL-M1-042 was not entitled to settle.
+    ...(dashboard === undefined ? {} : { dashboard }),
     resolveTenant: async () => {
       const { Client } = await import("pg");
       const client = new Client({ connectionString: databaseUrl });

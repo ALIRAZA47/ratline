@@ -100,6 +100,12 @@ export default tseslint.config(
 			// the control plane's typecheck depend on a page's script.
 			"docs-site/**",
 
+			// Vite's output. Bundled, minified, not source, and not in the typed
+			// program — so type-aware rules fail on it with "not found by the project
+			// service" the moment somebody runs `npm run build:web` before `npm run
+			// lint`, which RL-M1-057 did.
+			"dist/**",
+
 			// Scratch git worktrees for delegated agents. They contain complete
 			// checkouts, so without this the sweep lints another branch's
 			// work-in-progress and `npm run lint` fails on code that is not in

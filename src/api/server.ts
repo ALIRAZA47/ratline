@@ -101,6 +101,7 @@ import {
   type AuthzContext,
 } from "../authz/context.ts";
 import type { AuditAction } from "../authz/audit_events.ts";
+import { assetFor, headersFor, type Dashboard } from "./dashboard.ts";
 import { recordAudit } from "../repo/audit.ts";
 import { recordAuthAttempt } from "../auth/rate_limit.ts";
 import { verifySecondFactor } from "../auth/two_factor.ts";
@@ -140,6 +141,14 @@ export type ServerDeps = {
   /** Unseals a stored TOTP secret (ADR 0006). Required, never a lazy load. */
   readonly sealingKey: Buffer;
   readonly trustedOrigins?: readonly string[];
+  /**
+   * The built dashboard, when there is one (RL-M1-057).
+   *
+   * Optional, and absent in every test: the authorization matrix drives this server
+   * 630 times and has no interest in HTML. Passing it is what turns the API into
+   * something an operator can open in a browser.
+   */
+  readonly dashboard?: Dashboard;
 };
 
 type Bound = {
@@ -661,7 +670,33 @@ export function createServer(deps: ServerDeps): Hono {
     });
   }
 
+  // LAST, deliberately. Hono matches in registration order, so a static handler
+  // added earlier could shadow an API route — and `assetFor` independently refuses
+  // any path whose first segment belongs to the route table. Two guards, because the
+  // failure mode is an endpoint that silently stops existing.
+  if (deps.dashboard !== undefined) serveDashboard(app, deps.dashboard);
+
   return app;
+}
+
+/**
+ * Serve the dashboard for anything the API did not claim (RL-M1-057).
+ *
+ * GET and HEAD only. A POST to a client route is a bug in the caller, and answering
+ * it with HTML would hide that behind a 200.
+ */
+function serveDashboard(app: Hono, dashboard: Dashboard): void {
+  const respond = (path: string, withBody: boolean): Response | null => {
+    const asset = assetFor(dashboard, path);
+    if (asset === null) return null;
+    return new Response(withBody ? new Uint8Array(asset.body) : null, {
+      status: 200,
+      headers: headersFor(asset),
+    });
+  };
+
+  app.get("*", (c) => respond(new URL(c.req.url).pathname, true) ?? c.notFound());
+  app.on("HEAD", "*", (c) => respond(new URL(c.req.url).pathname, false) ?? c.notFound());
 }
 
 // ---------------------------------------------------------------------------
