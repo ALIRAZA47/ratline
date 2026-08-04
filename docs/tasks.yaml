@@ -4087,13 +4087,14 @@
 - id: RL-M1-057
   title: Serve the dashboard, and let an operator actually visit it
   milestone: M1
-  status: in-progress
+  status: done
   owner: agent
   estimate: M
   depends_on: []
   blocks: []
   risk: medium
   started_at: 2026-08-04
+  done_at: 2026-08-04
   acceptance:
     - The built dashboard is served, and a browser reaching the root gets HTML rather than a 404
     - Static serving cannot shadow an API route, and cannot read a file outside the build output
@@ -4101,17 +4102,18 @@
     - The exposure warning is visible in the interface, not only on stderr
   artifacts: []
   decisions: []
-  acceptance_met: [1, 2, 3]
+  acceptance_met: [1, 2, 3, 4]
   notes: |
     2026-08-04 — 2026-08-04 — The route table declared 30 API routes and the server served ZERO bytes of HTML, so a browser reaching the root got a framework 404. src/web/app has existed since RL-M1-022 and npm run build:web has always produced dist/web; the two were never connected. That is the fourth instance of the shape RL-M1-055 found three of: built, tested, never wired to a live path.
 
     2026-08-04 — 2026-08-04 — NOT serveStatic('*'), and the reason is two failure modes. A catch-all registered alongside 30 API routes can shadow one — Hono matches in registration order, so a file named 'audit' would silently replace the audit endpoint — and it can serve a file outside the build directory if a traversal survives normalisation. So the build is read once at startup into a manifest, and a request selects a KEY IN A MAP rather than naming a path to open: there is no traversal to defeat because nothing is resolved from the request. A file whose path collides with an API route refuses at STARTUP rather than losing quietly, because an endpoint that silently stops existing is close to undiagnosable from outside. Content types are an allow-list, so the build cannot start shipping a type nobody considered.
     2026-08-04 — 2026-08-04 — Acceptance 3 met THROUGH C5's mechanism rather than around it. 'scripts/stack visit' binds 0.0.0.0 inside the container, because docker port forwarding cannot reach a process on the container's own loopback, and sets RATLINE_ALLOW_PUBLIC_BIND so preflight permits it — which means the check still runs, the acknowledgement is explicit, and the warning prints on every boot. On the operator's machine the port publishes to 127.0.0.1 ONLY, never 0.0.0.0, so the dashboard is reachable from their browser and from nothing else on their network. That is materially smaller than what the in-container acknowledgement implies, and it is the smallest exposure that satisfies 'let me look at it'.
     2026-08-04 — 2026-08-04 — ACCEPTANCE 4 NOT MET. The exposure warning prints on stderr and is not rendered in the interface. C5 asks for a loud non-dismissable warning in the DASHBOARD, and stderr is not the dashboard — an operator who opened a browser and never read the container logs would see no warning at all. Left unchecked rather than reinterpreted.
+    2026-08-04 — 2026-08-04 — Acceptance 4 is now MET, by RL-M1-058: the C5 exposure warning renders in the interface, injected into the served HTML so it survives being signed out and the API failing, with no dismiss control of any kind. Verified in a browser.
 - id: RL-M1-058
   title: Wire the dashboard shell to the API it decorates
   milestone: M1
-  status: todo
+  status: review
   owner: agent
   estimate: L
   depends_on: []

@@ -8,7 +8,7 @@ Generated 2026-08-04.
 | Milestone | Progress | Done | Total | Open high-risk |
 | --- | --- | ---: | ---: | ---: |
 | **M0** Plan | `########################` 100% | 26 | 26 | 0 |
-| **M1** Control plane skeleton | `##################------` 76% | 45 | 59 | 6 |
+| **M1** Control plane skeleton | `###################-----` 78% | 46 | 59 | 6 |
 | **M2** Agent and first host | `####--------------------` 17% | 5 | 29 | 16 |
 | **M3** Static sites end to end | `------------------------` 0% | 0 | 27 | 18 |
 | **M4** Node and Bun apps | `------------------------` 0% | 0 | 15 | 10 |
@@ -29,9 +29,7 @@ Auth, org/team/project model, the can() function with 100% branch coverage, hash
 
 ## In progress
 
-| Task | Age | Owner | Risk | Acceptance | Title |
-| --- | ---: | --- | --- | ---: | --- |
-| `RL-M1-057` | 0d | agent | medium | 3/4 | Serve the dashboard, and let an operator actually visit it |
+_None._
 
 ## Blocked
 
@@ -45,6 +43,7 @@ _None._
 | `RL-M1-020` | 2d | agent | **high** | 2/3 | Rate limit every authentication path |
 | `RL-M1-041` | — | agent | low | 2/3 | Make the source scanners agree about comments |
 | `RL-M1-045` | 2d | agent | **high** | 2/3 | Chase the intermittent failure in the API token ceiling suite |
+| `RL-M1-058` | — | agent | medium | 3/4 | Wire the dashboard shell to the API it decorates |
 
 ## Open high-risk tasks without security-test coverage
 
@@ -114,8 +113,7 @@ CI: **green** at `18cca248` (2026-08-03T19:25:43Z)
 
 | Status | Count |
 | --- | ---: |
-| todo | 105 |
-| in-progress | 1 |
-| review | 4 |
-| done | 76 |
+| todo | 104 |
+| review | 5 |
+| done | 77 |
 | **all** | **186** |
