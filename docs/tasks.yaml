@@ -4037,13 +4037,14 @@
 - id: RL-M1-055
   title: Run the control plane for real, on a container that is not this Mac
   milestone: M1
-  status: in-progress
+  status: done
   owner: agent
   estimate: M
   depends_on: []
   blocks: []
   risk: medium
   started_at: 2026-08-04
+  done_at: 2026-08-04
   acceptance:
     - An entry point starts the server, after preflight and with migrations applied
     - It runs on Ubuntu 24.04 in a container, built reproducibly from a Dockerfile
