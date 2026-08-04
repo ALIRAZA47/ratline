@@ -483,6 +483,20 @@ function valueFor(param: string, subject: MatrixSubject, world: World): string {
       // permission — and someone the rest of the run does not depend on, because
       // this route really does end their sessions.
       return own ? world.bystanderId : world.otherUserId;
+    case "hostId":
+      // A fresh UUID for every subject, and that is sound here rather than lazy.
+      // `POST /hosts/:hostId/revoke-key` is scoped to the ORGANIZATION, not to the host —
+      // `revokeHostKey` resolves `host.update` at the organization root before it looks at
+      // the id at all — so whether the host exists cannot change the permission decision,
+      // which is what this cell measures.
+      //
+      // WHAT THAT MEANS THE CELL DOES NOT MEASURE, said plainly: that the host lookup is
+      // tenant-scoped. It is, by RLS on `host_keys`, and a cross-tenant id produces the
+      // same `revoked: false` a nonexistent one does — which is the invisibility C3 is
+      // for. But this row proves the permission, not the isolation. RL-M2-005's own suite
+      // covers the isolation, and conflating the two is how a matrix comes to report
+      // coverage it does not have.
+      return randomUUID();
     default:
       throw new Error(
         `${param} is a path parameter the matrix harness cannot supply a value for. ` +

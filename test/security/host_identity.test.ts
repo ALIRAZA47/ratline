@@ -33,6 +33,8 @@ import {
   type RegisteredKey,
 } from "../../src/crypto/host_identity.ts";
 import { INSTRUCTION_DOMAIN, canonicalBytes } from "../../src/agent/envelope.ts";
+import { createChallengeStore, MAX_IN_FLIGHT } from "../../src/api/challenges.ts";
+import { createServer } from "../../src/api/server.ts";
 
 const NOW = 1_770_000_000_000;
 const HOST = "8f14e45f-ea8f-4b5e-9c2a-1d3b7e6a0c11";
@@ -263,4 +265,115 @@ test("a well-formed answer from a live key is accepted", () => {
     key,
     NOW + 1000,
   );
+});
+
+// ---------------------------------------------------------------------------
+// The challenge store, which is what makes the binding property hold over HTTP
+// ---------------------------------------------------------------------------
+
+test("a challenge is consumed on first use, so an answer cannot be replayed", () => {
+  // Over HTTP there is no connection to bind to — request and response are separate
+  // exchanges — so the binding becomes "bound to the exchange that requested it". Taking
+  // rather than reading is what makes that true: a replay of the exact same request finds
+  // nothing, even if the signature is perfect.
+  const store = createChallengeStore();
+  const { handle, challenge } = store.issue(NOW);
+
+  assert.deepEqual(store.take(handle, NOW + 1000), challenge);
+  assert.equal(store.take(handle, NOW + 1000), null, "a challenge was answerable twice");
+  assert.equal(store.size(), 0);
+});
+
+test("an expired challenge is removed and refused", () => {
+  const store = createChallengeStore();
+  const { handle, challenge } = store.issue(NOW);
+
+  assert.equal(store.take(handle, challenge.expiresAt), null);
+  // Removed even though it was refused: an expired entry left in the map is a slot a
+  // legitimate agent cannot use, which is the bound turned into a leak.
+  assert.equal(store.size(), 0);
+});
+
+test("the challenge store is bounded, because an unauthenticated caller can fill it", () => {
+  // Asking for a challenge needs no credential. If issuing one allocated memory nothing
+  // reclaimed, asking repeatedly would be the cheapest possible denial of service against
+  // the control plane.
+  const store = createChallengeStore();
+  for (let index = 0; index < MAX_IN_FLIGHT; index += 1) store.issue(NOW);
+
+  assert.throws(() => store.issue(NOW), /already in flight/);
+
+  // And space is reclaimed by expiry, not by eviction — evicting the oldest would let a
+  // flood choose which legitimate agent's challenge is forgotten.
+  assert.ok(store.issue(NOW + CHALLENGE_TTL_MS + 1).handle.length > 0);
+});
+
+// ---------------------------------------------------------------------------
+// Over the wire
+// ---------------------------------------------------------------------------
+
+const WIRE_DEPS = {
+  cookieSecret: new Uint8Array(32).fill(7),
+  resolveTenant: () => Promise.resolve("00000000-0000-4000-8000-000000000001"),
+  signInIdentityId: "00000000-0000-4000-8000-000000000000",
+  sealingKey: Buffer.alloc(32, 9),
+  secretsDir: "/nonexistent-for-this-test",
+  trustedOrigins: ["http://127.0.0.1:7712"],
+};
+
+async function post(path: string, body: unknown): Promise<Response> {
+  return createServer(WIRE_DEPS).fetch(
+    new Request(`http://127.0.0.1:7712${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://127.0.0.1:7712" },
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+test("a connection presenting no proof is refused, over HTTP", () => {
+  // Acceptance 3's first half, at the transport layer rather than the decision layer.
+  // The revoked-key half needs a registered key and therefore a database, and lives in
+  // the decision-layer tests above — recorded rather than blurred.
+  return (async () => {
+    for (const body of [
+      {},
+      { handle: "nonsense" },
+      { handle: "nonsense", hostId: "h", nonce: "a", signature: "b", fingerprint: "c" },
+    ]) {
+      const response = await post("/agent/authenticate", body);
+      assert.ok(
+        response.status === 400 || response.status === 401,
+        `a bad answer got ${String(response.status)}`,
+      );
+
+      const text = await response.text();
+      // No detail about WHY. An unknown handle, a bad signature and a revoked key must
+      // read the same, or probing tells an attacker which handles and hosts are real.
+      assert.ok(
+        !/revoked|expired|unknown host|no challenge/i.test(text),
+        `the refusal leaks why it failed: ${text}`,
+      );
+    }
+  })();
+});
+
+test("asking for a challenge discloses nothing about the installation", () => {
+  return (async () => {
+    const response = await post("/agent/challenge", {});
+    assert.equal(response.status, 200);
+
+    const payload = (await response.json()) as { handle: string; nonce: string };
+    assert.equal(payload.nonce.length, CHALLENGE_BYTES * 2);
+    assert.ok(payload.handle.length >= 32, "the handle must not be guessable");
+
+    // Two requests must not share a nonce or a handle, or one agent's challenge could be
+    // consumed by another.
+    const second = (await (await post("/agent/challenge", {})).json()) as {
+      handle: string;
+      nonce: string;
+    };
+    assert.notEqual(payload.nonce, second.nonce);
+    assert.notEqual(payload.handle, second.handle);
+  })();
 });

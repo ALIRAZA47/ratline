@@ -102,6 +102,17 @@ import {
 } from "../authz/context.ts";
 import type { AuditAction } from "../authz/audit_events.ts";
 import { assetFor, headersFor, type Dashboard } from "./dashboard.ts";
+import {
+  EnrolmentRefused,
+  enrolHost,
+  listHosts,
+  redeemEnrolment,
+  registeredKeyFor,
+  recordHostSeen,
+  revokeHostKey,
+} from "../repo/enrolment.ts";
+import { IdentityRefused, verifyChallenge } from "../crypto/host_identity.ts";
+import { TooManyChallenges, createChallengeStore } from "./challenges.ts";
 import { recordAudit } from "../repo/audit.ts";
 import { recordAuthAttempt } from "../auth/rate_limit.ts";
 import { verifySecondFactor } from "../auth/two_factor.ts";
@@ -306,6 +317,61 @@ function handlers(deps: ServerDeps): Map<string, Bound["handle"]> {
     found(ctx, await findProject(ctx, c.req.param("projectId") ?? ""), "GET /projects/:projectId", "project"),
   );
   map.set("GET /audit", async (ctx) => json(await listAudit(ctx, { limit: 50 })));
+
+  // --- hosts (RL-M2-005) ----------------------------------------------------
+  map.set("GET /hosts", async (ctx) => json(await listHosts(ctx)));
+
+  map.set("POST /hosts", async (ctx, c) => {
+    const body = (await c.req.json().catch(() => ({}))) as { name?: unknown };
+    try {
+      // THE PERMISSION IS RESOLVED FIRST, and the body is not validated here at all.
+      //
+      // I wrote this the other way round — `if (typeof body.name !== "string") return 400`
+      // above the call — and the authorization matrix caught it: four roles without
+      // host.create got 400 instead of a refusal, so the matrix read them as ALLOWED. The
+      // bug is the same shape the instruction envelope is arranged against: validating
+      // before authorising hands an unauthorised caller the validation surface, and here it
+      // would let any member of a tenant probe the request schema of a route they cannot
+      // use.
+      //
+      // Coercing to "" rather than checking is what puts the order right without a second
+      // check: `enrolHost` resolves host.create first and refuses an empty name second.
+      const enrolment = await enrolHost(ctx, typeof body.name === "string" ? body.name : "");
+      // The token is in the RESPONSE and nowhere else — only its hash is stored, so this
+      // is the one moment it exists in plaintext. Said plainly in the payload, because an
+      // operator who assumes they can read it back later will lose it.
+      return json(
+        {
+          hostId: enrolment.hostId,
+          enrolmentToken: enrolment.token,
+          expiresAt: enrolment.expiresAt.toISOString(),
+          note: "This token is shown once and is not stored. Mint another if it is lost.",
+        },
+        201,
+      );
+    } catch (error) {
+      if (error instanceof EnrolmentRefused) return json({ error: error.message }, 400);
+      throw error;
+    }
+  });
+
+  map.set("POST /hosts/:hostId/revoke-key", async (ctx, c) => {
+    const body = (await c.req.json().catch(() => ({}))) as { reason?: unknown };
+    const hostId = c.req.param("hostId") ?? "";
+    try {
+      const revoked = await revokeHostKey(
+        ctx,
+        hostId,
+        typeof body.reason === "string" ? body.reason : "",
+      );
+      // `false` means there was no live key — not an error, and not success either. Saying
+      // which avoids an operator believing they revoked something that was already gone.
+      return json({ revoked });
+    } catch (error) {
+      if (error instanceof EnrolmentRefused) return json({ error: error.message }, 400);
+      throw error;
+    }
+  });
 
   map.set("POST /members/:userId/revoke-sessions", async (ctx, c) => {
     try {
@@ -598,6 +664,148 @@ export function createServer(deps: ServerDeps): Hono {
     return new Response(JSON.stringify({ ok: true }), { status: 200, headers });
   });
 
+  // --- the agent handshake (RL-M2-005, ADR 0002 as amended by A-04) ---------
+  //
+  // Three public routes, and each is public because the caller is establishing who it is.
+  // They are bound HERE rather than in the guarded loop for the same reason sign-in is:
+  // the loop resolves a session first, and none of these has one.
+  //
+  // The challenge store is created once per server, not per request. A store per request
+  // would issue a challenge nothing could ever answer, which would present as an agent
+  // that authenticates successfully and is then refused.
+  const challenges = createChallengeStore();
+
+  app.post("/agent/enrol", async (c) => {
+    const orgId = await deps.resolveTenant(c.req.raw);
+    if (orgId === null) return send(unauthenticated());
+
+    const body = (await c.req.json().catch(() => ({}))) as {
+      token?: unknown;
+      publicKeyPem?: unknown;
+    };
+    if (typeof body.token !== "string" || typeof body.publicKeyPem !== "string") {
+      return json({ error: "enrolment needs a token and a public key" }, 400);
+    }
+
+    // The pre-authentication seam (ADR 0014): acting as the sign-in identity, because
+    // there is no actor until the host has a key and has proved it holds the private half.
+    const ctx = contextForServiceIdentity({
+      orgId,
+      serviceIdentityId: deps.signInIdentityId,
+      name: "sign-in",
+      requestId: crypto.randomUUID(),
+    });
+
+    try {
+      const registered = await redeemEnrolment(ctx, body.token, body.publicKeyPem);
+      return json({ hostId: registered.hostId, fingerprint: registered.fingerprint }, 201);
+    } catch (error) {
+      if (error instanceof EnrolmentRefused) {
+        // 400 rather than 401: the caller is not unauthenticated, it is presenting a
+        // token that cannot be used. The message is deliberately one message for every
+        // reason — see redeemEnrolment.
+        return json({ error: error.message }, 400);
+      }
+      throw error;
+    }
+  });
+
+  app.post("/agent/challenge", async (c) => {
+    const orgId = await deps.resolveTenant(c.req.raw);
+    if (orgId === null) return send(unauthenticated());
+
+    try {
+      const { handle, challenge } = challenges.issue();
+      return json({ handle, nonce: challenge.nonce, expiresAt: challenge.expiresAt });
+    } catch (error) {
+      if (error instanceof TooManyChallenges) {
+        // 503, not 429. The store being full is the server declining to take on more
+        // state, which is a capacity condition rather than a per-caller rate — and
+        // labelling it 429 would tell an honest agent to back off when the problem is
+        // somebody else entirely.
+        return json({ error: error.message }, 503);
+      }
+      throw error;
+    }
+  });
+
+  app.post("/agent/authenticate", async (c) => {
+    const orgId = await deps.resolveTenant(c.req.raw);
+    if (orgId === null) return send(unauthenticated());
+
+    const body = (await c.req.json().catch(() => ({}))) as {
+      handle?: unknown;
+      hostId?: unknown;
+      nonce?: unknown;
+      signature?: unknown;
+      fingerprint?: unknown;
+    };
+    if (
+      typeof body.handle !== "string" ||
+      typeof body.hostId !== "string" ||
+      typeof body.nonce !== "string" ||
+      typeof body.signature !== "string" ||
+      typeof body.fingerprint !== "string"
+    ) {
+      return json({ error: "an answer needs a handle, host id, nonce, signature and fingerprint" }, 400);
+    }
+
+    // TAKEN, not read. Single use is what makes an answer unrepeatable, and taking it
+    // before anything else means a replay of this exact request finds nothing — even if
+    // the signature is perfect.
+    const issued = challenges.take(body.handle);
+    if (issued === null) {
+      // THE ONE REFUSAL, not a hand-written 401. I wrote `json({error: ...}, 401)` here
+      // first and indistinguishable_404's scan refused it — correctly: a second refusal
+      // shape is a second thing that can drift from the first, and the drift is the leak.
+      // It also means "no challenge in flight" and "bad signature" are the same bytes,
+      // which they must be: distinguishing them tells a prober whether a handle was real.
+      return send(unauthenticated());
+    }
+
+    const ctx = contextForServiceIdentity({
+      orgId,
+      serviceIdentityId: deps.signInIdentityId,
+      name: "sign-in",
+      requestId: crypto.randomUUID(),
+    });
+
+    const key = await registeredKeyFor(ctx, body.fingerprint);
+    if (key === null) {
+      // Indistinguishable from a bad signature on purpose. An unknown fingerprint and a
+      // wrong signature are the same refusal, so probing fingerprints tells an attacker
+      // nothing about which hosts exist.
+      return send(unauthenticated());
+    }
+
+    try {
+      verifyChallenge(
+        issued,
+        { hostId: body.hostId, nonce: body.nonce, signature: body.signature },
+        key,
+      );
+    } catch (error) {
+      if (error instanceof IdentityRefused) {
+        // The reason is AUDITED and not returned. An operator needs to know a revoked
+        // host tried to connect; the host does not need to know why it failed, and telling
+        // it distinguishes revocation from a bad signature.
+        await recordAudit(ctx, {
+          action: "host.update",
+          resourceType: "host",
+          resourceId: key.hostId,
+          decision: "deny",
+          reason: "authentication-failed",
+          metadata: { detail: error.message },
+        });
+        return send(unauthenticated());
+      }
+      throw error;
+    }
+
+    await recordHostSeen(ctx, key.hostId, c.req.header("x-forwarded-for") ?? null);
+    return json({ hostId: key.hostId, authenticated: true });
+  });
+
   app.post("/auth/sign-out", async (c) => {
     const orgId = await deps.resolveTenant(c.req.raw);
     const token = readCookie(c.req.header("cookie"), cookieName);
@@ -720,6 +928,14 @@ export function boundRouteKeys(deps: ServerDeps): Set<string> {
     "POST /auth/sign-in",
     "POST /auth/two-factor",
     "POST /auth/sign-out",
+    // The agent handshake (RL-M2-005). Listed here for the same reason the others are:
+    // this set is what `transportCoverage` reports and what the authorization matrix
+    // uses to decide which cells it can verify end to end. A route bound in the file and
+    // absent from this list would be reported as unreachable while actually serving —
+    // which is the one direction of error the matrix must not make.
+    "POST /agent/enrol",
+    "POST /agent/challenge",
+    "POST /agent/authenticate",
   ]) {
     keys.add(key);
   }

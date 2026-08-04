@@ -194,6 +194,59 @@ export const ROUTES: readonly Route[] = [
   { method: "GET", path: "/tokens", summary: "List every API token in the organization", scope: "organization", requires: "api_token.read_any" },
   { method: "POST", path: "/tokens", summary: "Issue an API token for yourself", scope: "organization", requires: "api_token.manage_own" },
   { method: "DELETE", path: "/tokens/:tokenId", summary: "Revoke anyone's API token", scope: "organization", requires: "api_token.revoke_any", scopeParam: "tokenId" },
+  // --- hosts and agent enrolment (RL-M2-005) --------------------------------
+  { method: "GET", path: "/hosts", summary: "List hosts", scope: "organization", requires: "host.read" },
+  { method: "POST", path: "/hosts", summary: "Add a host and mint its enrolment token", scope: "organization", requires: "host.create" },
+  {
+    method: "POST",
+    path: "/hosts/:hostId/revoke-key",
+    summary: "Revoke a host's signing key",
+    scope: "organization",
+    requires: "host.update",
+    scopeParam: "hostId",
+  },
+
+  // --- the agent's own three, all unauthenticated by necessity ---------------
+  //
+  // These are the enrolment and authentication handshake (ADR 0002 as amended by
+  // A-04). Each is public for the same structural reason sign-in is: the caller is
+  // establishing who it is, so there is no actor yet to check a permission against.
+  {
+    method: "POST",
+    path: "/agent/enrol",
+    summary: "Redeem an enrolment token and register this host's signing key",
+    scope: "organization",
+    requires: null,
+    publicReason:
+      "The caller is a host that has no identity yet — registering the key that will " +
+      "authenticate it is the point of the call. What stands in for a permission is the " +
+      "enrolment token, which is single use, short lived, and hashed at rest. An operator " +
+      "holding host.create minted it; this route spends it.",
+  },
+  {
+    method: "POST",
+    path: "/agent/challenge",
+    summary: "Ask for a challenge to prove this host's identity",
+    scope: "organization",
+    requires: null,
+    publicReason:
+      "Asking for a challenge cannot require proof of identity, because answering the " +
+      "challenge IS the proof. It discloses nothing: the response is 32 random bytes and " +
+      "a handle, neither derived from anything about the installation. It is rate limited " +
+      "and the store is bounded, because an unauthenticated caller can reach it.",
+  },
+  {
+    method: "POST",
+    path: "/agent/authenticate",
+    summary: "Answer a challenge and open an authenticated agent session",
+    scope: "organization",
+    requires: null,
+    publicReason:
+      "This route is where a host BECOMES authenticated, so requiring authentication " +
+      "would be circular — the same reason /auth/sign-in is public. The signature is the " +
+      "check, and it is verified against a key registered at enrolment and refused if " +
+      "that key is revoked.",
+  },
 ];
 
 /** A stable identifier for one route, used as the matrix row key. */

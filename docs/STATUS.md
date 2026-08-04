@@ -31,7 +31,7 @@ Auth, org/team/project model, the can() function with 100% branch coverage, hash
 
 | Task | Age | Owner | Risk | Acceptance | Title |
 | --- | ---: | --- | --- | ---: | --- |
-| `RL-M2-005` | 0d | agent | **high** | 4/5 | Implement agent enrolment and mutual transport authentication |
+| `RL-M2-005` | 0d | agent | **high** | 5/5 | Implement agent enrolment and mutual transport authentication |
 
 ## Blocked
 
@@ -74,23 +74,23 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 
 | Suite | Passing | Rate |
 | --- | ---: | ---: |
-| Unit | 456 / 456 | 100% |
+| Unit | 461 / 461 | 100% |
 | Integration | not measured | — |
 | Authorization matrix | 191 / 191 | 100% |
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | 100% | must be 100% |
 
-Measured 2026-08-04T18:52:52.880Z.
+Measured 2026-08-04T19:14:54.166Z.
 
 ### Authorization matrix (role × endpoint × subject)
 
 | | |
 | --- | ---: |
-| Cells passing | 630 / 630 |
-| Endpoints × roles | 30 × 7 |
-| Verified end to end (real request) | 56 |
-| Verified at the decision layer (`can()`) | 448 |
-| Unguarded by declaration, nothing to decide | 126 |
+| Cells passing | 756 / 756 |
+| Endpoints × roles | 36 × 7 |
+| Verified end to end (real request) | 77 |
+| Verified at the decision layer (`can()`) | 490 |
+| Unguarded by declaration, nothing to decide | 189 |
 
 > The remainder is verified one layer down, against `can()` with real grants and
 > row-level security. Two things are not expressible as a request: a route the
