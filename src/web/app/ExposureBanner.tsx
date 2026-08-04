@@ -36,9 +36,9 @@ export function ExposureBanner({ exposure }: { readonly exposure: Exposure }): R
       // the one thing on the page that changes what an operator should do next.
       role="alert"
       style={{
-        background: "var(--rust, #7a2f1e)",
-        color: "var(--chalk)",
-        borderBottom: "2px solid var(--rust-edge, #a8452c)",
+        background: "var(--st-fail)",
+        color: "var(--st-fail-on)",
+        borderBottom: "2px solid var(--st-fail-mark)",
         padding: "10px 16px",
         fontFamily: "var(--font-body)",
         fontSize: "0.8125rem",

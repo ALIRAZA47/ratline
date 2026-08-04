@@ -105,7 +105,7 @@ const pane: React.CSSProperties = {
 };
 
 const heading: React.CSSProperties = {
-  fontFamily: "var(--font-display, var(--font-body))",
+  fontFamily: "var(--font-display)",
   fontSize: "1.125rem",
   fontWeight: 600,
   margin: "0 0 4px",
@@ -184,12 +184,12 @@ const th: React.CSSProperties = {
   padding: "6px 10px 6px 0",
   color: "var(--chalk-dim)",
   fontWeight: 500,
-  borderBottom: "1px solid var(--seam, #2a2724)",
+  borderBottom: "1px solid var(--rule-hairline)",
   whiteSpace: "nowrap",
 };
 const td: React.CSSProperties = {
   padding: "7px 10px 7px 0",
-  borderBottom: "1px solid var(--seam, #2a2724)",
+  borderBottom: "1px solid var(--rule-hairline)",
   verticalAlign: "top",
 };
 const mono: React.CSSProperties = { ...td, fontFamily: "var(--font-mono)", fontSize: "0.75rem" };
@@ -261,7 +261,7 @@ export function AuditScreen(): React.JSX.Element {
                       ...td,
                       // Deny is the colour that matters. A log where every row reads the
                       // same is a log nobody scans.
-                      color: entry.decision === "deny" ? "var(--rust-text, #d98a72)" : "var(--chalk)",
+                      color: entry.decision === "deny" ? "var(--st-fail-mark)" : "var(--chalk)",
                     }}
                   >
                     {entry.decision}
@@ -426,7 +426,7 @@ function NotBuilt({
           fontSize: "0.8125rem",
           maxWidth: "72ch",
           lineHeight: 1.5,
-          borderLeft: "2px solid var(--seam, #2a2724)",
+          borderLeft: "2px solid var(--rule-hairline)",
           paddingLeft: "12px",
         }}
       >

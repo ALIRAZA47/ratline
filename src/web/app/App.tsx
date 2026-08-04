@@ -81,7 +81,7 @@ export function App(): React.JSX.Element {
           background: "var(--tar)",
           minHeight: "100vh",
           color: "var(--chalk)",
-          padding: "var(--space-6, 32px)",
+          padding: "var(--space-lg)",
           fontFamily: "var(--font-body)",
         }}
       >
