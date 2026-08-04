@@ -14,6 +14,60 @@ and which task IDs.
 
 ---
 
+## 2026-08-04 — Session 17 — M1 close-out, M2 protocol, and the control plane running
+
+**Done:** RL-M1-048, RL-M1-049, RL-M1-050, RL-M1-055, RL-M1-057, RL-M1-059,
+RL-M2-001, RL-M2-002, RL-M2-003, RL-M2-007, RL-M2-028. The M1 gate report was
+written and both its exit criteria marked met.
+
+**The theme of this session was that nothing had ever been RUN.** Five mechanisms
+turned out to be built, tested, and never wired to a live path: `createServer` had
+no caller, `preflight` had no caller outside its own module, `mintBootstrapToken`
+had exactly one caller and it was a test — so first run was IMPOSSIBLE on a real
+installation — the dashboard build was never served, and `Shell`'s `<main>`
+rendered `{null}`. Every one was invisible while the suite was green, because the
+suite drives `createServer` in-process and has no interest in HTML.
+
+Ratline now runs on Ubuntu 24.04 (`./scripts/stack visit`), completes first run,
+issues sessions, and serves a dashboard with real audit and member data. Two rail
+destinations honestly say they have no endpoint rather than showing an empty list.
+
+**Two security defects in already-merged work**, surfaced under §2.10, reported,
+and fixed on the owner's authorization (A-03): `POST /auth/sign-out` had no CSRF
+protection because the guard lived inside the guarded-route loop while that route
+is bound above it, and `refuse()` let callers take `.wire` and drop the audit
+record — so a cross-tenant probe was correctly indistinguishable on the wire and
+completely invisible in the log.
+
+**An adversarial compliance review** falsified five claims in my own M1 gate report
+and found the asymmetry it was pointed at: three tasks marked `done` with an unmet
+acceptance line (RL-M1-015, RL-M1-041, RL-M1-045), each verified and demoted to
+`review`. A documentation pass over every file at once found thirteen
+contradictions; four were my own corrections not propagated, fixed; the rest are on
+RL-M1-056.
+
+**Worth carrying:** a scanner nobody has proven fires is a scanner nobody has
+tested — RL-M2-028's fixtures found two real things on their first run, including a
+bypass in the check itself. And the project's own guards caught me inventing a
+design token and hiding the invention behind a CSS fallback, the second time that
+exact mistake has been made here.
+
+**Next session should start with:** `RL-M2-004`, scoped in its notes. Acceptances 1
+and 2 are already met and verified against the running container; the work is
+acceptance 3, rotation with an overlap window, and HALF OF IT ALREADY EXISTS —
+`Verify` takes a set of accepted keys and tries every one, so the agent side of a
+rollover works and is tested. The missing half is the control plane: a second key
+slot, a recorded overlap deadline, and a rotation that moves current to previous
+rather than replacing it. Acceptance 4's gap is specific: no test yet covers an
+envelope correctly signed by a key the agent does NOT hold, which is the assertion
+that fails if verification ever falls back to the envelope's own key material.
+
+**Also open:** RL-M1-058 in `review` (a CSRF token on a guarded mutation has
+nothing to test until a write endpoint is bound), RL-M1-045 and RL-M1-046 (one test
+per full run dies to cross-test database interference whose cause is still
+unexplained — the victim varies and each passes in isolation), and RL-M1-051
+through -054 and -056 from the review.
+
 ## 2026-08-03 — Session 16 — M1
 
 **Completed:** RL-M1-041, RL-M1-044, RL-M1-045, RL-M1-030, RL-M1-047, and the
