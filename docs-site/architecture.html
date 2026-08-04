@@ -154,13 +154,14 @@
 
           <!-- zones -->
           <rect class="dg-zone" x="8" y="34" width="176" height="300" rx="4"/>
-          <text class="dg-zonelabel" x="8" y="26">Operator network — VPN or Tailscale</text>
+          <text class="dg-zonelabel" x="8" y="16">Operator network</text>
+          <text class="dg-zonelabel" x="8" y="28">VPN or Tailscale</text>
 
           <rect class="dg-zone" x="208" y="34" width="290" height="300" rx="4"/>
-          <text class="dg-zonelabel" x="208" y="26">Control plane host</text>
+          <text class="dg-zonelabel" x="208" y="28">Control plane host</text>
 
           <rect class="dg-zone" x="540" y="34" width="332" height="300" rx="4"/>
-          <text class="dg-zonelabel" x="540" y="26">Managed host</text>
+          <text class="dg-zonelabel" x="540" y="28">Managed host</text>
 
           <rect class="dg-zone" x="208" y="370" width="664" height="44" rx="4"/>
           <text class="dg-zonelabel" x="208" y="364">External</text>
@@ -241,7 +242,7 @@
           <path class="dg-arrow" d="M422,158 L422,238" marker-end="url(#arw-sys)"/>
 
           <path class="dg-arrow" d="M220,136 L212,136 L212,392 L218,392" marker-end="url(#arw-sys)"/>
-          <text class="dg-edge" x="226" y="356">webhooks in, clone out</text>
+          <text class="dg-edge" x="226" y="350">webhooks in, clone out</text>
 
           <path class="dg-arrow dg-arrow--strong" d="M552,72 L520,72 L520,196 L490,196" marker-end="url(#arw-sys-strong)"/>
           <text class="dg-edge" transform="rotate(-90 512 134)" x="512" y="134" text-anchor="middle">agent dials out · mTLS + signed envelopes</text>
@@ -254,7 +255,7 @@
           <path class="dg-arrow dg-arrow--dashed" d="M806,164 L806,186" marker-end="url(#arw-sys)"/>
 
           <path class="dg-arrow" d="M570,228 L570,392 L696,392" marker-end="url(#arw-sys)"/>
-          <text class="dg-edge" x="578" y="356">ACME challenge</text>
+          <text class="dg-edge" x="578" y="350">ACME challenge</text>
         </svg>
         </div>
         <figcaption>Redrawn from the mermaid diagram in <span class="pathref">docs/PLAN.md</span> §2. Note the

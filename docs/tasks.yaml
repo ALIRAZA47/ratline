@@ -4034,3 +4034,28 @@
   decisions: []
   notes: |
     2026-08-03 — 2026-08-04 — weakSecretReason correctly rejects an all-zero 32-byte secret, but is never called for ServerDeps.cookieSecret; csrf.ts validates length only, and csrfTokenForSessionId(new Uint8Array(32), ...) returns a token happily. csrf.ts:240-241 names the exact outcome it is trying to prevent — 'a token every installation on earth could compute' — and then guards only length. Not exploitable today because nothing calls createServer in production: there is no serve() anywhere, and @hono/node-server is declared but never imported. It becomes live the moment M2 adds an entry point, which is why it is filed now rather than when it bites.
+- id: RL-M1-055
+  title: Run the control plane for real, on a container that is not this Mac
+  milestone: M1
+  status: in-progress
+  owner: agent
+  estimate: M
+  depends_on: []
+  blocks: []
+  risk: medium
+  started_at: 2026-08-04
+  acceptance:
+    - An entry point starts the server, after preflight and with migrations applied
+    - It runs on Ubuntu 24.04 in a container, built reproducibly from a Dockerfile
+    - "First run is completed end to end against it: token minted, installation claimed, session issued"
+    - "C5 holds inside the container: the dashboard binds localhost and is reached from inside, never published"
+  artifacts: []
+  decisions: []
+  notes: |
+    2026-08-04 — 2026-08-04 — WHY THIS TASK EXISTS AND WHY IT IS LATE. The plan has no task for starting the control plane. Every M1 task built a piece of it and the matrix harness drives createServer in-process, so the suite is green and nothing has ever served a request outside a test. The compliance review found the consequence: @hono/node-server is a declared dependency that is never imported, nothing calls createServer in production, and preflight() is only reachable from boot.ts's own main. That is how RL-M1-054 (an unchecked cookie secret on the createServer path) can be latent rather than live — there is no live path.
+
+    2026-08-04 — 2026-08-04 — A DESIGN TENSION FOUND WHILE WIRING IT, recorded because it is not mine to settle quietly. ServerDeps.signInIdentityId is ONE string, but service_identities.org_id is not null and references organizations — the table is per-organization. One id for every tenant is coherent only for a single-organization installation. Worse for a first run: before the installation is claimed no organization exists, so no sign-in identity can exist either, and yet the server must already serve /bootstrap. Related to RL-M1-053, which found the id has no foreign key and a ghost UUID is accepted — the two findings are the same gap seen from opposite ends.
+    2026-08-04 — 2026-08-04 — Two real defects found by actually running it, which is the whole justification for the task. (1) Postgres would not start: it defaults its unix socket directory to /var/run/postgresql, which the Debian packaging creates owned by 'postgres', so a cluster run by any other account dies with 'could not create lock file ... Permission denied' — one line after reporting that it is listening. Moved to /var/lib/ratline/run rather than chowning a system directory, which is the same instinct as C1: narrow the authority to what the job needs. (2) My Dockerfile set RATLINE_BIND and RATLINE_PORT; the code reads RATLINE_BIND_ADDRESS and RATLINE_BIND_PORT. Those would have been silently ignored and the defaults used, so the container would have looked configured while nothing read the configuration.
+    2026-08-04 — 2026-08-04 — Nothing is published to the host, deliberately. Publishing -p 8787:8787 would make the dashboard reachable from the Mac, and C5's honest reading is that it should not be — so every request goes through docker exec, which is what 'scripts/stack curl' is for. That is the constraint holding in the one place it has ever been exercised rather than a limitation being tolerated. An override exists via RATLINE_ALLOW_PUBLIC_BIND, and preflight reports the exposure loudly on every boot.
+    2026-08-04 — 2026-08-04 — INCOMPLETE AS OF THIS COMMIT. The image built and served once, which is how the socket-directory defect was found; then I ran 'scripts/stack rebuild', which discards the image, at the moment the host's DNS started refusing — buildkit needs a manifest HEAD for ubuntu:24.04 even when the layers are cached, so it cannot rebuild until DNS returns. Acceptances 2, 3 and 4 stay unchecked: the current image is unbuilt, so first run has not been completed end to end against it. Using 'build' rather than 'rebuild' would have kept a working image; noted so the next person does not repeat it.
+  acceptance_met: [1]

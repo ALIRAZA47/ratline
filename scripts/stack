@@ -1,0 +1,150 @@
+#!/bin/sh
+# The control plane, running on Ubuntu 24.04 (RL-M1-055). Same shape as scripts/host.
+#
+#   ./scripts/stack up        build if needed, run, wait for /health
+#   ./scripts/stack logs      follow the server's output
+#   ./scripts/stack shell     a shell inside, as the ratline account
+#   ./scripts/stack psql      a psql session against its database
+#   ./scripts/stack curl ...  one request from inside the container
+#   ./scripts/stack claim     complete first run end to end
+#   ./scripts/stack down      remove the container
+#   ./scripts/stack rebuild   rebuild the image from scratch
+#
+# ## Why nothing is published to the host
+#
+# C5: the dashboard binds localhost and must not be internet-exposed. Publishing
+# -p 8787:8787 would make it reachable from the Mac, and the honest reading of C5 is
+# that it should not be — so every request goes through `docker exec`, which is what
+# `stack curl` is for. That is not a limitation being tolerated; it is the constraint
+# holding in the one place it has ever been exercised.
+#
+# If you genuinely want it in a browser, set RATLINE_ALLOW_PUBLIC_BIND inside the
+# container and publish the port by hand. preflight() will report the exposure loudly
+# on every boot, which is the point.
+set -eu
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+NAME=rl-control-plane
+IMAGE=ratline-control-plane
+
+say() { printf '%s\n' "$*"; }
+die() { printf '%s\n' "$*" >&2; exit 1; }
+
+need_docker() {
+	command -v docker >/dev/null 2>&1 || die "docker is not on PATH."
+	docker info >/dev/null 2>&1 || die "docker is installed but not running."
+}
+
+image_exists() { docker image inspect "$IMAGE" >/dev/null 2>&1; }
+running() { [ "$(docker inspect -f '{{.State.Running}}' "$NAME" 2>/dev/null || echo false)" = true ]; }
+
+cmd_build() {
+	need_docker
+	say "building $IMAGE (ubuntu 24.04, node 22, postgres 17)"
+	docker build -f "$ROOT/tools/control-plane-host/Dockerfile" -t "$IMAGE" "$ROOT"
+}
+
+cmd_up() {
+	need_docker
+	image_exists || cmd_build
+
+	if running; then say "already up"; return; fi
+	docker rm -f "$NAME" >/dev/null 2>&1 || true
+
+	# No -p. See the note at the top of this file.
+	docker run -d --name "$NAME" "$IMAGE" serve >/dev/null
+
+	say "waiting for the control plane"
+	i=0
+	while [ "$i" -lt 60 ]; do
+		if docker exec "$NAME" curl -fsS http://127.0.0.1:8787/health >/dev/null 2>&1; then
+			say "up — $(docker exec "$NAME" curl -fsS http://127.0.0.1:8787/health)"
+			say ""
+			say "It is NOT reachable from this Mac, deliberately (C5). Use:"
+			say "  ./scripts/stack curl /bootstrap"
+			say "  ./scripts/stack claim"
+			return
+		fi
+		# A container that exited is a failure to report, not something to keep
+		# waiting for — the whole point of this script is that a boot refusal is
+		# visible rather than a timeout.
+		if ! running; then
+			say ""
+			say "the container exited. Its output:"
+			docker logs "$NAME" 2>&1 | tail -30
+			die "control plane failed to start"
+		fi
+		i=$((i + 1))
+		sleep 1
+	done
+
+	docker logs "$NAME" 2>&1 | tail -30
+	die "timed out waiting for /health"
+}
+
+cmd_curl() {
+	running || die "not up. Run ./scripts/stack up"
+	path=${1:-/health}
+	shift 2>/dev/null || true
+	docker exec "$NAME" curl -sS -i "http://127.0.0.1:8787$path" "$@"
+}
+
+# Complete first run, which is acceptance 3: mint the token, read it, claim the
+# installation, and show what came back.
+cmd_claim() {
+	running || die "not up. Run ./scripts/stack up"
+
+	state=$(docker exec "$NAME" curl -fsS http://127.0.0.1:8787/bootstrap)
+	say "bootstrap state: $state"
+	case "$state" in
+	*'"unclaimed":false'*)
+		say "already claimed. ./scripts/stack down && ./scripts/stack up starts over."
+		return
+		;;
+	esac
+
+	token=$(docker exec "$NAME" sh -c 'cat /var/lib/ratline/secrets/bootstrap-token 2>/dev/null || true')
+	[ -n "$token" ] || die "no bootstrap token on disk. The server mints it on first boot; check ./scripts/stack logs"
+	say "token read from the filesystem, which is the authority for claiming (host access, not network access)"
+
+	# The password is a literal here because this is a development container that is
+	# thrown away. It is not a default: the operator supplies it, and C4 is about the
+	# APPLICATION never shipping one.
+	docker exec "$NAME" curl -sS -i -X POST http://127.0.0.1:8787/bootstrap \
+		-H 'content-type: application/json' \
+		-H "x-ratline-bootstrap: $token" \
+		-d '{"organizationSlug":"acme","organizationName":"Acme","ownerEmail":"owner@example.com","ownerName":"Owner","ownerPassword":"a-long-development-password-9f3a2b"}'
+
+	say ""
+	say "The server needs restarting before authenticated paths work: the sign-in"
+	say "identity is per-organization and none existed at boot. See RL-M1-055."
+	say "  ./scripts/stack restart"
+}
+
+cmd_restart() {
+	running || die "not up"
+	docker restart "$NAME" >/dev/null
+	say "restarted; waiting for /health"
+	i=0
+	while [ "$i" -lt 60 ]; do
+		if docker exec "$NAME" curl -fsS http://127.0.0.1:8787/health >/dev/null 2>&1; then
+			say "up"; return
+		fi
+		i=$((i + 1)); sleep 1
+	done
+	die "timed out"
+}
+
+case "${1:-}" in
+up) cmd_up ;;
+build) cmd_build ;;
+rebuild) need_docker; docker rm -f "$NAME" >/dev/null 2>&1 || true; docker image rm -f "$IMAGE" >/dev/null 2>&1 || true; cmd_build ;;
+logs) running || die "not up"; docker logs -f "$NAME" ;;
+shell) running || die "not up. Run ./scripts/stack up"; docker exec -it "$NAME" su ratline -c 'cd /srv/ratline && exec bash' ;;
+psql) running || die "not up"; docker exec -it "$NAME" su ratline -c 'psql -h 127.0.0.1 -U ratline ratline' ;;
+curl) shift; cmd_curl "$@" ;;
+claim) cmd_claim ;;
+restart) cmd_restart ;;
+down) need_docker; docker rm -f "$NAME" >/dev/null 2>&1 || true; say "removed $NAME" ;;
+*) die "usage: scripts/stack up | claim | curl <path> | shell | psql | logs | restart | down | build | rebuild" ;;
+esac
