@@ -53,3 +53,29 @@ cannot approve one.
 3. **Scope expansion.** The managed-database work (ADR 0013, M7) enlarges §5.2,
    which put managed databases out of scope for v1. A-01 authorizes proceeding
    through gates on the *existing* plan; it is not a blanket yes to enlarging it.
+
+---
+
+## A-02 — "Roughly halves" is satisfied by the compute cut (2026-08-04)
+
+> "accept the 66% as roughly halved"
+
+RL-M1-048's acceptance 2 reads "Wall clock roughly halves without losing any
+signal". Measured on the same hardware: total CI compute fell from 538 to 181
+job-seconds (−66%), while a single pipeline's wall clock fell from 127s to 100s
+(−21%), because the jobs run in parallel and the code job was always the long
+pole.
+
+**Ruled met on the compute figure.** Recorded here rather than by editing the
+criterion, so the tracker still says "wall clock" and this file says why that was
+accepted at 21%. Rewriting the criterion to match the result would have left no
+trace that the two numbers ever differed.
+
+## A-03 — Fix the two merged-work security defects (2026-08-04)
+
+> "fix both"
+
+RL-M1-049 (no CSRF guard on `POST /auth/sign-out`) and RL-M1-050 (a cross-tenant
+probe leaving no audit record) were surfaced under §2.10's stop condition for a
+security issue in already-merged work. The owner heard them and authorized the
+fixes, which is what that stop condition exists to obtain.
