@@ -251,13 +251,44 @@ function loadMilestones(): Milestone[] {
     for (const e of errors) console.error(`${rel(MILESTONES_PATH)}:${e.line + 1}: ${e.message}`);
     die("milestones.yaml failed to parse");
   }
-  return items.map((it) => ({
-    id: s(it, "id"),
-    name: s(it, "name"),
-    goal: s(it, "goal"),
-    exit_criteria: l(it, "exit_criteria"),
-    exit_met: l(it, "exit_met").map(Number).filter((n) => Number.isInteger(n)),
-  }));
+  return items.map((it) => {
+    const criteria = l(it, "exit_criteria");
+    const rawMet = l(it, "exit_met");
+
+    // `.filter(Number.isInteger)` used to be the whole check, and DISCARDING a
+    // bad entry is what made it dangerous. Writing the criteria' prose into
+    // `exit_met` — the obvious mistake, because the criteria are right above it —
+    // produced NaN for every line, filtered them all away, and left `[]`. The
+    // gate report then said "both criteria met" while STATUS.md rendered
+    // "0 of 2 met" from the same file, and `tasks validate` reported 0 warnings.
+    //
+    // A malformed tracker must fail the build on its own merits (brief §2.3), so
+    // an entry that is not a valid index is now an error rather than a silence.
+    const met: number[] = [];
+    for (const entry of rawMet) {
+      const index = Number(entry);
+      if (!Number.isInteger(index) || index < 1 || index > criteria.length) {
+        die(
+          `${rel(MILESTONES_PATH)}: ${s(it, "id")} exit_met contains ${JSON.stringify(entry)}, ` +
+            `which is not an exit-criterion index. exit_met holds 1-based NUMBERS pointing into ` +
+            `exit_criteria (this milestone has ${criteria.length}), not the criteria themselves. ` +
+            `Write \`exit_met: [1, 2]\`.`,
+        );
+      }
+      if (met.includes(index)) {
+        die(`${rel(MILESTONES_PATH)}: ${s(it, "id")} lists exit criterion ${index} twice.`);
+      }
+      met.push(index);
+    }
+
+    return {
+      id: s(it, "id"),
+      name: s(it, "name"),
+      goal: s(it, "goal"),
+      exit_criteria: criteria,
+      exit_met: met,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -754,6 +785,16 @@ function cmdSyncBlocks(args: Args): void {
 }
 
 function cmdValidate(): void {
+  // milestones.yaml is validated too, and it was not before. `validate` read only
+  // tasks.yaml, so a malformed `exit_met` passed with "0 warning(s)" and the
+  // damage showed up as a gate report and a STATUS.md that disagreed about
+  // whether a milestone's exit criteria were met — both generated from this file.
+  //
+  // Loading it is the whole check: loadMilestones() rejects a bad index itself.
+  // Calling it here is what puts that rejection in front of CI (brief §2.3, a
+  // malformed tracker fails the build on its own merits).
+  loadMilestones();
+
   const doc = loadTasks();
   const problems = validateDoc(doc);
   const errors = problems.filter((p) => p.level === "error");

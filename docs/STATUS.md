@@ -8,8 +8,8 @@ Generated 2026-08-03.
 | Milestone | Progress | Done | Total | Open high-risk |
 | --- | --- | ---: | ---: | ---: |
 | **M0** Plan | `########################` 100% | 26 | 26 | 0 |
-| **M1** Control plane skeleton | `#######################-` 94% | 44 | 47 | 2 |
-| **M2** Agent and first host | `------------------------` 0% | 0 | 29 | 20 |
+| **M1** Control plane skeleton | `###################-----` 78% | 42 | 54 | 6 |
+| **M2** Agent and first host | `#-----------------------` 3% | 1 | 29 | 20 |
 | **M3** Static sites end to end | `------------------------` 0% | 0 | 27 | 18 |
 | **M4** Node and Bun apps | `------------------------` 0% | 0 | 15 | 10 |
 | **M5** RBAC completion | `------------------------` 0% | 0 | 7 | 6 |
@@ -22,10 +22,10 @@ Auth, org/team/project model, the can() function with 100% branch coverage, hash
 
 ### Exit criteria
 
-- [ ] Authorization matrix test harness exists and runs, even though most endpoints do not exist yet
-- [ ] `tasks validate` gates the build
+- [x] Authorization matrix test harness exists and runs, even though most endpoints do not exist yet
+- [x] `tasks validate` gates the build
 
-0 of 2 met.
+2 of 2 met.
 
 ## In progress
 
@@ -39,8 +39,10 @@ _None._
 
 | Task | Age | Owner | Risk | Acceptance | Title |
 | --- | ---: | --- | --- | ---: | --- |
-| `RL-M1-002` | 2d | agent | low | 1/3 | Build the CI pipeline and wire the tracker into it |
+| `RL-M1-015` | 2d | agent | medium | 2/3 | Schedule audit chain verification and surface its result |
 | `RL-M1-020` | 1d | agent | **high** | 2/3 | Rate limit every authentication path |
+| `RL-M1-041` | — | agent | low | 2/3 | Make the source scanners agree about comments |
+| `RL-M1-045` | 1d | agent | **high** | 2/3 | Chase the intermittent failure in the API token ceiling suite |
 
 ## Open high-risk tasks without security-test coverage
 
@@ -61,28 +63,31 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 - `RL-M7-015` (M7, todo) — Implement MongoDB support
 - `RL-M7-016` (M7, todo) — Decide how major-version upgrades are handled, or that they are not
 - `RL-M1-046` (M1, todo) — Chase the intermittent failure in the no-default-secrets suite
+- `RL-M1-049` (M1, todo) — Put the CSRF guard in front of every request, not every guarded route
+- `RL-M1-050` (M1, todo) — Make the audit half of a refusal impossible to drop
+- `RL-M1-052` (M1, todo) — Catch a repository export that is not async
 
 ## Test health
 
 | Suite | Passing | Rate |
 | --- | ---: | ---: |
-| Unit | 390 / 390 | 100% |
+| Unit | 408 / 409 | 100% |
 | Integration | not measured | — |
 | Authorization matrix | 191 / 191 | 100% |
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | 100% | must be 100% |
 
-Measured 2026-08-02T16:21:59.739Z.
+Measured 2026-08-03T21:43:53.736Z.
 
 ### Authorization matrix (role × endpoint × subject)
 
 | | |
 | --- | ---: |
-| Cells passing | 588 / 588 |
-| Endpoints × roles | 28 × 7 |
+| Cells passing | 630 / 630 |
+| Endpoints × roles | 30 × 7 |
 | Verified end to end (real request) | 56 |
 | Verified at the decision layer (`can()`) | 448 |
-| Unguarded by declaration, nothing to decide | 84 |
+| Unguarded by declaration, nothing to decide | 126 |
 
 > The remainder is verified one layer down, against `can()` with real grants and
 > row-level security. Two things are not expressible as a request: a route the
@@ -94,20 +99,20 @@ Measured 2026-08-02T16:21:59.739Z.
 | Severity | Open |
 | --- | ---: |
 | Critical | 0 |
-| High | 0 |
+| High | 1 |
 | Medium | 0 |
 
-Gate check (critical + high must be zero): PASS
+Gate check (critical + high must be zero): **FAIL — gate blocked**
 
 ## Build
 
-CI: _no status recorded yet._
+CI: **green** at `18cca248` (2026-08-03T19:25:43Z)
 
 ## Totals
 
 | Status | Count |
 | --- | ---: |
-| todo | 102 |
-| review | 2 |
-| done | 70 |
-| **all** | **174** |
+| todo | 108 |
+| review | 4 |
+| done | 69 |
+| **all** | **181** |

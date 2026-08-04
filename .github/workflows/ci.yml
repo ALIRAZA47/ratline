@@ -12,9 +12,22 @@
 name: ci
 
 on:
+  # Push only, deliberately (RL-M1-048). A `pull_request:` trigger alongside this
+  # one meant every push to a branch with an open PR started TWO full pipelines —
+  # `github.ref` differs between the two events, so the concurrency group below
+  # does not collapse them, and neither cancels the other.
+  #
+  # What that trigger buys is a run against the branch merged into main, which is
+  # a genuinely different question from "does the branch pass". It is not worth
+  # paying for on every push here, because main carries this same workflow: a
+  # merge that breaks it is caught by main's own run within a minute, not never.
+  #
+  # RESTORE `pull_request:` IF THIS REPOSITORY EVER TAKES OUTSIDE CONTRIBUTIONS.
+  # A push from a fork does not trigger a workflow in this repository, so a fork's
+  # pull request would arrive with no CI at all — and unlike the merge-result
+  # question, that gap is silent.
   push:
     branches: ["**"]
-  pull_request:
 
 permissions:
   contents: read
@@ -48,6 +61,55 @@ jobs:
   code:
     name: Lint, typecheck, test
     runs-on: ubuntu-latest
+
+    # A real Postgres, for the same reason the migration job has one. Without it
+    # every database-backed suite SKIPS — and the first run of this workflow
+    # proved what that costs: 320 of 592 tests passed, the authorization matrix
+    # reported "did not run, it is NOT green, it is unknown", and both coverage
+    # gates refused at 71%. The gates were right and the workflow was wrong.
+    #
+    # Skipping is the dangerous shape here, not failing. `test/support/db.ts`
+    # skips only when DATABASE_URL is UNSET and throws when it is set and
+    # unreachable, precisely so a pipeline cannot report a green security suite
+    # that never touched a database. Setting it below turns any future
+    # connection problem into a loud failure instead of a quiet skip.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: ratline
+          POSTGRES_PASSWORD: ratline
+          POSTGRES_DB: ratline_test
+          # Matches local development, and that is the point rather than a
+          # convenience. The fixtures connect as `ratline_app` with no password —
+          # migration 2 creates it NOLOGIN and passwordless deliberately, because
+          # a login role with a shipped password is the default credential C4
+          # forbids — so under scram-sha-256 every authorization suite fails to
+          # connect while the unit tests pass, which is what the second CI run
+          # showed: 374 of 592, and the matrix reporting "unknown".
+          #
+          # Giving the role a password for CI only would make the pipeline test a
+          # configuration production never uses. Trust here keeps "passes
+          # locally" and "passes in CI" the same claim. It is safe in a way it
+          # would not be anywhere else: an ephemeral container, on loopback,
+          # inside one job, destroyed with it.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # The suites create a scratch DATABASE per test, so this role needs
+      # CREATEDB — the postgres image makes POSTGRES_USER a superuser, which
+      # covers it and also covers the one `alter role ratline_app login` the
+      # fixtures perform. The APPLICATION still connects as the unprivileged
+      # ratline_app; a superuser bypasses row-level security unconditionally, so
+      # using it for the assertions would make every isolation test vacuous.
+      DATABASE_URL: postgres://ratline:ratline@127.0.0.1:5432/ratline_test
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -95,6 +157,20 @@ jobs:
           POSTGRES_USER: ratline
           POSTGRES_PASSWORD: ratline
           POSTGRES_DB: ratline_test
+          # Matches local development, and that is the point rather than a
+          # convenience. The fixtures connect as `ratline_app` with no password —
+          # migration 2 creates it NOLOGIN and passwordless deliberately, because
+          # a login role with a shipped password is the default credential C4
+          # forbids — so under scram-sha-256 every authorization suite fails to
+          # connect while the unit tests pass, which is what the second CI run
+          # showed: 374 of 592, and the matrix reporting "unknown".
+          #
+          # Giving the role a password for CI only would make the pipeline test a
+          # configuration production never uses. Trust here keeps "passes
+          # locally" and "passes in CI" the same claim. It is safe in a way it
+          # would not be anywhere else: an ephemeral container, on loopback,
+          # inside one job, destroyed with it.
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports: ["5432:5432"]
         options: >-
           --health-cmd pg_isready
@@ -123,18 +199,64 @@ jobs:
         env:
           DATABASE_URL: postgres://ratline:ratline@127.0.0.1:5432/ratline_test
 
+  agent:
+    name: Agent binaries
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+        # fetch-depth: 0 is not needed, but the checkout must be a real
+        # repository rather than an exported tree: Go stamps the commit into main
+        # packages from the VCS state, and agent/internal/build's artifact test
+        # asserts a 40-character revision landed. An export would fail it —
+        # correctly, because a binary built that way is unattributable (C6).
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: agent/go.mod
+          # No module cache key needed: the module has no dependencies, and a
+          # test asserts it stays that way. If caching ever becomes worthwhile
+          # here, that is the signal something was added.
+          cache: false
+
+      # Acceptance 2 of RL-M2-001. `verify` is gofmt, go vet, go test, and a
+      # reproducibility check that builds the same tree twice and compares the
+      # bytes — the claim ADR 0002's checksum-before-execute bootstrap depends
+      # on. Running the script rather than inlining the steps keeps CI and a
+      # developer's terminal executing the same checks in the same order.
+      - name: Verify
+        run: ./scripts/agent verify
+
+      # Acceptance 1. The test above already parses the ELF headers, so this is
+      # the release path rather than the verification: it proves the shipping
+      # build works on a clean runner and publishes the artefacts with their
+      # checksums.
+      - name: Release build
+        run: ./scripts/agent build "0.0.0-ci.${{ github.run_number }}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agent-binaries
+          path: agent/dist/
+          if-no-files-found: error
+
   status:
     name: Record CI status
     runs-on: ubuntu-latest
-    needs: [tracker, code, database]
+    needs: [tracker, code, database, agent]
     if: success()
     steps:
       - uses: actions/checkout@v4
 
       # `tasks done` refuses to close a task unless this file reports green.
-      # It is written only when BOTH jobs above succeeded, so "green" means the
-      # whole pipeline, not one step of it. Nothing outside CI writes this file
-      # — a local run that minted its own green light would defeat the gate.
+      # It is written only when ALL FOUR jobs above succeeded, so "green" means
+      # the whole pipeline, not one step of it. Nothing outside CI writes this
+      # file — a local run that minted its own green light would defeat the gate.
+      #
+      # Adding a job means adding it to `needs` as well. Forgetting to would not
+      # break anything visibly: the pipeline would still go green, while quietly
+      # no longer waiting for the new job's result.
       - name: Write ci-status.json
         run: |
           mkdir -p .ratline

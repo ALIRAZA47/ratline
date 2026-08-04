@@ -1,8 +1,19 @@
 # Build output and dependencies
 node_modules/
 dist/
-build/
 *.tsbuildinfo
+
+# ANCHORED, and it has to be. This line used to read `build/`, which git matches
+# at every depth — so it silently excluded `agent/internal/build/`, the Go package
+# that reports the agent's version and commit. `git add -A` skipped the directory
+# without a word, the local build kept working off files that were on disk but
+# untracked, and the first CI run on a clean checkout failed with "no required
+# module provides package .../internal/build".
+#
+# `build` is an ordinary name for a source package. Do not un-anchor this, and do
+# not add unanchored patterns for other ordinary words — test/toolchain/repository_hygiene.test.ts
+# fails if any source file becomes ignored.
+/build/
 
 # Go
 /bin/

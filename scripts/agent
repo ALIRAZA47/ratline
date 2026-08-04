@@ -1,0 +1,130 @@
+#!/bin/sh
+# The agent binaries (RL-M2-001). Same shape as scripts/host and scripts/pg.
+#
+#   ./scripts/agent build [version]   both binaries, both architectures
+#   ./scripts/agent verify            everything CI checks, in CI's order
+#   ./scripts/agent test             `go test ./...` on its own
+#   ./scripts/agent clean             remove agent/dist
+#
+# Two binaries, because the agent is unprivileged and ratline-privd is the root
+# helper that distrusts it (ADR 0004). Two architectures, because an arm64 host
+# is a normal thing to manage and a build that only ever ran on amd64 discovers
+# its cgo dependency on somebody else's server.
+set -eu
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+MODULE="$ROOT/agent"
+DIST="$MODULE/dist"
+BINARIES="ratline-agent ratline-privd"
+ARCHES="amd64 arm64"
+
+say() { printf '%s\n' "$*"; }
+die() { printf '%s\n' "$*" >&2; exit 1; }
+
+need_go() {
+	command -v go >/dev/null 2>&1 || die "go is not on PATH. The agent needs the Go toolchain named in agent/go.mod."
+}
+
+cmd_build() {
+	need_go
+	version=${1:-0.0.0-dev}
+
+	# A warning rather than a refusal: building a dirty tree is a normal thing to
+	# do while working, and the binary says so itself when asked. What must not
+	# happen is a dirty binary reaching a host silently, which is why the notice
+	# is here as well as in `version` output.
+	if ! git -C "$ROOT" diff --quiet HEAD 2>/dev/null; then
+		say "NOTE: the tree has uncommitted changes, so these binaries will report"
+		say "      themselves untraceable and enrolment will refuse them. Fine for"
+		say "      local work; commit before building anything you intend to install."
+		say ""
+	fi
+
+	rm -rf "$DIST"
+	mkdir -p "$DIST"
+
+	for binary in $BINARIES; do
+		for arch in $ARCHES; do
+			out="$DIST/$binary-linux-$arch"
+			# -trimpath so the artefact carries no absolute path from this
+			# machine, which is both a small information leak and the usual
+			# reason two builds of one commit differ.
+			#
+			# The commit is NOT passed here. Go stamps it from the checkout by
+			# itself, so a binary built without this script is attributable too —
+			# see the reasoning in agent/internal/build/build.go.
+			( cd "$MODULE" && CGO_ENABLED=0 GOOS=linux GOARCH="$arch" \
+				go build -trimpath \
+					-ldflags "-s -w -X github.com/ALIRAZA47/ratline/agent/internal/build.Version=$version" \
+					-o "$out" "./cmd/$binary" )
+			say "built $(basename "$out")"
+		done
+	done
+
+	say ""
+	say "sha256:"
+	( cd "$DIST" && shasum -a 256 ./* 2>/dev/null || sha256sum ./* )
+}
+
+cmd_test() {
+	need_go
+	( cd "$MODULE" && go test ./... )
+}
+
+cmd_verify() {
+	need_go
+	failed=0
+
+	say "== gofmt =="
+	unformatted=$( cd "$MODULE" && gofmt -l . )
+	if [ -n "$unformatted" ]; then
+		say "not gofmt'd:"
+		printf '%s\n' "$unformatted"
+		failed=1
+	else
+		say "clean"
+	fi
+
+	say ""
+	say "== go vet =="
+	if ( cd "$MODULE" && go vet ./... ); then say "clean"; else failed=1; fi
+
+	say ""
+	say "== go test =="
+	if ( cd "$MODULE" && go test ./... ); then :; else failed=1; fi
+
+	# The reproducibility claim in agent/go.mod, checked rather than asserted.
+	# Two builds of one tree must be byte-identical, because "verify the checksum
+	# of the binary before executing it" (ADR 0002's bootstrap) is worth nothing
+	# if the checksum depends on which machine built it.
+	say ""
+	say "== reproducible build =="
+	scratch=$(mktemp -d)
+	trap 'rm -rf "$scratch"' EXIT
+	for pass in 1 2; do
+		( cd "$MODULE" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+			go build -trimpath -o "$scratch/pass$pass" ./cmd/ratline-agent )
+	done
+	if cmp -s "$scratch/pass1" "$scratch/pass2"; then
+		say "clean — two builds of this tree are byte-identical"
+	else
+		say "NOT REPRODUCIBLE: two builds of the same tree differ."
+		say "Either the build gained a timestamp or a path, or the claim in"
+		say "agent/go.mod is now false and should be removed rather than left."
+		failed=1
+	fi
+
+	say ""
+	[ "$failed" -eq 0 ] || die "agent verify FAILED"
+	say "agent verify: all clean"
+}
+
+cmd_clean() { rm -rf "$DIST"; say "removed agent/dist"; }
+
+case "${1:-}" in
+	build) shift; cmd_build "$@" ;;
+	test) cmd_test ;;
+	verify) cmd_verify ;;
+	clean) cmd_clean ;;
+	*) die "usage: scripts/agent build [version] | verify | test | clean" ;;
+esac
