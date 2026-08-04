@@ -1616,13 +1616,14 @@
 - id: RL-M2-005
   title: Implement agent enrolment and mutual transport authentication
   milestone: M2
-  status: in-progress
+  status: done
   owner: agent
   estimate: L
   depends_on: [RL-M2-004]
   blocks: [RL-M2-006, RL-M2-010]
   risk: high
   started_at: 2026-08-04
+  done_at: 2026-08-04
   acceptance:
     - Each host registers its own Ed25519 signing key at enrolment
     - Keys are individually revocable and revocation takes effect on next connection
