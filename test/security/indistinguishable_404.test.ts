@@ -38,11 +38,28 @@ import { fileURLToPath } from "node:url";
 
 import {
   REFUSAL_CAUSES,
+  auditRecordFor,
   refuse,
+  refusalWireWithoutAuditForTests,
   serialiseRefusal,
   unauthenticated,
   type RefusalCause,
 } from "../../src/api/refusal.ts";
+
+/**
+ * The wire response of a pending refusal (RL-M1-050).
+ *
+ * `refuse()` no longer hands out `{ wire, audit }`, because taking `.wire` and
+ * dropping `.audit` is exactly what let a cross-tenant probe go unrecorded. This
+ * file is the one place that legitimately needs the response without an audit
+ * entry: it PROVES the response is a single frozen constant whatever caused it,
+ * which cannot be shown without holding the constant.
+ *
+ * The unpleasant name is the guarantee. `refusal_accounting.test.ts` scans `src/`
+ * and fails if it appears there, so the exemption is enforced rather than
+ * requested, and this alias keeps that visible on every line below.
+ */
+const wireOf = refusalWireWithoutAuditForTests;
 import {
   ACTION_CATALOGUE,
   ALL_ACTIONS,
@@ -110,7 +127,7 @@ test("every refusal is the same bytes, whatever caused it", () => {
   let compared = 0;
 
   for (const truth of everyTruth()) {
-    const { wire } = refuse({ action: someActionFor(truth.resourceType), ...truth });
+    const wire = wireOf(refuse({ action: someActionFor(truth.resourceType), ...truth }));
     distinct.add(serialiseRefusal(wire).toString("base64"));
     compared += 1;
   }
@@ -145,19 +162,19 @@ test("a denied request and an absent one are the same object, not merely equal",
     cause: "absent",
     reason: "unknown-scope",
   });
-  assert.equal(denied.wire, absent.wire);
-  assert.equal(denied.wire.status, 404, "403 would assert the resource exists");
+  assert.equal(wireOf(denied), wireOf(absent));
+  assert.equal(wireOf(denied).status, 404, "403 would assert the resource exists");
 });
 
 test("the response is 404 and says nothing else", () => {
   const id = randomUUID();
-  const { wire } = refuse({
+  const wire = wireOf(refuse({
     action: "secret.read_value",
     resourceType: "secret",
     resourceId: id,
     cause: "denied",
     reason: "explicit-deny",
-  });
+  }));
   const bytes = serialiseRefusal(wire).toString("utf8");
 
   // Looking for the inputs in the output, rather than reading the output and
@@ -169,13 +186,14 @@ test("the response is 404 and says nothing else", () => {
 });
 
 test("no header varies, including the ones nobody thinks of as content", () => {
-  const names = refuse({
+  const refusalForHeaders = refuse({
     action: "host.read",
     resourceType: "host",
     resourceId: null,
     cause: "absent",
     reason: "unknown-scope",
-  }).wire.headers.map(([name]) => name);
+  });
+  const names = wireOf(refusalForHeaders).headers.map(([name]: readonly [string, string]) => name);
 
   assert.deepEqual(names, [...names].sort(), "header order is part of the bytes");
   assert.deepEqual(names, names.map((n) => n.toLowerCase()));
@@ -191,13 +209,14 @@ test("401 is a different answer to a different question", () => {
   // takes no arguments — and this pins the pair apart so a later refactor
   // cannot quietly route denials into it.
   const anonymous = unauthenticated();
-  const denied = refuse({
+  const deniedPending = refuse({
     action: "site.read",
     resourceType: "site",
     resourceId: randomUUID(),
     cause: "denied",
     reason: "no-grant",
-  }).wire;
+  });
+  const denied = wireOf(deniedPending);
 
   assert.equal(anonymous.status, 401);
   assert.notEqual(anonymous.status, denied.status);
@@ -244,8 +263,8 @@ test("the truth the response withholds reaches the audit log", { skip }, async (
         reason: "unknown-scope",
       });
 
-      await recordAudit(ctx, denied.audit);
-      await recordAudit(ctx, absent.audit);
+      await recordAudit(ctx, auditRecordFor(denied));
+      await recordAudit(ctx, auditRecordFor(absent));
 
       const entries = await listAudit(ctx, { limit: 10 });
       const reasons = entries.map((e) => e.reason);
@@ -296,13 +315,13 @@ test("the refusal cannot be constructed without the branded type", () => {
   // Documented as a compile-time property, asserted here as a runtime one:
   // the object handed out is frozen, so even a caller holding a reference
   // cannot bend it into a per-request message.
-  const { wire } = refuse({
+  const wire = wireOf(refuse({
     action: "site.read",
     resourceType: "site",
     resourceId: null,
     cause: "absent",
     reason: "unknown-scope",
-  });
+  }));
   assert.ok(Object.isFrozen(wire));
   assert.ok(Object.isFrozen(wire.headers));
   assert.throws(() => {

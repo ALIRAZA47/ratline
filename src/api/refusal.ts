@@ -62,8 +62,9 @@
  * attacker can take, rather than here.
  */
 
-import type { AuditAction, AuditResourceType } from "../authz/audit_events.ts";
+import type { AuditAction, AuditEvent, AuditResourceType } from "../authz/audit_events.ts";
 import type { AuditRecord } from "../repo/audit.ts";
+import type { AuthzContext } from "../authz/context.ts";
 
 declare const brand: unique symbol;
 
@@ -142,19 +143,98 @@ export type RefusalTruth = {
  * inside src/repo/ — and because a refusal produced during a failed
  * authentication has no `AuthzContext` to record against yet (ADR 0014).
  */
-export function refuse(truth: RefusalTruth): { readonly wire: Refusal; readonly audit: AuditRecord } {
+/**
+ * A refusal that has not been accounted for yet (RL-M1-050).
+ *
+ * `refuse()` used to return `{ wire, audit }`, and the comment above claimed the
+ * refusal could not be obtained without recording what happened. It could:
+ * `refuse({...}).wire` takes the response and drops the record, which is exactly
+ * what `found()` in server.ts did. The consequence was that a cross-tenant probe
+ * on the one route able to express one returned an indistinguishable 404 — RL-M1-026
+ * working — and wrote nothing to the audit log. Correct on the wire, invisible in
+ * the record, which is the worse half of that trade: an attacker enumerating ids
+ * across tenants left no trace at all.
+ *
+ * So the response is now sealed inside a value with no public `wire` field. The
+ * only ways out are {@link recordAndRefuse}, which writes the audit entry first,
+ * and {@link alreadyAudited}, which demands the name of the entry that covers it.
+ * Destructuring cannot reach the response, so the failure mode is a type error
+ * rather than a silence.
+ */
+export type PendingRefusal = {
+  readonly [brand]: true;
+  /** @internal Reachable only through this module's own accessors. */
+  readonly truth: RefusalTruth;
+};
+
+export function refuse(truth: RefusalTruth): PendingRefusal {
+  return { truth } as PendingRefusal;
+}
+
+/** The audit record a pending refusal owes. Exported for tests, not for callers. */
+export function auditRecordFor(pending: PendingRefusal): AuditRecord {
   return {
-    wire: REFUSED,
-    audit: {
-      action: truth.action,
-      resourceType: truth.resourceType,
-      resourceId: truth.resourceId,
-      decision: "deny",
-      reason: truth.reason,
-      // The distinction the response refuses to make, kept where it belongs.
-      metadata: { refusal_cause: truth.cause },
-    },
+    action: pending.truth.action,
+    resourceType: pending.truth.resourceType,
+    resourceId: pending.truth.resourceId,
+    decision: "deny",
+    reason: pending.truth.reason,
+    // The distinction the response refuses to make, kept where it belongs.
+    metadata: { refusal_cause: pending.truth.cause },
   };
+}
+
+/**
+ * Record the refusal, then return the response.
+ *
+ * The order is the point. If `recordAudit` throws, the caller gets the exception
+ * and no response — which is the right way round: a refusal nobody can account
+ * for should surface as a fault, not be served quietly. Serving the 404 first and
+ * auditing afterwards would put the failure exactly where nobody looks.
+ */
+export async function recordAndRefuse(
+  ctx: AuthzContext,
+  pending: PendingRefusal,
+  record: (ctx: AuthzContext, entry: AuditRecord) => Promise<unknown>,
+): Promise<Refusal> {
+  await record(ctx, auditRecordFor(pending));
+  return REFUSED;
+}
+
+/**
+ * The response for a refusal whose audit entry was already written elsewhere.
+ *
+ * `guardCsrf` is the real case: it records `session.csrf_rejected` itself, with
+ * the origin and route, before returning its verdict. Auditing again here would
+ * double-count a single rejected request.
+ *
+ * The `writtenBy` argument is not decoration. It is the whole reason this is a
+ * separate function rather than a `.wire` getter: an exemption has to name the
+ * record that covers it, so `grep alreadyAudited` lists every place the guarantee
+ * is claimed rather than enforced, and a reviewer can check each claim. A silent
+ * escape hatch on "every refusal is audited" makes the rule advisory.
+ */
+export function alreadyAudited(_pending: PendingRefusal, writtenBy: AuditEvent): Refusal {
+  void writtenBy;
+  return REFUSED;
+}
+
+/**
+ * The wire response with no audit record, FOR TESTS ONLY.
+ *
+ * `indistinguishable_404.test.ts` is the test that proves every refusal is one
+ * frozen constant whatever caused it, and it cannot prove that without holding the
+ * constant. Every other way of giving it access — a public `wire` getter, an
+ * unsealing cast — would hand the same thing to production code, which is the
+ * defect RL-M1-050 fixed.
+ *
+ * "Must not be called from src/" is worth nothing as a comment, so
+ * `test/security/refusal_accounting.test.ts` scans the source and fails if this
+ * name appears under `src/`. The name is deliberately unpleasant for the same
+ * reason: nobody reaches for it by accident, and it reads as wrong in a diff.
+ */
+export function refusalWireWithoutAuditForTests(_pending: PendingRefusal): Refusal {
+  return REFUSED;
 }
 
 /**

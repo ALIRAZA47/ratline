@@ -38,8 +38,12 @@
  *   2. **Rate limiting**, on the authentication paths only. It must run BEFORE
  *      the expensive work — that ordering is the whole reason R-15 said this
  *      belonged to a route handler — and it is spent, not merely consulted.
- *   3. **CSRF**, on every unsafe method. `isSafeMethod` from the route table is
- *      consulted rather than copied.
+ *   3. **CSRF**, on every unsafe method — and "every" is literal, checked once in
+ *      front of the whole app rather than per route. It was per-route until
+ *      RL-M1-049, which protected the routes that reached the loop and left
+ *      `POST /auth/sign-out` — bound above it as public — open to a cross-origin
+ *      request that ended an operator's session. `isSafeMethod` from the route
+ *      table is consulted rather than copied.
  *
  * None of the three is an authorization decision. All three are things that
  * must happen before one, and could not live in a repository because they are
@@ -47,8 +51,8 @@
  *
  * ## Routes without handlers are not bound
  *
- * The route table declares 27 routes and this binds the ones that have a
- * repository function to call. The rest are deliberately absent rather than
+ * The route table declares 30 routes and this binds the 12 that have a repository
+ * function to call. The rest are deliberately absent rather than
  * bound to a stub, because a stub would answer 200-or-501 to everybody and
  * report itself as reachable — the matrix would then measure a guard that does
  * not exist. An unbound route 404s from the framework, which is honest, and
@@ -65,8 +69,16 @@ import {
   type HttpMethod,
   type Route,
 } from "./routes.ts";
-import { refuse, secondFactorOwed, unauthenticated, type Refusal } from "./refusal.ts";
 import {
+  alreadyAudited,
+  recordAndRefuse,
+  refuse,
+  secondFactorOwed,
+  unauthenticated,
+  type Refusal,
+} from "./refusal.ts";
+import {
+  CSRF_AUDIT_ACTION,
   CSRF_HEADER,
   cookieAttributes,
   cookiePolicy,
@@ -162,15 +174,19 @@ function json(body: unknown, status = 200): Response {
  */
 async function renderDenial(ctx: AuthzContext, route: Route, error: NotPermittedError): Promise<Response> {
   const action: AuditAction = route.requires ?? "organization.read";
-  const { wire, audit } = refuse({
-    action,
-    resourceType: "organization",
-    resourceId: null,
-    cause: "denied",
-    reason: error.decision.reason,
-  });
-  await recordAudit(ctx, audit);
-  return send(wire);
+  return send(
+    await recordAndRefuse(
+      ctx,
+      refuse({
+        action,
+        resourceType: "organization",
+        resourceId: null,
+        cause: "denied",
+        reason: error.decision.reason,
+      }),
+      recordAudit,
+    ),
+  );
 }
 
 /** The header carrying the first-run token. Not a cookie: it is typed in once. */
@@ -244,26 +260,41 @@ function handlers(deps: ServerDeps): Map<string, Bound["handle"]> {
    * distinguishable from a refusal, reintroducing at the HTTP layer exactly the
    * oracle the data layer had closed.
    */
-  const found = <T>(value: T | null, route: string, resourceType: "project" | "organization"): Response =>
+  const found = async <T>(
+    ctx: AuthzContext,
+    value: T | null,
+    route: string,
+    resourceType: "project" | "organization",
+  ): Promise<Response> =>
     value === null
       ? send(
-          refuse({
-            action: route === "GET /projects/:projectId" ? "project.read" : "organization.read",
-            resourceType,
-            resourceId: null,
-            cause: "absent",
-            reason: "unknown-scope",
-          }).wire,
+          // THE DEFECT THIS SIGNATURE EXISTS TO PREVENT (RL-M1-050). This used to
+          // be `refuse({...}).wire`, which served the 404 and dropped the audit
+          // record, so a cross-tenant id probe — the only kind this route can
+          // express — was indistinguishable on the wire AND invisible in the log.
+          // Taking `ctx` is what makes the record possible, so the parameter is
+          // load-bearing rather than plumbing.
+          await recordAndRefuse(
+            ctx,
+            refuse({
+              action: route === "GET /projects/:projectId" ? "project.read" : "organization.read",
+              resourceType,
+              resourceId: null,
+              cause: "absent",
+              reason: "unknown-scope",
+            }),
+            recordAudit,
+          ),
         )
       : json(value);
 
   map.set("GET /organization", async (ctx) =>
-    found(await currentOrganization(ctx), "GET /organization", "organization"),
+    found(ctx, await currentOrganization(ctx), "GET /organization", "organization"),
   );
   map.set("GET /members", async (ctx) => json(await listMembers(ctx)));
   map.set("GET /projects", async (ctx) => json(await listProjects(ctx)));
   map.set("GET /projects/:projectId", async (ctx, c) =>
-    found(await findProject(ctx, c.req.param("projectId") ?? ""), "GET /projects/:projectId", "project"),
+    found(ctx, await findProject(ctx, c.req.param("projectId") ?? ""), "GET /projects/:projectId", "project"),
   );
   map.set("GET /audit", async (ctx) => json(await listAudit(ctx, { limit: 50 })));
 
@@ -279,13 +310,17 @@ function handlers(deps: ServerDeps): Map<string, Bound["handle"]> {
       // the refusal is rendered without a second entry.
       if (error instanceof NotPermittedToRevokeSessions) {
         return send(
-          refuse({
-            action: "member.revoke_sessions",
-            resourceType: "member",
-            resourceId: c.req.param("userId") ?? null,
-            cause: "denied",
-            reason: "not-permitted",
-          }).wire,
+          await recordAndRefuse(
+            ctx,
+            refuse({
+              action: "member.revoke_sessions",
+              resourceType: "member",
+              resourceId: c.req.param("userId") ?? null,
+              cause: "denied",
+              reason: "not-permitted",
+            }),
+            recordAudit,
+          ),
         );
       }
       throw error;
@@ -305,6 +340,82 @@ export function createServer(deps: ServerDeps): Hono {
   const bound = handlers(deps);
   const trusted = deps.trustedOrigins ?? resolveTrustedOrigins();
   const cookieName = sessionCookieName();
+
+  // ---------------------------------------------------------------------------
+  // The CSRF guard, in front of EVERY request (RL-M1-049)
+  //
+  // This was previously inside the guarded-route loop below, which protected the
+  // routes that reached the loop and nothing else. `POST /auth/sign-out` is bound
+  // above it as a public route, so it never got there: a cross-origin fetch with
+  // credentials from any page an operator happened to visit ended their session,
+  // and left no audit entry either. Only SameSite stood in the way, and
+  // `csrf.ts` argues at length that SameSite must never be the only lock, because
+  // the population of browsers reaching a self-hosted install is not one we pick.
+  //
+  // csrf.ts's own instruction to the server author was already explicit: call it
+  // on every request, "not per-route and not opt-in: the default has to be
+  // protected, or the one route somebody forgets is the one that matters". This is
+  // that instruction followed. A route added in M2 is covered by existing.
+  //
+  // WHY A MISSING SESSION PASSES THROUGH. `guardCsrf` decides that itself, and it
+  // is the right rule rather than a convenience: a request with no session has no
+  // authority to borrow, so there is nothing for a forgery to accomplish. It is
+  // also what makes sign-in and two-factor work at all — they are unsafe methods
+  // that necessarily arrive without a session. Sign-out is the opposite case and
+  // is why this is middleware: it has a session, so it has something to lose.
+  // ---------------------------------------------------------------------------
+  app.use("*", async (c, next) => {
+    const method = c.req.method as HttpMethod;
+    if (isSafeMethod(method)) return next();
+
+    const orgId = await deps.resolveTenant(c.req.raw);
+    const token = readCookie(c.req.header("cookie"), cookieName);
+    // No tenant or no cookie means no session, so nothing to forge. The route's
+    // own authentication still refuses it if it needs one — this guard is not
+    // standing in for that, and must not be read as doing so.
+    if (orgId === null || token === null) return next();
+
+    const preAuth = contextForServiceIdentity({
+      orgId,
+      serviceIdentityId: deps.signInIdentityId,
+      name: "sign-in",
+      requestId: crypto.randomUUID(),
+    });
+    const session = await validateSession(preAuth, token);
+    if (session === null) return next();
+
+    const verdict = await guardCsrf(
+      preAuth,
+      {
+        method,
+        headers: Object.fromEntries(c.req.raw.headers.entries()),
+        url: c.req.url,
+        // The matched pattern, not the concrete path, so an audit entry for
+        // /projects/:projectId groups with its siblings instead of fragmenting
+        // into one row per id — and so a probed id never lands in the route field.
+        routeKey: `${method} ${c.req.routePath}`,
+      },
+      session,
+      { cookieSecret: deps.cookieSecret, trustedOrigins: trusted },
+    );
+
+    if (verdict.ok) return next();
+
+    // guardCsrf has already written `session.csrf_rejected` with the origin and
+    // route, so this refusal is accounted for and says which record covers it.
+    return send(
+      alreadyAudited(
+        refuse({
+          action: CSRF_AUDIT_ACTION,
+          resourceType: "session",
+          resourceId: session.id,
+          cause: "denied",
+          reason: verdict.refusal,
+        }),
+        CSRF_AUDIT_ACTION,
+      ),
+    );
+  });
 
   // --- public routes, each with a written reason in the table ---------------
 
@@ -533,30 +644,11 @@ export function createServer(deps: ServerDeps): Hono {
         ip: c.req.header("x-forwarded-for") ?? null,
       });
 
-      if (!isSafeMethod(route.method)) {
-        const verdict = await guardCsrf(
-          ctx,
-          {
-            method: route.method,
-            headers: Object.fromEntries(c.req.raw.headers.entries()),
-            url: c.req.url,
-            routeKey: routeKey(route),
-          },
-          session,
-          { cookieSecret: deps.cookieSecret, trustedOrigins: trusted },
-        );
-        if (!verdict.ok) {
-          return send(
-            refuse({
-              action: route.requires,
-              resourceType: "session",
-              resourceId: session.id,
-              cause: "denied",
-              reason: verdict.refusal,
-            }).wire,
-          );
-        }
-      }
+      // NO CSRF CHECK HERE, deliberately (RL-M1-049). It used to live in this
+      // loop, which meant it protected exactly the routes that reached the loop —
+      // and POST /auth/sign-out is bound above it as a public route, so a
+      // cross-origin request could end an operator's session. The guard is now
+      // middleware that sees every request. Per-route was the bug.
 
       try {
         return await handle(ctx, c);

@@ -3867,12 +3867,13 @@
 - id: RL-M1-048
   title: Stop running the whole suite twice per CI run
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: S
   depends_on: []
   blocks: []
   risk: low
+  done_at: 2026-08-04
   acceptance:
     - The suite runs once per CI run, and the integration files run in addition rather than instead
     - Wall clock roughly halves without losing any signal
@@ -3882,7 +3883,8 @@
     2026-08-03 — The database job's last step is ci-metrics --integration, which runs all ~600 tests plus the four integration files. The code job already ran the same 600. So every CI run executes the suite twice for one extra file's worth of signal, roughly doubling wall clock. Noticed while watching the first runs; deliberately not fixed mid-run, because changing the workflow would have cancelled the run that was about to give a verdict.
     2026-08-03 — 2026-08-04 — Acceptance 1 met three times over: the authz suite no longer runs twice inside one ci-metrics invocation (the per-file test:summary events give the subtotal that the second run was paying for), --integration no longer drags the whole suite along, and push+pull_request no longer start two pipelines per push. Acceptance 2 NOT checked: 'wall clock roughly halves' needs a before-and-after on the same hardware, and I only have the after. The honest expectation is that total CI compute more than halves while a single pipeline's wall clock falls by less, because the jobs run in parallel and the code job was always the long pole — it loses the authz re-run but keeps the main suite. Compare the Tests step duration in the last green run against the next one before ticking this.
     2026-08-03 — 2026-08-04 — MEASURED, and acceptance 2 stays UNCHECKED because the honest answer is that it measures the wrong quantity. Old run 30854557961 against new run 30856251255, same hardware: code job 127s -> 100s (-21%), database job 115s -> 29s (-75%), pipelines per push 2 -> 1. Total CI compute 538 -> 181 job-seconds, a 66% cut, so THAT more than halved. But 'wall clock' for a single pipeline fell 21%, not 50%, because the jobs run in parallel and the code job was always the long pole: it loses the authz re-run and keeps the main suite. The criterion was written expecting a wall-clock doubling; the doubling turned out to be mostly in parallel work. I am not rewriting the criterion to fit the result — that is the goalpost-moving refused over RL-M2-001's dependency edge. It needs a one-line ruling: accept 'roughly halves' as satisfied by the 66% compute cut, or leave the task open pending a real wall-clock win (which would mean sharding the code job).
-  acceptance_met: [1]
+    2026-08-04 — 2026-08-04 — Acceptance 2 RULED MET by the owner on the compute figure (A-02): 538 -> 181 job-seconds is the 66% cut, accepted as 'roughly halves' even though single-pipeline wall clock fell 21%. The criterion's wording is left as written and the ruling is recorded in docs/AUTHORIZATIONS.md, so the gap between the two numbers stays visible instead of being edited away.
+  acceptance_met: [1, 2]
 - id: RL-M1-049
   title: Put the CSRF guard in front of every request, not every guarded route
   milestone: M1
@@ -3900,6 +3902,8 @@
   decisions: []
   notes: |
     2026-08-03 — 2026-08-04 — Found by the compliance reviewer, DEMONSTRATED by execution against a running server, and it is a security issue in already-merged work (§2.10 stop condition). guardCsrf is called exactly once, at src/api/server.ts:537, inside the 'for (const route of guardedRoutes())' loop that starts at line 505. The four public POST routes are bound BEFORE that loop, so they never reach it. Sign-in, two-factor and bootstrap are legitimately exempt because checkCsrf refuses with 'unauthenticated' when there is no session. POST /auth/sign-out is NOT: it has a session. A cross-origin fetch with credentials:'include' from any page an operator visits ends their session, and only SameSite stands in the way — which src/api/csrf.ts:17-26 argues at length must never be the only lock. Aggravating: the forced sign-out writes zero audit entries. csrf.ts:732 already instructs the server author to call guardCsrf on every request, 'not per-route and not opt-in: the default has to be protected, or the one route somebody forgets is the one that matters'. That is the route somebody forgot, and I am the somebody.
+    2026-08-04 — 2026-08-04 — FIXED structurally, authorized by A-03. guardCsrf moved out of the guarded-route loop into app.use("*") middleware, so it sees every request and a route added in M2 is covered by existing rather than by remembering. A missing session still passes through, and that is guardCsrf's own rule rather than a shortcut: a request with no session has no authority to borrow, which is also what lets sign-in and two-factor work at all as unsafe methods arriving without one. Sign-out is the opposite case, and is precisely why this has to be middleware. Verified by mutation: narrowing app.use("*") to app.use("/projects/*") fails both CSRF tests in test/security/refusal_accounting.test.ts. Acceptances 2 and 3 NOT checked — both ask for behavioural proof (a real cross-origin POST to /auth/sign-out; a per-route enumeration that fails if any unsafe method reaches a handler unguarded) and what exists so far is structural. The reviewer demonstrated the bug with a live request, so the fix is owed the same standard.
+  acceptance_met: [1]
 - id: RL-M1-050
   title: Make the audit half of a refusal impossible to drop
   milestone: M1
@@ -3917,6 +3921,8 @@
   decisions: []
   notes: |
     2026-08-03 — 2026-08-04 — DEMONSTRATED: as an acme Owner who holds project.read, a request for another tenant's project id returned 404 (correct) and wrote ZERO audit entries (not correct). src/api/server.ts:247-258 calls refuse({...}).wire and drops the audit half. This also falsifies a claim in the M1 gate report: 'refuse() returns the response AND the audit record together, so the refusal cannot be obtained without recording what really happened.' The design intends that; six lines separate the claim from the code. refusal.ts:121 states the stakes itself — the audit entry is the only record, because the response deliberately says nothing. Net effect: cross-tenant id enumeration is correctly indistinguishable in its responses AND completely invisible to the audit log, which is the worse half of the tradeoff. Same shape at server.ts:281-289 and 549-557, but those are covered because the auth layer and guardCsrf audit before throwing.
+    2026-08-04 — 2026-08-04 — FIXED by construction, authorized by A-03. refuse() now returns an opaque PendingRefusal with no public wire field. The only exits are recordAndRefuse (writes the audit entry FIRST, so a failure to record surfaces as a fault instead of a quietly-served 404) and alreadyAudited, which requires the name of the entry that covers it — used once, for guardCsrf, which audits session.csrf_rejected itself. The type change turned every drop site into a compile error, which is how the four in server.ts were found rather than argued about. found() now takes ctx, and that parameter is load-bearing rather than plumbing: it is what makes the record possible. One test-only accessor exists because indistinguishable_404.test.ts proves the response is a single frozen constant and cannot do that without holding it; test/security/refusal_accounting.test.ts scans src/ and fails if it appears there, verified by mutation. Acceptances 2 and 3 NOT checked: both want behavioural proof driven from the route table, and what exists is structural.
+  acceptance_met: [1]
 - id: RL-M1-051
   title: Fail the coverage gate for an authz file no test ever loads
   milestone: M1
