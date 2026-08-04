@@ -1,7 +1,7 @@
 /**
  * The envelope's canonical encoding, control-plane side (RL-M2-003).
  *
- * The Go half is `agent/internal/protocol/envelope_test.go`. Both suites verify the
+ * The Go half is `agent/internal/protocol/envelope_security_test.go`. Both suites verify the
  * SAME committed vectors in `agent/internal/protocol/testdata/envelope_vectors.json`,
  * and that is the whole cross-language guarantee: two independent implementations of
  * a canonical encoding is exactly the situation where both can be self-consistent

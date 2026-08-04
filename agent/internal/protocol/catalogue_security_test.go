@@ -1,6 +1,6 @@
 // The catalogue's security properties, asserted on the agent's side (RL-M2-002).
 //
-// The tracker declared this artefact as test/security/agent_operation_catalogue_test.go.
+// The tracker declared this artefact as test/security/agent_operation_catalogue_security_test.go.
 // That path cannot work: Go requires a _test.go file to sit in the package it
 // tests, and test/ is outside the agent module entirely, so a file there would
 // never be compiled or run — it would be a security suite that silently does

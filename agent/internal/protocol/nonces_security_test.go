@@ -7,7 +7,7 @@
 // A constant named MaxRememberedNonces is not a bound; a bound is what happens when
 // the constant is reached.
 //
-// The restart case lives in envelope_test.go's TestReplayAfterRestartIsRefused,
+// The restart case lives in envelope_security_test.go's TestReplayAfterRestartIsRefused,
 // because it is a property of the whole verification path rather than of the store,
 // and testing it through Verify is what makes it the property ADR 0002 asks for.
 package protocol

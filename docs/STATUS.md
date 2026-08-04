@@ -9,7 +9,7 @@ Generated 2026-08-04.
 | --- | --- | ---: | ---: | ---: |
 | **M0** Plan | `########################` 100% | 26 | 26 | 0 |
 | **M1** Control plane skeleton | `###################-----` 80% | 43 | 54 | 6 |
-| **M2** Agent and first host | `##----------------------` 10% | 3 | 29 | 18 |
+| **M2** Agent and first host | `###---------------------` 14% | 4 | 29 | 17 |
 | **M3** Static sites end to end | `------------------------` 0% | 0 | 27 | 18 |
 | **M4** Node and Bun apps | `------------------------` 0% | 0 | 15 | 10 |
 | **M5** RBAC completion | `------------------------` 0% | 0 | 7 | 6 |
@@ -29,9 +29,7 @@ Auth, org/team/project model, the can() function with 100% branch coverage, hash
 
 ## In progress
 
-| Task | Age | Owner | Risk | Acceptance | Title |
-| --- | ---: | --- | --- | ---: | --- |
-| `RL-M2-007` | 0d | agent | **high** | 3/3 | Implement replay protection with a durable nonce store |
+_None._
 
 ## Blocked
 
@@ -50,7 +48,6 @@ _None._
 
 These cannot be marked `done` until they name a security-suite artifact (brief §2.2).
 
-- `RL-M2-007` (M2, in-progress) — Implement replay protection with a durable nonce store
 - `RL-M2-021` (M2, todo) — Manage the host firewall
 - `RL-M2-024` (M2, todo) — Build the integration test harness against real hosts
 - `RL-M2-026` (M2, todo) — Chaos test the provisioning path against connection loss
@@ -116,7 +113,6 @@ CI: **green** at `18cca248` (2026-08-03T19:25:43Z)
 | Status | Count |
 | --- | ---: |
 | todo | 104 |
-| in-progress | 1 |
 | review | 4 |
-| done | 72 |
+| done | 73 |
 | **all** | **181** |

@@ -1544,7 +1544,7 @@
     - There is no operation that accepts a free-form command
     - A test asserts the agent rejects an operation name outside the catalogue
   artifacts:
-    - agent/internal/protocol/catalogue_test.go
+    - agent/internal/protocol/catalogue_security_test.go
     - test/security/agent_operation_catalogue.test.ts
   decisions: [2, 4]
   acceptance_met: [1, 2, 3, 4]
@@ -1571,7 +1571,7 @@
     - An envelope addressed to another host is refused
     - An expired or replayed envelope is refused
   artifacts:
-    - agent/internal/protocol/envelope_test.go
+    - agent/internal/protocol/envelope_security_test.go
     - test/security/envelope_encoding.test.ts
     - agent/internal/protocol/testdata/envelope_vectors.json
   decisions: [2]
@@ -1642,20 +1642,21 @@
 - id: RL-M2-007
   title: Implement replay protection with a durable nonce store
   milestone: M2
-  status: in-progress
+  status: done
   owner: agent
   estimate: M
   depends_on: [RL-M2-003]
   blocks: []
   risk: high
   started_at: 2026-08-04
+  done_at: 2026-08-04
   acceptance:
     - Seen nonces persist across agent restarts for at least the envelope validity window
     - The store is bounded so it cannot grow without limit
     - A test replays a captured envelope after restart and confirms refusal
   artifacts:
-    - agent/internal/protocol/nonces_test.go
-    - agent/internal/protocol/envelope_test.go
+    - agent/internal/protocol/nonces_security_test.go
+    - agent/internal/protocol/envelope_security_test.go
   decisions: [2]
   acceptance_met: [1, 2, 3]
   notes: |
@@ -1665,6 +1666,7 @@
     2026-08-04 — 2026-08-04 — The bound became per-store because testing it at the production value cost 95 SECONDS — 10,000 fsyncs — which is more than the entire rest of the suite and exactly the cost RL-M1-048 was spent removing. A limit of 8 exercises the same code path in milliseconds, and a separate test pins the production constant against the traffic it must accommodate (ten times what one instruction per second produces in a MaxValidity window) so the value cannot drift while the mechanism stays tested. WithLimit ignores zero and negatives, because '0 means unlimited' is how an unbounded store gets configured in by accident.
     2026-08-04 — 2026-08-04 — scripts/agent verify now runs go test -race, and the reason is this store. Its correctness claim is that checking and recording a nonce are ONE atomic operation; the test asserting 'exactly one of 64 concurrent callers was told the nonce was fresh' can pass by luck on a machine that schedules them serially. The race detector does not depend on luck. Costs a few seconds, and CI picks it up for free because the Agent job already calls scripts/agent verify.
     2026-08-04 — 2026-08-04 — Three properties tested that the acceptance did not name but the design depends on. An expired-but-unpruned nonce is still refused, because treating it as fresh would open a replay window as wide as the gap between expiry and the next prune — a window whose size is an implementation detail of the pruning schedule. A failed append is rolled back out of the in-memory map, or a restart would forget a nonce this process believed it had recorded, and the honest answer to 'can I rule out replay?' would have been no. And a nonce containing whitespace is refused, because the file is one record per line and a newline could forge a record boundary — envelope nonces are hex and cannot, but the store must not depend on its caller having checked, which is the shape of the vulnerability class this design exists to avoid.
+    2026-08-04 — 2026-08-04 — The Go security suites are renamed to *_security_test.go, which is a convention the tasks-done gate already defined and I had not followed. The gate refused this task: its artifacts were both Go files and none matched test/security/**, test/authz/**, *_security_test.go or *.security.test.ts. Renaming to the convention is the right fix rather than widening the gate — the gate anticipated Go security suites and named the pattern for them. RL-M2-002's and RL-M2-003's artifact lists were updated to match, and they had closed only because each also listed a TypeScript suite under test/security/, which hid the same gap.
 - id: RL-M2-008
   title: Build the privileged helper as a separate socket-activated process
   milestone: M2
