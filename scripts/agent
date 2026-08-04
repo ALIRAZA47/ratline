@@ -96,9 +96,15 @@ cmd_verify() {
 	say "== go vet =="
 	if ( cd "$MODULE" && go vet ./... ); then say "clean"; else failed=1; fi
 
+	# -race, because the nonce store's whole correctness claim is that checking and
+	# recording a nonce are ONE atomic operation. A test asserting "exactly one of 64
+	# concurrent callers was told the nonce was fresh" can pass by luck on a machine
+	# that happens to schedule them serially; the race detector does not depend on
+	# luck. It costs a few seconds and it is the only way that claim is checked
+	# rather than hoped for.
 	say ""
-	say "== go test =="
-	if ( cd "$MODULE" && go test ./... ); then :; else failed=1; fi
+	say "== go test -race =="
+	if ( cd "$MODULE" && go test -race ./... ); then :; else failed=1; fi
 
 	# The reproducibility claim in agent/go.mod, checked rather than asserted.
 	# Two builds of one tree must be byte-identical, because "verify the checksum

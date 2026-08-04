@@ -59,6 +59,15 @@ type FileNonceStore struct {
 	// nonce failing to persist. A hidden clock in a security check is a hidden
 	// assumption about when that check applies.
 	now func() time.Time
+	// limit is this store's bound, defaulting to MaxRememberedNonces.
+	//
+	// Per-store rather than a bare constant, because a test for "what happens at the
+	// bound" that has to reach the production bound spends 10,000 fsyncs doing it —
+	// 95 seconds, which is more than the entire rest of the suite and precisely the
+	// cost RL-M1-048 was spent removing. A small limit exercises the SAME code path
+	// in milliseconds. The production default is asserted separately, so the constant
+	// itself cannot drift while the mechanism stays tested.
+	limit int
 
 	mutex sync.Mutex
 	// seen maps nonce to its expiry. Loaded once, then maintained in memory and
@@ -86,7 +95,25 @@ func OpenNonceStore(path string) *FileNonceStore {
 // OpenNonceStoreAt is OpenNonceStore with an explicit clock, for tests that need
 // controlled time and for any caller that already has one.
 func OpenNonceStoreAt(path string, now func() time.Time) *FileNonceStore {
-	return &FileNonceStore{path: path, seen: make(map[string]time.Time), now: now}
+	return &FileNonceStore{
+		path:  path,
+		seen:  make(map[string]time.Time),
+		now:   now,
+		limit: MaxRememberedNonces,
+	}
+}
+
+// WithLimit returns the store with a different bound. For tests, and for a
+// deployment that genuinely knows its instruction rate.
+//
+// A limit of zero or less is refused rather than treated as "unlimited": an
+// unbounded store is the disk-exhaustion bug this whole mechanism exists to
+// prevent, and "0 means infinity" is how that gets configured in by accident.
+func (store *FileNonceStore) WithLimit(limit int) *FileNonceStore {
+	if limit > 0 {
+		store.limit = limit
+	}
+	return store
 }
 
 // Remember records a nonce, returning false if it was already present.
@@ -121,9 +148,9 @@ func (store *FileNonceStore) Remember(nonce string, expiresAt time.Time) (bool, 
 		return false, nil
 	}
 
-	if len(store.seen) >= MaxRememberedNonces {
+	if len(store.seen) >= store.limit {
 		store.prune(store.now())
-		if len(store.seen) >= MaxRememberedNonces {
+		if len(store.seen) >= store.limit {
 			return false, fmt.Errorf(
 				"%w: %d entries. Either instructions are arriving far faster than one per "+
 					"second, or something is flooding this agent. Refusing rather than "+

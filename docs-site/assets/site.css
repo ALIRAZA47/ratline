@@ -655,6 +655,40 @@ svg { display: block; max-width: 100%; height: auto; }
 svg text { font-family: var(--font-body); }
 svg .svg-mono { font-family: var(--font-mono); }
 
+/* Hand-authored diagram vocabulary. Linework only — DESIGN.md §9 rejected rope
+   textures and knot iconography; what is left is one hairline and one hue. */
+.dg-zone {
+  fill: none;
+  stroke: var(--hemp);
+  stroke-opacity: 0.35;
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+.dg-box {
+  fill: var(--tar);
+  stroke: var(--hemp);
+  stroke-opacity: 0.55;
+  stroke-width: 1;
+}
+.dg-box--root { stroke: var(--st-fail); stroke-opacity: 1; stroke-width: 1.5; }
+.dg-box--data { fill: var(--pitch); }
+.dg-title { fill: var(--chalk); font-size: 12px; font-weight: 500; }
+.dg-sub { fill: var(--chalk-dim); font-size: 10px; }
+.dg-zonelabel {
+  fill: var(--chalk-dim);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.dg-arrow { stroke: var(--chalk-dim); stroke-width: 1; fill: none; }
+.dg-arrow--strong { stroke: var(--hemp); stroke-width: 1.5; }
+.dg-arrow--dashed { stroke-dasharray: 3 3; }
+.dg-head { fill: var(--chalk-dim); }
+.dg-head--strong { fill: var(--hemp); }
+.dg-edge { fill: var(--chalk-dim); font-size: 10px; }
+.dg-bnd { fill: var(--st-fail); font-size: 10px; font-weight: 700; }
+.dg-step { fill: var(--hemp); font-size: 11px; font-weight: 700; }
+
 /* --------------------------------------------------------------------------
    Next / previous
    -------------------------------------------------------------------------- */

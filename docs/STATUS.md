@@ -29,7 +29,9 @@ Auth, org/team/project model, the can() function with 100% branch coverage, hash
 
 ## In progress
 
-_None._
+| Task | Age | Owner | Risk | Acceptance | Title |
+| --- | ---: | --- | --- | ---: | --- |
+| `RL-M2-007` | 0d | agent | **high** | 3/3 | Implement replay protection with a durable nonce store |
 
 ## Blocked
 
@@ -48,6 +50,7 @@ _None._
 
 These cannot be marked `done` until they name a security-suite artifact (brief §2.2).
 
+- `RL-M2-007` (M2, in-progress) — Implement replay protection with a durable nonce store
 - `RL-M2-021` (M2, todo) — Manage the host firewall
 - `RL-M2-024` (M2, todo) — Build the integration test harness against real hosts
 - `RL-M2-026` (M2, todo) — Chaos test the provisioning path against connection loss
@@ -77,7 +80,7 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | 100% | must be 100% |
 
-Measured 2026-08-04T08:45:59.272Z.
+Measured 2026-08-04T08:56:14.242Z.
 
 ### Authorization matrix (role × endpoint × subject)
 
@@ -112,7 +115,8 @@ CI: **green** at `18cca248` (2026-08-03T19:25:43Z)
 
 | Status | Count |
 | --- | ---: |
-| todo | 105 |
+| todo | 104 |
+| in-progress | 1 |
 | review | 4 |
 | done | 72 |
 | **all** | **181** |
