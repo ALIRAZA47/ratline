@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Decision records — Ratline</title>
+<meta name="description" content="All 18 architecture decision records: the question each answers, the decision in a sentence or two, and why none is accepted.">
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/site.css">
+<script defer src="assets/app.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<div class="shroud">
+
+  <nav class="rail" aria-label="Documentation sections">
+    <a class="rail__brand" href="index.html">
+      <span class="rail__wordmark display">RATLINE</span>
+    </a>
+    <div class="rail__group">
+      <p class="rail__group-label label">Reference</p>
+      <ul class="rail__list">
+        <li><a class="rail__link" href="index.html"><span class="rail__num">01</span> Overview</a></li>
+        <li><a class="rail__link" href="constraints.html"><span class="rail__num">02</span> Constraints</a></li>
+        <li><a class="rail__link" href="architecture.html"><span class="rail__num">03</span> Architecture</a></li>
+        <li><a class="rail__link" href="authorization.html"><span class="rail__num">04</span> Authorization</a></li>
+        <li><a class="rail__link" href="agent.html"><span class="rail__num">05</span> Agent protocol</a></li>
+        <li><a class="rail__link" href="threat-model.html"><span class="rail__num">06</span> Threat model</a></li>
+        <li><a class="rail__link" href="decisions.html"><span class="rail__num">07</span> Decisions</a></li>
+        <li><a class="rail__link" href="roadmap.html"><span class="rail__num">08</span> Roadmap</a></li>
+        <li><a class="rail__link" href="workflow.html"><span class="rail__num">09</span> Workflow</a></li>
+        <li><a class="rail__link" href="defects.html"><span class="rail__num">10</span> Defects</a></li>
+      </ul>
+    </div>
+  </nav>
+
+  <div class="column">
+    <header class="topbar">
+      <div class="topbar__row">
+        <nav class="crumbs" aria-label="Breadcrumb">
+          <a href="index.html">ratline</a>
+          <span class="crumbs__sep" aria-hidden="true">/</span>
+          <span class="crumbs__here">decisions</span>
+        </nav>
+        <span class="topbar__spacer"></span>
+        <div class="search">
+          <label class="skip" for="site-search">Search the documentation</label>
+          <input class="search__input" id="site-search" type="search" placeholder="Search — press / or Ctrl-K"
+                 autocomplete="off" role="combobox" aria-expanded="false" aria-controls="site-search-results">
+          <ul class="search__results" id="site-search-results" hidden></ul>
+        </div>
+        <button class="themetoggle" id="theme-toggle" type="button">Theme: System</button>
+      </div>
+      <div class="tension" aria-hidden="true"></div>
+    </header>
+
+    <main class="page" id="main">
+      <h1>Decision records</h1>
+      <p class="lede">Eighteen records in <span class="pathref">docs/decisions/</span>. Any choice that would
+      be expensive to reverse gets one: the context that forced it, the options with a one-line security
+      assessment each, the decision, and the consequences — including the new attack surface it introduces.</p>
+
+      <div class="note" data-status="attention" id="status-note">
+        <span class="note__label">Every record is proposed. None is accepted.</span>
+        <p>That is deliberate, and it is a rule rather than a backlog. §2.6 of the brief says: “ADRs are
+        proposed by you and accepted by me. Do not mark one <code>accepted</code> yourself.”</p>
+        <p>The point survived a later instruction. <span class="pathref">docs/AUTHORIZATIONS.md</span> A-01
+        records that the owner removed the milestone-gate approval requirement so the build could proceed
+        without waiting — and that the request to have an agent <em>issue</em> the approvals was refused.
+        The reasoning is recorded verbatim: an approval's whole value is that it is the owner's, and an agent
+        signing one converts the agent's own judgement into a record asserting a human decision. That is worse
+        than no approval, because no approval is merely absent whereas a fabricated one is misleading — and it
+        is misleading in the direction that stops anyone from looking.</p>
+        <p>A-01 amends §2.7 (gates), not §2.6 (acceptance). Nothing in the build blocks on the word, so the
+        cost of leaving them proposed is zero and the cost of assuming acceptance would be a design record that
+        lies about its own status.</p>
+        <p>The M1 gate report names the two it would most like ruled on: <a href="#adr-0016">ADR 0016</a>,
+        because it assumes <code>Secure</code> works on <code>http://127.0.0.1</code> — which could not be
+        verified without a browser and is the riskiest assumption in that design — and
+        <a href="#adr-0006">ADR 0006</a>, because M2 builds on it directly.</p>
+      </div>
+
+      <h2 id="adrs">The eighteen records</h2>
+
+      <div class="scroller">
+        <div class="filter">
+          <label class="skip" for="adr-filter">Filter decision records</label>
+          <input id="adr-filter" type="search" placeholder="Filter — try secrets, ssh, rate, m7"
+                 data-filter-for="adr-table" data-filter-count="adr-count" data-filter-empty="adr-empty" autocomplete="off">
+          <span class="filter__count" id="adr-count" aria-live="polite"></span>
+        </div>
+        <table id="adr-table">
+          <caption class="skip">All 18 architecture decision records with status, date and originating task</caption>
+          <thead>
+            <tr>
+              <th scope="col">#</th>
+              <th scope="col">Title</th>
+              <th scope="col">Status</th>
+              <th scope="col">Date</th>
+              <th scope="col">Task</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row"><a href="#adr-0001">0001</a></th><td>Stack choice</td><td><span class="badge badge--proposed">proposed</span></td><td class="nowrap">2026-08-01</td><td class="mono nowrap">RL-M0-010</td></tr>
+            <tr><th scope="row"><a href="#adr-0002">0002</a></th><td>Agent transport and authentication</td><td><span class="badge badge--proposed">proposed</span></td><td class="nowrap">2026-08-01</td><td class="mono nowrap">RL-M0-011</td></tr>
+            <tr><th scope="row"><a href="#adr-0003">0003</a></th><td>Tenant scoping and the data-access layer</td><td><span class="badge badge--proposed">proposed</span></td><td class="nowrap">2026-08-01</td><td class="mono nowrap">RL-M0-012</td></tr>
+            <tr><th scope="row"><a href="#adr-0004">0004</a></th><td>Host privilege separation</td><td><span class="badge badge--proposed">proposed</span></td><td class="nowrap">2026-08-01</td><td class="mono nowrap">RL-M0-013</td></tr>
+            <tr><th scope="row"><a href="#adr-0005">0005</a></th><td>Command execution and user-authored build scripts</td><td><span class="badge badge--proposed">proposed</span></td><td class="nowrap">2026-08-01</td><td class="mono nowrap">RL-M0-014</td></tr>
+            <tr><th scope="row"><a href="#adr-0006">0006</a></th><td>Secrets, envelope encryption and redaction</td><td><span class="badge badge--proposed">proposed</span></td><td class="nowrap">2026-08-01</td><td class="mono nowrap">RL-M0-015</td></tr>
+            <tr><th scope="row"><a href="#adr-0007">0007</a></th><td>Job queue on Postgres rather than Redis</td><td><span class="badge badge--proposed">proposed</span></td><td class="nowrap">2026-08-01</td><td class="mono nowrap">RL-M0-016</td></tr>
+            <tr><th scope="row"><a href="#adr-0008">0008</a></th><td>SSH certificate authority design</td><td><span class="badge badge--proposed">proposed</span></td><td class="nowrap">2026-08-01</td><td class="mono nowrap">RL-M0-017</td></tr>
+            <tr><th scope="row"><a href="#adr-0009">0009</a></th><td>Where builds run</td><td><span class="badge badge--proposed">proposed</span></td><td class="nowrap">2026-08-01</td><td class="mono nowrap">RL-M0-018</td></tr>
+            <tr><th scope="row"><a href="#adr-0010">0010</a></th><td>Web server configuration generation, validation and rollback</td><td><span class="badge badge--proposed">proposed</span></td><td class="nowrap">2026-08-01</td><td class="mono nowrap">RL-M0-019</td></tr>
+            <tr><th scope="row"><a href="#adr-0011">0011</a></th><td>Detecting public exposure without phoning home</td><td><span class="badge badge--proposed">proposed</span></td><td class="nowrap">2026-08-01</td><td class="mono nowrap">RL-M1-023</td></tr>
+            <tr><th scope="row"><a href="#adr-0012">0012</a></th><td>Grant resolution, the expiry clock, and unconditional owner grants</td><td><span class="badge badge--proposed">proposed</span></td><td class="nowrap">2026-08-01</td><td class="mono nowrap">RL-M1-011</td></tr>
+            <tr><th scope="row"><a href="#adr-0013">0013</a></th><td>Managed database engines — amends brief §5.2</td><td><span class="badge badge--proposed">proposed</span></td><td class="nowrap">2026-08-02</td><td class="mono nowrap">RL-M7-001</td></tr>
+            <tr><th scope="row"><a href="#adr-0014">0014</a></th><td>Sessions and password storage</td><td><span class="badge badge--proposed">proposed</span></td><td class="nowrap">2026-08-02</td><td class="mono nowrap">RL-M1-017</td></tr>
+            <tr><th scope="row"><a href="#adr-0015">0015</a></th><td>Authentication rate limiting</td><td><span class="badge badge--proposed">proposed</span></td><td class="nowrap">2026-08-02</td><td class="mono nowrap">RL-M1-020</td></tr>
+            <tr><th scope="row"><a href="#adr-0016">0016</a></th><td>CSRF tokens and the session cookie policy</td><td><span class="badge badge--proposed">proposed</span></td><td class="nowrap">2026-08-02</td><td class="mono nowrap">RL-M1-021</td></tr>
+            <tr><th scope="row"><a href="#adr-0017">0017</a></th><td>Session idle timeout</td><td><span class="badge badge--proposed">proposed</span></td><td class="nowrap">2026-08-02</td><td class="mono nowrap">RL-M1-035</td></tr>
+            <tr><th scope="row"><a href="#adr-0018">0018</a></th><td>Two-factor authentication</td><td><span class="badge badge--proposed">proposed</span></td><td class="nowrap">2026-08-02</td><td class="mono nowrap">RL-M1-019</td></tr>
+          </tbody>
+        </table>
+        <p class="filter__empty" id="adr-empty" hidden></p>
+      </div>
+
+      <h2 id="adr-0001">0001 — Stack choice</h2>
+      <p><span class="badge badge--proposed">proposed</span> <span class="pathref">docs/decisions/0001-stack-choice.md</span></p>
+      <p><strong>The question.</strong> The brief proposes a stack and explicitly invites disagreement. Four
+      constraints do most of the choosing — C3 requires that an unscoped read be impossible to <em>write</em>,
+      which rules out any ORM whose generated client is the natural thing to reach for; C4 requires a refusal to
+      boot without generated secrets.</p>
+      <p><strong>The decision.</strong> TypeScript throughout, strict, on Node 22 LTS; Hono for the API;
+      Postgres 16 or later with row-level security; Postgres for the queue; Go static binaries for the agent and
+      the privileged helper; every asset self-hosted with no external origin at runtime. The front end is
+      <strong>React</strong>, ruled by the owner on 2026-08-02 — the record originally recommended SvelteKit and
+      keeps that recommendation visible rather than rewriting it.</p>
+
+      <h2 id="adr-0002">0002 — Agent transport and authentication</h2>
+      <p><span class="badge badge--proposed">proposed</span> <span class="pathref">docs/decisions/0002-agent-transport-and-authentication.md</span></p>
+      <p><strong>The question.</strong> Three things have to be answered separately, and conflating them is how
+      this goes wrong: who dials whom, what authenticates the channel, and what authenticates the
+      <em>instruction</em>.</p>
+      <p><strong>The decision.</strong> Agent-initiated mTLS carrying independently signed instruction
+      envelopes over an enumerated operation catalogue. The agent dials out over HTTP/2 with TLS, mutually
+      authenticated, each host holding its own individually revocable client certificate; no managed host
+      listens on a Ratline port. Every instruction is signed with an Ed25519 key stored separately from the
+      database, and the agent verifies signature, target, expiry and nonce <em>before interpreting any
+      argument</em>. Log chunks are not individually signed — they are data, not instructions — but they are
+      bound to a job identifier and rate limited. Key rotation uses an overlap window so there is never a
+      flag-day. SSH is used exactly once, for bootstrap, with an operator-supplied key that is not retained.
+      <a href="agent.html">The protocol in detail</a>.</p>
+
+      <h2 id="adr-0003">0003 — Tenant scoping and the data-access layer</h2>
+      <p><span class="badge badge--proposed">proposed</span> <span class="pathref">docs/decisions/0003-tenant-scoping-and-data-access.md</span></p>
+      <p><strong>The question.</strong> C3 is unusually precise: make the unscoped variant <em>impossible to
+      call</em>. That rules out the usual answers — a review convention is not impossible, a helper you are
+      supposed to use is not impossible, and even a lint rule is only impossible-in-CI.</p>
+      <p><strong>The decision.</strong> Three independent layers, each failing closed on its own: the client is
+      constructed in one import-restricted module that exports only <code>scoped()</code>; every repository
+      function takes a branded <code>AuthzContext</code> whose constructor is not exported; and every
+      tenant-scoped table has row-level security enabled <em>and forced</em>, with the application connecting as
+      a role that is neither the owner nor a superuser. <a href="authorization.html#isolation">The three
+      layers</a>.</p>
+
+      <h2 id="adr-0004">0004 — Host privilege separation</h2>
+      <p><span class="badge badge--proposed">proposed</span> <span class="pathref">docs/decisions/0004-host-privilege-separation.md</span></p>
+      <p><strong>The question.</strong> One the brief leaves implicit, and it decides how much C1 is actually
+      worth: <em>what privilege does the agent itself hold?</em> If the agent runs as root, C1 holds against a
+      compromised control plane and collapses against a compromised agent — and the agent is the component that
+      parses untrusted input, runs on every host, and executes user build output.</p>
+      <p><strong>The decision.</strong> Two components with a trust boundary between them.
+      <code>ratline-agent</code> runs unprivileged and does everything it can without privilege, which is most
+      of the work. <code>ratline-privd</code> runs as root, socket-activated, with no network access, accepts
+      only the enumerated privileged operations, identifies its caller by <code>SO_PEERCRED</code>, and
+      re-validates every argument independently. Duplicating validation is deliberate: if it lived only in the
+      agent, <code>privd</code> would be a confused deputy and the boundary would be decorative.
+      <code>privd</code> writes every operation to a root-owned append-only log <em>before</em> performing it,
+      so an attacker who owns the agent cannot erase the record of what they asked for.</p>
+
+      <h2 id="adr-0005">0005 — Command execution and user-authored build scripts</h2>
+      <p><span class="badge badge--proposed">proposed</span> <span class="pathref">docs/decisions/0005-command-execution-and-build-scripts.md</span></p>
+      <p><strong>The question.</strong> A genuine conflict in the brief. C2 forbids constructing a shell from
+      user-derived data; §6.5 requires configurable build and install commands, which are shell strings by
+      nature. Under a literal reading of C2 that feature cannot exist.</p>
+      <p><strong>The decision.</strong> C2 holds absolutely for every command Ratline constructs — the control
+      plane executes no processes at all, the agent and <code>privd</code> use argument vectors only, and every
+      user-controllable field reaching a host is fuzzed from the operation schema. User-authored build commands
+      are <em>contained, not interpolated</em>: the text is written atomically to a file owned by the site's own
+      Linux user, executed as <code>["/bin/sh", "&lt;system-generated-path&gt;"]</code> where every argument is
+      system-generated, as that site's unprivileged user, inside a transient systemd scope carrying the site's
+      sandboxing and limits. Setting a build command is its own permission, and changing it is audited with
+      before and after values. The property held is not “this cannot run code” but “this cannot
+      <em>escalate</em>”.</p>
+      <p class="dim">Carried as an open risk, R-02, because the brief's own conflict has not been ruled on.</p>
+
+      <h2 id="adr-0006">0006 — Secrets, envelope encryption and redaction</h2>
+      <p><span class="badge badge--proposed">proposed</span> <span class="pathref">docs/decisions/0006-secrets-and-envelope-encryption.md</span></p>
+      <p><strong>The question.</strong> Not encryption. The leakage paths: a value has to reach a build
+      environment on a host, which means it exists in plaintext somewhere, and
+      <code>secret.read_value</code> must stay separable from <code>secret.read_name</code>.</p>
+      <p><strong>The decision.</strong> Each secret value gets a fresh 256-bit data key, is sealed with AEAD
+      under it, and the data key is wrapped by the key-encryption key; the name stays plaintext so
+      <code>secret.read_name</code> needs no unwrapping. The key-encryption key is generated at first run, kept
+      in a file readable only by the control plane user, never in the database and never in a backup that also
+      contains the database, and the application refuses to boot if it is missing or looks like a placeholder.
+      Values reach only the agent on the host that runs the site, over mTLS, written to an environment file with
+      mode 0600 — never into a release directory, a build artifact, or a process argument, because arguments are
+      world-readable in <code>/proc</code>. Redaction is streaming-safe across chunk boundaries, covers base64,
+      URL-encoding and JSON escaping, and refuses very short values at set time rather than redacting ordinary
+      text out of every log.</p>
+
+      <h2 id="adr-0007">0007 — Job queue on Postgres rather than Redis</h2>
+      <p><span class="badge badge--proposed">proposed</span> <span class="pathref">docs/decisions/0007-job-queue-on-postgres.md</span></p>
+      <p><strong>The question.</strong> The brief suggests a Redis-backed queue and invites disagreement. Every
+      stateful component is something a self-hosting operator installs, patches, monitors, backs up and reasons
+      about during an incident. Does the workload actually need Redis?</p>
+      <p><strong>The decision.</strong> No. Jobs are rows; claiming uses <code>SELECT … FOR UPDATE SKIP
+      LOCKED</code> with a visibility timeout so a worker that dies releases its job; workers wake on
+      <code>LISTEN/NOTIFY</code> and fall back to polling, so a missed notification delays a job rather than
+      losing it. Enqueue happens in the same transaction as the state change that caused it. Retries back off
+      exponentially into a dead-letter state that surfaces in the interface — §9 forbids silent catch blocks,
+      and a queue that quietly drops jobs is the same anti-pattern wearing a different hat.</p>
+
+      <h2 id="adr-0008">0008 — SSH certificate authority design</h2>
+      <p><span class="badge badge--proposed">proposed</span> <span class="pathref">docs/decisions/0008-ssh-certificate-authority.md</span></p>
+      <p><strong>The question.</strong> The ordinary failure mode: a contractor leaves, someone removes them in
+      the panel, and their key stays in an <code>authorized_keys</code> file on a host that was unreachable that
+      afternoon. The panel says revoked; the host says welcome.</p>
+      <p><strong>The decision.</strong> Users upload public keys and Ratline never handles a private one.
+      Certificates default to eight hours, configurable per organization, carrying principals derived from the
+      requester's current grants. <strong>Principals are the join between the model and the host</strong> — a
+      grant on site <code>marketing-www</code> yields principal <code>rl-marketing-www</code>, and hosts
+      authorise through <code>AuthorizedPrincipalsFile</code> generated by <code>privd</code> from the same
+      grant data the interface renders, so neither holds an independent copy of the policy. A user with no grant
+      receives no certificate rather than one with an empty principal list, because an empty list is easy to
+      mis-handle into meaning “any”. Revocation is three mechanisms together: a short lifetime, a revocation
+      list consulted by <code>sshd</code>, and active session termination. Scoped sudo fragments list
+      fully-qualified commands with no wildcards and must pass <code>visudo -c</code> before installation. The
+      web terminal is its own permission, off by default for every role except Infrastructure, recorded in
+      asciicast format, and the recording is separately permission-gated.</p>
+
+      <h2 id="adr-0009">0009 — Where builds run</h2>
+      <p><span class="badge badge--proposed">proposed</span> <span class="pathref">docs/decisions/0009-where-builds-run.md</span></p>
+      <p><strong>The question.</strong> The brief does not say, and the answer shapes the agent, the release
+      pipeline, the host stack and the security model. Building on the host that serves production traffic means
+      running user-authored code with an unbounded dependency tree on the machine currently answering requests;
+      building elsewhere means an artifact transfer story, a build fleet, and a way to reproduce each site's
+      runtime somewhere it does not normally exist.</p>
+      <p><strong>The decision.</strong> Build on the target host, as the site's own unprivileged Linux user,
+      inside a transient systemd scope with explicit limits. <strong>Build limits default lower than the site's
+      runtime limits</strong>, so a runaway build degrades itself before it degrades the host. Per-host build
+      concurrency is capped, and queued deploys show their position rather than appearing hung. Dependency
+      caches are keyed by lockfile content and runtime version, owned by the site user, and never shared between
+      sites — cross-site cache poisoning is impossible by construction and tested.</p>
+
+      <h2 id="adr-0010">0010 — Web server configuration generation, validation and rollback</h2>
+      <p><span class="badge badge--proposed">proposed</span> <span class="pathref">docs/decisions/0010-webserver-config-generation.md</span></p>
+      <p><strong>The question.</strong> §6.2's strongest clause is “never leave a host with config that fails
+      validation”, which is about crash-safety rather than error handling. A host that loses power between
+      writing a virtual host file and validating it must come back serving.</p>
+      <p><strong>The decision.</strong> <code>text/template</code> with a fixed set of escapers chosen per
+      interpolation context and <strong>no default passthrough</strong> — a template that interpolates a raw
+      value fails the build — with allowlist validation before templating, so escaping is the second line rather
+      than the first. Applying a configuration is a seven-step state machine: stage into the same directory,
+      validate with the server's own validator in a complete config context, snapshot the known-good file, swap
+      by <code>rename(2)</code>, reload, <strong>verify the server is actually serving</strong>, and roll back
+      to the snapshot on failure with the validator's real output. Step six matters more than it looks: a reload
+      can succeed while the server cannot bind a port or read a certificate, and checking the process rather
+      than the exit code is the difference between “we reloaded” and “it works”.</p>
+
+      <h2 id="adr-0011">0011 — Detecting public exposure without phoning home</h2>
+      <p><span class="badge badge--proposed">proposed</span> <span class="pathref">docs/decisions/0011-exposure-detection-without-phoning-home.md</span></p>
+      <p><strong>The question.</strong> C5 requires detecting public reachability. The obvious implementation is
+      an outbound probe, and it conflicts with two other properties: C5 itself implies isolated networks, where
+      a probe times out, and a self-hosted product that calls home on every install creates a fleet-wide
+      correlation point.</p>
+      <p><strong>The decision.</strong> Classify locally; never make a network call to determine exposure. Three
+      local inputs — the configured bind address, the addresses actually on the host's interfaces when the bind
+      is a wildcard, and whether the operator has acknowledged a public bind — yield three levels:
+      <code>contained</code>, <code>network</code>, <code>exposed</code>. A wildcard or globally routable bind
+      refuses to start without <code>RATLINE_ALLOW_PUBLIC_BIND=1</code>, and that acknowledgement never silences
+      the warning. <strong>The blind spot is stated, not hidden:</strong> local classification cannot see a NAT
+      port-forward, a load balancer, or a reverse proxy on the same host, so every report carries the caveat and
+      <code>contained</code> is never read as <em>verified private</em>. Overstating certainty would be worse
+      than the warning being absent, because an operator would stop looking.</p>
+
+      <h2 id="adr-0012">0012 — Grant resolution, the expiry clock, and unconditional owner grants</h2>
+      <p><span class="badge badge--proposed">proposed</span> <span class="pathref">docs/decisions/0012-grant-resolution-and-expiry-clock.md</span></p>
+      <p><strong>The question.</strong> §6.3 requires time-bound grants whose expiry is enforced server-side
+      rather than by a cleanup job, denies that always win, and permissions that inherit downward.
+      <code>can()</code> is built on whatever this decides, so the interface matters more than the
+      implementation.</p>
+      <p><strong>The decision.</strong> Three database objects, each with exactly one job:
+      <code>live_grants</code> owns the expiry predicate and nothing else, <code>effective_grants()</code> owns
+      inheritance direction, and <code>grant_decision()</code> owns precedence — denies first, then allows, else
+      deny. Both functions read the view, so no resolution path can skip the expiry filter, and all three are
+      <strong>invoker-rights</strong>: a <code>SECURITY DEFINER</code> function here would run as the migration
+      role and bypass row-level security entirely, undoing C3's layer 3. A test asserts
+      <code>prosecdef</code> is false, because that mistake is invisible in review. Deny-by-default is the
+      <code>else</code> branch, not an absence. An organization-scope <code>owner</code> grant must be an allow
+      with no expiry, enforced by <code>CHECK</code>. And the creation-time expiry check is
+      <code>expires_at &gt; created_at</code>, not <code>&gt; now()</code>: Postgres refuses non-immutable
+      functions in <code>CHECK</code>, and <code>now()</code> would be wrong regardless, because
+      <code>CHECK</code> is re-validated on update and on restore — so a valid grant would become un-updatable
+      and a dump taken today would refuse to restore tomorrow, purely because time had passed.</p>
+
+      <h2 id="adr-0013">0013 — Managed database engines</h2>
+      <p><span class="badge badge--proposed">proposed</span> <span class="badge badge--open">amends brief §5.2</span> <span class="pathref">docs/decisions/0013-managed-database-engines.md</span></p>
+      <p><strong>The question.</strong> The brief excludes managed databases from v1 and says to leave a clean
+      seam and an ADR rather than an implementation. This is that seam, now requested as real scope. The reason
+      for the original exclusion changes what the product is: every workload Ratline manages today is
+      reconstructible from git, and a database is not.</p>
+      <p><strong>The decision.</strong> Add M7 after M6, with seven properties. <strong>Backup and tested
+      restore land before create-and-delete is exposed</strong> — the first thing that works is taking a dump
+      and restoring it into a scratch instance, verified byte-for-byte in CI. Engines install through the
+      enumerated operation catalogue, with a version argument validated against a known set rather than a
+      package name passed through. Databases bind to loopback by default, the same posture as C5. Credentials
+      are generated, never defaulted, envelope-encrypted at rest, and
+      <code>database.read_credentials</code> is distinct from <code>database.read</code>, mirroring the secret
+      name/value split. Restore is the most dangerous action in the product and gets its own permission, its own
+      confirmation naming the target, and an audit entry recorded <em>before</em> it begins. MongoDB is
+      scheduled last and separately — a different auth model, different backup tooling, no meaningful DDL
+      quoting story, and an SSPL licence an operator should be told about rather than have chosen for them.
+      Major-version upgrades are explicitly not in M7: in-place upgrade is where irreversible data loss actually
+      happens.</p>
+
+      <h2 id="adr-0014">0014 — Sessions and password storage</h2>
+      <p><span class="badge badge--proposed">proposed</span> <span class="pathref">docs/decisions/0014-sessions-and-password-storage.md</span></p>
+      <p><strong>The question.</strong> Four decisions, three of them cheap now and expensive later: how
+      passwords are hashed, whether a session is tenant-scoped, what rotation means, and how expiry works.</p>
+      <p><strong>The decision.</strong></p>
+      <ul>
+        <li><strong>scrypt from <code>node:crypto</code></strong> at N = 2<sup>17</sup>, r = 8, p = 1, with a
+        32-byte key and a 16-byte per-password salt. bcrypt caps the password at 72 bytes with a small fixed
+        memory cost; argon2id needs a native dependency, against §6.7's preference for the standard library.
+        Parameters are stored alongside the hash so the choice is revisable without a migration. The implied
+        cost is <strong>128 MiB per hash</strong>, stated as a fact about the deployment rather than a footnote,
+        and computed by a function rather than left as arithmetic in a comment.</li>
+        <li><strong>A session belongs to a user <em>within</em> one organization.</strong> A session is an act of
+        access, not a person, so a stolen cookie reaches one tenant. It is also structural:
+        <code>scoped()</code> binds exactly one tenant per transaction, so an unscoped session table would need
+        a second data-access primitive — the escape hatch C3 exists to prevent. The stated cost is that three
+        organizations means three sessions, which is acceptable because switching organization <em>is</em> a
+        privilege change and has to rotate anyway.</li>
+        <li><strong>Rotation replaces the row rather than editing it</strong> — new identifier, new row, old one
+        revoked and retained with a pointer to its successor. An edited row loses the evidence that a rotation
+        happened, which is the thing an incident review looks for.</li>
+        <li><strong>Expiry is absolute</strong>, fixed at creation, never extended on use. A sliding window
+        makes “how long can a stolen cookie live” unanswerable, which is the only question the column exists to
+        answer. Session tokens come from the CSPRNG and are stored only as a hash.</li>
+      </ul>
+
+      <h2 id="adr-0015">0015 — Authentication rate limiting</h2>
+      <p><span class="badge badge--proposed">proposed</span> <span class="pathref">docs/decisions/0015-authentication-rate-limiting.md</span></p>
+      <p><strong>The question.</strong> The sign-in path derives a 128 MiB scrypt hash on every attempt,
+      including for accounts that do not exist — which is correct, because deriving unconditionally is what
+      stops timing revealing whether an account exists. The consequence is that an unauthenticated caller can
+      make the control plane do expensive work for free. The interesting sub-questions are about what happens
+      when the limiter itself is under load.</p>
+      <p><strong>The decision.</strong> A row per organization, dimension, path and window, upserted — bounded
+      by configuration rather than by traffic. The window is <strong>fixed, never extended by later
+      attempts</strong>, so it releases on time. The bucket key is a digest of the presented identifier computed
+      before anything is looked up. A store that cannot answer <strong>fails closed</strong>: a rate limiter
+      that fails open is an availability feature, not a control. Both dimensions — per account and per source
+      address — are counted on <em>every</em> attempt and a refusal by one does not short-circuit the other,
+      because otherwise an attacker would spend one account's budget for free as far as their address was
+      concerned, then move to the next account with a clean address budget.</p>
+
+      <h2 id="adr-0016">0016 — CSRF tokens and the session cookie policy</h2>
+      <p><span class="badge badge--proposed">proposed</span> <span class="pathref">docs/decisions/0016-csrf-tokens-and-cookie-policy.md</span></p>
+      <p><strong>The question.</strong> The cookie policy is the whole decision, because Ratline's deployment
+      model is unusual. C5 means it is commonly served as plain HTTP on loopback, just as commonly as HTTPS
+      behind a reverse proxy on a real domain, and <span class="pathref">docs/NETWORK.md</span> recommends a
+      third shape — plain HTTP over Tailscale or WireGuard.</p>
+      <p><strong>The decision.</strong> The token is derived —
+      <code>HMAC-SHA256(HKDF(cookie secret, "ratline/csrf/v1"), session.id)</code> — so there is no migration,
+      no stored state and no synchronisation to maintain. It travels in a request header
+      (<code>X-Ratline-CSRF</code>), never in a cookie and never in a URL. <code>Secure</code> is on by default
+      and comes off only on an explicit, warned acknowledgement.
+      <code>SameSite=Strict</code>, <code>HttpOnly</code>, <code>Path=/</code>, and the
+      <code>__Host-</code> prefix whenever every declared origin is https. <code>Origin</code> — falling back to
+      <code>Referer</code> — is checked against the declared trusted set by exact match as defence in depth, and
+      an unsafe request carrying neither header is refused: every browser sends <code>Origin</code> on an unsafe
+      method, and a non-browser client should be presenting an API token rather than riding a cookie session, at
+      which point CSRF does not apply to it.</p>
+      <p class="dim">The gate report flags this as the record it would most like ruled on: it assumes
+      <code>Secure</code> works on <code>http://127.0.0.1</code>, which could not be verified without a browser
+      and is the riskiest assumption in the design. The trade-off is real, because
+      <code>Secure</code> on plain-HTTP loopback is precisely the shape C5 recommends.</p>
+
+      <h2 id="adr-0017">0017 — Session idle timeout</h2>
+      <p><span class="badge badge--proposed">proposed</span> <span class="pathref">docs/decisions/0017-session-idle-timeout.md</span></p>
+      <p><strong>The question.</strong> ADR 0014 gave sessions an absolute lifetime. Should there also be an
+      idle timeout? What an idle timeout is actually bought for decides everything: not a stolen token — that is
+      what revocation, rotation and the absolute lifetime are for — but one scenario, an operator walking away
+      from an unlocked workstation.</p>
+      <p><strong>The decision.</strong> <strong>No idle timeout in v1.</strong> An idle rule measured on
+      <code>last_seen_at</code> records the last <em>request</em>, not the last human: a dashboard polling for
+      deploy status writes it on a timer, so the rule would fire only when the tab is closed — which the
+      absolute lifetime already covers — and never for the abandoned open tab, which is the entire scenario.
+      Instead: keep the absolute eight-hour lifetime and make it configurable per organization through the
+      security policy that already exists; require re-authentication for the highest-risk actions, which
+      polling does not defeat and which binds the check to the moment of danger rather than to a clock; and say
+      plainly in the interface that Ratline does not sign an idle session out, so nobody assumes otherwise.
+      Shipping the timeout would be worse than its absence, because an operator who believes the console signs
+      itself out locks their screen less often.</p>
+
+      <h2 id="adr-0018">0018 — Two-factor authentication</h2>
+      <p><span class="badge badge--proposed">proposed</span> <span class="pathref">docs/decisions/0018-two-factor-authentication.md</span></p>
+      <p><strong>The question.</strong> §6.3 requires two-factor authentication with an organization-level
+      policy, and the task adds three specifics: TOTP enrolment producing recovery codes, an organization able
+      to <em>require</em> it with non-compliant members forced into enrolment at next login, and single-use
+      recovery codes whose consumption is audited.</p>
+      <p><strong>The decision.</strong> A <strong>challenge</strong> rather than a partial session, so nothing
+      that has not presented both factors is a session at all. TOTP, with the WebAuthn gap recorded rather than
+      papered over — a shared secret is a symmetric credential the verifier can impersonate its holder with,
+      which is R-25. Secrets are envelope-encrypted with the shape enforced in the database, recovery codes are
+      digest-hashed and single-use, replay protection is monotonic, and no new dependency was added.</p>
+
+      <section class="sources" aria-labelledby="sources-heading">
+        <h2 id="sources-heading" class="label" style="border:0;padding:0;margin:0 0 var(--space-xs)">Sources for this page</h2>
+        <ul>
+          <li><span class="pathref">docs/decisions/0001…0018</span> — the eighteen files; each summary above is drawn from that file's Context and Decision sections</li>
+          <li><span class="pathref">docs/BRIEF.md</span> §2.6 — the acceptance rule</li>
+          <li><span class="pathref">docs/AUTHORIZATIONS.md</span> A-01 — the gate amendment, and the refusal to issue approvals</li>
+          <li><span class="pathref">docs/gates/M1.md</span> — the two records the gate asks to have ruled on</li>
+        </ul>
+      </section>
+
+      <nav class="pager" aria-label="Section navigation">
+        <a href="threat-model.html"><span class="label">Previous</span> Threat model and risks</a>
+        <a href="roadmap.html"><span class="label">Next</span> Roadmap and status</a>
+      </nav>
+    </main>
+
+    <footer class="page" style="padding-top:0">
+      <p class="dim" style="font-size:var(--text-xs)">Written from the repository at
+      <span class="pathref">/Users/ark/Desktop/FunProjects/moss-clone</span>. Design tokens copied from
+      <span class="pathref">src/web/lib/design/</span>; no font files or scripts are loaded from any external
+      origin.</p>
+    </footer>
+  </div>
+</div>
+</body>
+</html>

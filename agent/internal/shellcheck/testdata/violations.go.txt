@@ -1,0 +1,69 @@
+// Deliberate C2 violations. Every exec call below must be reported.
+//
+// Kept as .go.txt so the Go build never compiles it — a fixture that compiled would
+// mean the agent ships code that knows how to run a shell, which is the thing the
+// check exists to prevent. A scanner with no fixtures proving it fires is a scanner
+// nobody has tested, and this project has already shipped one of those.
+package fixture
+
+import (
+	"context"
+	"fmt"
+	"os/exec"
+	"strings"
+	"syscall"
+)
+
+// want: shell-interpreter formatted-process-argument
+func obviousShell(slug string) {
+	exec.Command("sh", "-c", "useradd "+slug)
+}
+
+// want: shell-interpreter formatted-process-argument
+func absolutePath(slug string) {
+	exec.Command("/bin/bash", "-c", fmt.Sprintf("rm -rf /srv/%s", slug))
+}
+
+// want: shell-interpreter
+func viaEnv(slug string) {
+	exec.Command("/usr/bin/env", "sh", "-c", slug)
+}
+
+// want: shell-interpreter
+func withContext(ctx context.Context, slug string) {
+	exec.CommandContext(ctx, "zsh", "-c", slug)
+}
+
+// want: formatted-process-argument
+func sprintfIntoAnArgument(slug string) {
+	exec.Command("useradd", fmt.Sprintf("--home=/srv/%s", slug))
+}
+
+// want: formatted-process-argument
+func concatenationIntoAnArgument(slug string) {
+	exec.Command("useradd", "--home=/srv/"+slug)
+}
+
+// want: formatted-process-argument
+func joinIntoAnArgument(parts []string) {
+	exec.Command("systemctl", strings.Join(parts, " "))
+}
+
+// want: formatted-process-argument
+func embeddedScript() {
+	exec.Command("python3", `
+import os
+os.system("id")
+`)
+}
+
+// want: shell-interpreter
+func rawSyscall(slug string) {
+	_ = syscall.Exec("/bin/sh", []string{"sh", "-c", slug}, nil)
+}
+
+// want: formatted-process-argument
+func bareAnnotationDoesNotPermit(slug string) {
+	//ratline:allow-formatted-arg
+	exec.Command("useradd", fmt.Sprintf("--home=/srv/%s", slug))
+}

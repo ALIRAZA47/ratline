@@ -1,0 +1,57 @@
+// Code that must NOT be reported.
+//
+// The other half of the fixture pair, and the more important one: a check that
+// reports everything is as useless as one that reports nothing, and it is the version
+// that gets disabled rather than fixed.
+package fixture
+
+import (
+	"context"
+	"fmt"
+	"os/exec"
+)
+
+// An argv array with a validated identifier. The normal, correct shape: argv carries
+// no shell, so there is nothing to inject into.
+func argvArray(slug string) {
+	exec.Command("useradd", "--create-home", "--shell", "/usr/sbin/nologin", slug)
+}
+
+// A variable holding a validated value is not "formatting". Flagging this would put
+// an annotation on every exec call in the agent, and annotations nobody reads are
+// worse than none.
+func variableArgument(unit string) {
+	exec.Command("systemctl", "reload", unit)
+}
+
+// Fixed arguments, whatever they contain.
+func fixedArguments() {
+	exec.Command("systemd-analyze", "verify", "/etc/systemd/system/rl-web.service")
+}
+
+// The word bash appears here, in prose, explaining that bash must never be invoked.
+// The scanner walks expressions and never visits comments, so this cannot trip it.
+// The TypeScript side learned that four separate times before RL-M1-041.
+func prosePlainlyMentionsShAndBashAndZsh() {
+	exec.Command("true")
+}
+
+// Annotated with a reason, which is what the annotation is for.
+func annotatedWithAReason(port int64) {
+	//ratline:allow-formatted-arg the port is an int64 validated against the catalogue's bounds, not text
+	exec.Command("some-runtime", fmt.Sprintf("--port=%d", port))
+}
+
+// A trailing annotation, for a call short enough to read on one line.
+func annotatedInline(port int64) {
+	exec.Command("some-runtime", fmt.Sprintf("--port=%d", port)) //ratline:allow-formatted-arg bounded int64
+}
+
+// Not a process launch at all.
+func notAnExec(slug string) string {
+	return fmt.Sprintf("sh -c 'useradd %s'", slug)
+}
+
+func withContextButClean(ctx context.Context, unit string) {
+	exec.CommandContext(ctx, "systemctl", "reload", unit)
+}
