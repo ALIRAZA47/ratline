@@ -1557,13 +1557,14 @@
 - id: RL-M2-003
   title: Implement the signed instruction envelope
   milestone: M2
-  status: in-progress
+  status: done
   owner: agent
   estimate: L
   depends_on: [RL-M2-002]
   blocks: [RL-M2-004, RL-M2-007]
   risk: high
   started_at: 2026-08-04
+  done_at: 2026-08-04
   acceptance:
     - Envelopes carry operation, typed arguments, nonce, issue time, expiry and target host identity
     - Signature verification happens before any argument is interpreted
