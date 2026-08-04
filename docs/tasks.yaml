@@ -4138,12 +4138,13 @@
 - id: RL-M1-059
   title: Write the screens behind the rail
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: M
   depends_on: []
   blocks: []
   risk: low
+  done_at: 2026-08-04
   acceptance:
     - Audit, Team and Sites render data the API returned
     - A destination with no endpoint says so rather than showing an empty list
