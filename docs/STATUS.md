@@ -8,7 +8,7 @@ Generated 2026-08-04.
 | Milestone | Progress | Done | Total | Open high-risk |
 | --- | --- | ---: | ---: | ---: |
 | **M0** Plan | `########################` 100% | 26 | 26 | 0 |
-| **M1** Control plane skeleton | `###################-----` 79% | 44 | 56 | 6 |
+| **M1** Control plane skeleton | `###################-----` 78% | 46 | 59 | 6 |
 | **M2** Agent and first host | `#####-------------------` 21% | 6 | 29 | 15 |
 | **M3** Static sites end to end | `------------------------` 0% | 0 | 27 | 18 |
 | **M4** Node and Bun apps | `------------------------` 0% | 0 | 15 | 10 |
@@ -43,6 +43,7 @@ _None._
 | `RL-M1-020` | 2d | agent | **high** | 2/3 | Rate limit every authentication path |
 | `RL-M1-041` | — | agent | low | 2/3 | Make the source scanners agree about comments |
 | `RL-M1-045` | 2d | agent | **high** | 2/3 | Chase the intermittent failure in the API token ceiling suite |
+| `RL-M1-058` | — | agent | medium | 3/4 | Wire the dashboard shell to the API it decorates |
 
 ## Open high-risk tasks without security-test coverage
 
@@ -71,13 +72,13 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 
 | Suite | Passing | Rate |
 | --- | ---: | ---: |
-| Unit | 445 / 445 | 100% |
+| Unit | 433 / 433 | 100% |
 | Integration | not measured | — |
 | Authorization matrix | 191 / 191 | 100% |
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | 100% | must be 100% |
 
-Measured 2026-08-04T13:56:02.587Z.
+Measured 2026-08-04T14:40:35.828Z.
 
 ### Authorization matrix (role × endpoint × subject)
 
@@ -113,6 +114,6 @@ CI: **green** at `18cca248` (2026-08-03T19:25:43Z)
 | Status | Count |
 | --- | ---: |
 | todo | 103 |
-| review | 4 |
-| done | 76 |
-| **all** | **183** |
+| review | 5 |
+| done | 78 |
+| **all** | **186** |

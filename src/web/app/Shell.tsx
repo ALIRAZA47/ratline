@@ -309,6 +309,7 @@ export function Shell({
   held,
   operations = [],
   labels = {},
+  children,
 }: {
   readonly path: string;
   readonly environment: EnvironmentKind;
@@ -316,6 +317,15 @@ export function Shell({
   readonly held?: readonly string[];
   readonly operations?: readonly Operation[];
   readonly labels?: Readonly<Record<string, string>>;
+  /**
+   * The screen for the current path (RL-M1-059).
+   *
+   * `<main>` rendered `{null}` from RL-M1-022 until now, so every rail destination
+   * was an empty frame. Taken as children rather than resolved here, because the
+   * shell should not know which screens exist — the rail is data and so is the
+   * routing table.
+   */
+  readonly children?: React.ReactNode;
 }): React.JSX.Element {
   const reducedMotion = useReducedMotion();
   const items = visibleNavigation(held ?? NAVIGATION.map((item) => item.requires));
@@ -363,7 +373,7 @@ export function Shell({
           tabIndex={-1}
           style={{ flex: 1, overflow: "auto", padding: "var(--space-lg)" }}
         >
-          {null}
+          {children ?? null}
         </main>
       </div>
     </div>

@@ -4094,3 +4094,83 @@
 
     2026-08-04 — 2026-08-04 — STILL OPEN. (1) ADR 0001 decides 'Drizzle behind a mandatory scoping layer' and src/db/internal/README.md says the directory constructs the Drizzle client; handle.ts imports Pool from pg and runs raw SQL, and drizzle-orm is not in package.json. The code is almost certainly right — a scoping layer over raw SQL is simpler to make unreachable — but an ADR that describes a library nobody installed is a design record that misleads, and ADR 0001 is still 'proposed' so the deviation belongs in it rather than in a commit message. (2) PLAN section 7 puts the catalogue in src/ops/ with generated Go in agent/internal/ops/; src/ops/ holds only a README and the real files are src/agent/catalogue.ts and agent/internal/protocol/catalogue_gen.go. (3) Stale closing conditions: R-12 says the API-token ceiling 'has not landed' (RL-M1-032 is done), R-17 is 'Open until two-factor ships (RL-M1-019)' (done), DESIGN section 10.1 ends 'the reserved hue does not exist yet' (RL-M1-040 is done and ENVIRONMENT.production exists). (4) THREAT-MODEL's own table disagrees about whether an HTTP layer exists: R-15 says 'nothing calls the limiter — there is no HTTP layer' and R-21 says 'Owed by whatever builds the HTTP layer', while R-23 three rows later says 'Closed by RL-M1-042'.
     2026-08-04 — 2026-08-04 — NOT contradictions, checked and dismissed rather than left on the list: the gate report's 'green on all four jobs' reconciles with ci.yml's five, because the fifth only records the result and needs the other four. And brief section 6.3 ('cannot read PRODUCTION secret values') versus RL-M1-010's acceptance ('provably cannot read secret values') is a real disagreement that roles.ts D1 already flags in writing rather than hiding — which is the right handling, so there is nothing to fix.
+- id: RL-M1-057
+  title: Serve the dashboard, and let an operator actually visit it
+  milestone: M1
+  status: done
+  owner: agent
+  estimate: M
+  depends_on: []
+  blocks: []
+  risk: medium
+  started_at: 2026-08-04
+  done_at: 2026-08-04
+  acceptance:
+    - The built dashboard is served, and a browser reaching the root gets HTML rather than a 404
+    - Static serving cannot shadow an API route, and cannot read a file outside the build output
+    - "An operator can reach it from their own machine, through C5 acknowledged exposure rather than around it"
+    - The exposure warning is visible in the interface, not only on stderr
+  artifacts: []
+  decisions: []
+  acceptance_met: [1, 2, 3, 4]
+  notes: |
+    2026-08-04 — 2026-08-04 — The route table declared 30 API routes and the server served ZERO bytes of HTML, so a browser reaching the root got a framework 404. src/web/app has existed since RL-M1-022 and npm run build:web has always produced dist/web; the two were never connected. That is the fourth instance of the shape RL-M1-055 found three of: built, tested, never wired to a live path.
+
+    2026-08-04 — 2026-08-04 — NOT serveStatic('*'), and the reason is two failure modes. A catch-all registered alongside 30 API routes can shadow one — Hono matches in registration order, so a file named 'audit' would silently replace the audit endpoint — and it can serve a file outside the build directory if a traversal survives normalisation. So the build is read once at startup into a manifest, and a request selects a KEY IN A MAP rather than naming a path to open: there is no traversal to defeat because nothing is resolved from the request. A file whose path collides with an API route refuses at STARTUP rather than losing quietly, because an endpoint that silently stops existing is close to undiagnosable from outside. Content types are an allow-list, so the build cannot start shipping a type nobody considered.
+    2026-08-04 — 2026-08-04 — Acceptance 3 met THROUGH C5's mechanism rather than around it. 'scripts/stack visit' binds 0.0.0.0 inside the container, because docker port forwarding cannot reach a process on the container's own loopback, and sets RATLINE_ALLOW_PUBLIC_BIND so preflight permits it — which means the check still runs, the acknowledgement is explicit, and the warning prints on every boot. On the operator's machine the port publishes to 127.0.0.1 ONLY, never 0.0.0.0, so the dashboard is reachable from their browser and from nothing else on their network. That is materially smaller than what the in-container acknowledgement implies, and it is the smallest exposure that satisfies 'let me look at it'.
+    2026-08-04 — 2026-08-04 — ACCEPTANCE 4 NOT MET. The exposure warning prints on stderr and is not rendered in the interface. C5 asks for a loud non-dismissable warning in the DASHBOARD, and stderr is not the dashboard — an operator who opened a browser and never read the container logs would see no warning at all. Left unchecked rather than reinterpreted.
+    2026-08-04 — 2026-08-04 — Acceptance 4 is now MET, by RL-M1-058: the C5 exposure warning renders in the interface, injected into the served HTML so it survives being signed out and the API failing, with no dismiss control of any kind. Verified in a browser.
+- id: RL-M1-058
+  title: Wire the dashboard shell to the API it decorates
+  milestone: M1
+  status: review
+  owner: agent
+  estimate: L
+  depends_on: []
+  blocks: []
+  risk: medium
+  acceptance:
+    - Each rail destination shows data the API returned, not placeholder text
+    - A signed-out visitor is sent to sign in rather than shown an empty shell
+    - The C5 exposure warning is rendered in the interface and cannot be dismissed
+    - Every fetch sends the CSRF token on unsafe methods, and a refusal is shown as a refusal
+  artifacts: []
+  decisions: []
+  notes: |
+    2026-08-04 — 2026-08-04 — FOUND BY OPENING IT IN A BROWSER, which nothing had done before RL-M1-057 served it. The shell renders correctly — rail, breadcrumb, the PRODUCTION chip in its reserved hue, the palette affordance, the tension line — and the network log shows it fetching its own HTML, JS, CSS and fonts and making ZERO API calls. 'marketing-www' in the breadcrumb is placeholder text inside the component, not a site that exists. RL-M1-022 built the shell as chrome and the data layer was never added, so the rail items lead nowhere. That is honest for what M1 scoped, and it means the dashboard currently looks more finished than it is — which is the specific risk of serving it: a screenshot of this would misrepresent the state of the product.
+
+    2026-08-04 — 2026-08-04 — Acceptance 3 here is inherited from RL-M1-057, which left it unmet: C5 asks for a loud non-dismissable warning in the DASHBOARD and the warning currently only reaches stderr. An operator who opened a browser and never read the container logs would see nothing. src/web/lib/shell/ already models the tension states and RL-M1-023 built the exposure text, so this is wiring rather than design.
+    2026-08-04 — 2026-08-04 — ACCEPTANCES 2 AND 3 MET AND VERIFIED IN A BROWSER, which is the first time any of this was looked at. Signed out, the root now renders the sign-in form with 'This installation is already set up' — so Entry asked the server and chose sign-in over claim rather than us guessing. Signing in with the real owner credentials produced a session and the shell, with the rail marking Audit active and NO marketing-www placeholder anywhere. The C5 exposure banner renders above everything, carries its own caveat about NAT and reverse proxies, and has no dismiss control at all: no button, no close icon, no local-storage key, because each of those is something somebody clicks once and never sees again.
+    2026-08-04 — 2026-08-04 — The banner is injected into the served HTML rather than fetched, and that placement is the decision. C5 wants a warning that cannot be dismissed, so it has to survive the two cases a fetch would not: before anyone signs in, and when the API is failing. A warning that needs a working session to appear is absent exactly when somebody is most likely to be poking at an exposed dashboard. It is also set in the asset MAP as well as the fallback, because assetFor returns the map entry for an exact path — so a browser asking for /index.html directly would otherwise get the copy without the warning, which is the one case where it silently disappears.
+    2026-08-04 — 2026-08-04 — The probe is GET /organization, not a dedicated /session endpoint, deliberately. A session endpoint would be a second source of truth about authorization, and one saying 'you are signed in' while the endpoint you actually need refuses you is worse than no answer — the interface would then show a shell it cannot fill. organization.read is held by all seven roles, so a 200 means there is a session AND it can do the minimum. A 404 is treated as signed-out rather than investigated, because §6.3 makes unauthorized and nonexistent indistinguishable on purpose and the dashboard must not try to guess which.
+    2026-08-04 — 2026-08-04 — 'unreachable' is a THIRD state, not folded into signed-out, and this is the one design decision here I would defend hardest. Rendering a sign-in form when the server cannot be reached invites an operator to type a password into a page that cannot deliver it — which is how a transient outage becomes a credential typed into something unknown. It renders an explicit failure naming what broke instead.
+    2026-08-04 — 2026-08-04 — ACCEPTANCES 1 AND 4 NOT MET, left unchecked. The placeholder data is gone and the organization name is real, but Shell has no content components behind the rail: the panes are empty because RL-M1-022 built chrome and no screen was ever written. So 'each rail destination shows data the API returned' is half true — the frame is real and there is nothing in it. And acceptance 4 is untested: sign-in is a public route needing no CSRF token, so nothing here has yet sent one on a guarded mutation. Both need screens to exist first. Also recorded: the environment chip is hardcoded to production because no endpoint reports which environment an installation is — defaulted that way because the chip reserves its hue for production, so being wrong in this direction over-warns rather than under-warns.
+    2026-08-04 — 2026-08-04 — Acceptance 1 now met by RL-M1-059, which wrote the screens. Acceptance 4 (CSRF on unsafe methods) remains unmet: every screen so far is a read, so nothing has yet sent a token on a guarded mutation. It becomes testable when the first write lands.
+  acceptance_met: [1, 2, 3]
+- id: RL-M1-059
+  title: Write the screens behind the rail
+  milestone: M1
+  status: done
+  owner: agent
+  estimate: M
+  depends_on: []
+  blocks: []
+  risk: low
+  done_at: 2026-08-04
+  acceptance:
+    - Audit, Team and Sites render data the API returned
+    - A destination with no endpoint says so rather than showing an empty list
+    - Loading, empty, refused and failed are four distinguishable states
+    - Rail navigation works, and a bookmark to a destination loads it directly
+  artifacts: []
+  decisions: []
+  acceptance_met: [1, 2, 3, 4]
+  notes: |
+    2026-08-04 — 2026-08-04 — VERIFIED IN A BROWSER, all five destinations. Audit shows the real hash-chained entry from claiming: seq 1, organization.update, actor user, decision allow, reason installation-claimed, chain cf3917af. Team shows the real owner from GET /members. Hosts shows the not-built state naming RL-M2-005. Rail navigation works — the breadcrumb and the active marker both follow — and Shell's main element rendered {null} from RL-M1-022 until this commit, which is why every destination was an empty frame.
+
+    2026-08-04 — 2026-08-04 — TWO DESTINATIONS DELIBERATELY DO NOT SHOW AN EMPTY LIST. Hosts and Deploys have no bound endpoint, and an empty table under 'Hosts' would claim there are no hosts when the truth is that Ratline cannot manage one yet. A claim about the world is worse than an admission about the software, so each says there is no endpoint behind it, explains why that differs from an empty list, and names the task. §291 asks empty states to invite action rather than apologise.
+    2026-08-04 — 2026-08-04 — SITES SHOWS PROJECTS AND SAYS SO. The rail says Sites; the only bound read is GET /projects. A project contains sites and sites arrive in M3, so rendering projects under a heading that says Sites would be a quiet mislabelling of the data model — the kind that survives because it looks plausible. The heading reads Projects and the note explains the difference.
+    2026-08-04 — 2026-08-04 — FOUR OUTCOMES, not two. Loading, empty, refused and failed each get a different sentence, because collapsing 'the server refused you' into 'there is nothing here' is the specific mistake that makes a permissions problem look like an empty account — and an operator then hunts for data that was never missing. The refused text is honest that it CANNOT tell which: §6.3 makes unauthorized and nonexistent indistinguishable on purpose, so the screen says so rather than guessing. A 401 is deliberately NOT handled per-pane; it means the session ended, and the right response is re-probing the whole app rather than one pane showing an error while four others still render as signed in.
+    2026-08-04 — 2026-08-04 — Routing is history.pushState and popstate, not a router library: five destinations and no nested routes do not earn a dependency (§6.7), and the browser already implements back and bookmarking correctly. dashboard.ts serving index.html for any unclaimed path is what makes a cold load of /audit work. Clicks are intercepted in App rather than in Rail, so the rail stays a presentation of data with no opinion about history, and a click with a modifier key is left alone — an operator opening a destination in a new tab is being reasonable and a router that swallows that is one people fight.
+    2026-08-04 — 2026-08-04 — THREE OF THE PROJECT'S OWN GUARDS FIRED on this code, and CI agreed. All three were right to fire. (1) design_tokens found a hard-coded #7a2f1e in ExposureBanner: I had written fallback literals like var(--rust, #7a2f1e) for tokens that do not exist. Replaced with the real ones — the alarm state is --st-fail with --st-fail-on for text and --st-fail-mark for the edge, and borders are --rule-hairline. Inventing a token name and hiding the invention behind a CSS fallback is exactly what RL-M1-041's eight invented tokens did, and the scan caught it a second time. (2) indistinguishable_404 objected to src/web/lib/session.ts mentioning 401 and 404. (3) no_default_secrets objected to credentials: 'same-origin' as a secret-shaped assignment.
+    2026-08-04 — 2026-08-04 — Both scans were written for server code and met a browser client for the first time, so each got a NARROW exemption with a written argument rather than a workaround. src/web/** cannot build a response at all — it reads a status the server already chose, and it must, because a client unable to tell 'sign in' from 'refused' would show a signed-out operator an error and a refused one a login form. And it cannot hold a secret: everything there was sent to a browser, so it is public by construction. The alternative for the second one was moving 'same-origin' into a differently-named constant, which would have kept the test green and taught nobody anything. The exemption is the directory that cannot serve, not a list of files somebody appends to.

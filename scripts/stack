@@ -2,6 +2,8 @@
 # The control plane, running on Ubuntu 24.04 (RL-M1-055). Same shape as scripts/host.
 #
 #   ./scripts/stack up        build if needed, run, wait for /health
+#   ./scripts/stack visit     up, AND publish to this machine's loopback so a browser
+#                             can open it — through C5's acknowledged path, not around it
 #   ./scripts/stack logs      follow the server's output
 #   ./scripts/stack shell     a shell inside, as the ratline account
 #   ./scripts/stack psql      a psql session against its database
@@ -51,8 +53,32 @@ cmd_up() {
 	if running; then say "already up"; return; fi
 	docker rm -f "$NAME" >/dev/null 2>&1 || true
 
-	# No -p. See the note at the top of this file.
-	docker run -d --name "$NAME" "$IMAGE" serve >/dev/null
+	if [ "${PUBLISH:-0}" = 1 ]; then
+		# ## What this does and does not expose
+		#
+		# Inside the container the server binds 0.0.0.0, because docker's port
+		# forwarding cannot reach a process bound to the container's own loopback.
+		# preflight() refuses a 0.0.0.0 bind outright unless the exposure is
+		# acknowledged, so RATLINE_ALLOW_PUBLIC_BIND is set — which means the warning
+		# prints on every boot and the dashboard shows it. That is C5's own mechanism
+		# being used rather than bypassed: the check still runs, the acknowledgement is
+		# explicit, and the warning is not dismissable.
+		#
+		# On THIS machine the port is published to 127.0.0.1 only, never 0.0.0.0. So
+		# the dashboard is reachable from this Mac's browser and NOT from anything else
+		# on the network — which is the smallest exposure that satisfies "let me look at
+		# it", and materially smaller than what the acknowledgement inside the container
+		# implies.
+		say "publishing to 127.0.0.1:8787 on THIS machine only — not to your network"
+		docker run -d --name "$NAME" \
+			-p 127.0.0.1:8787:8787 \
+			-e RATLINE_BIND_ADDRESS=0.0.0.0 \
+			-e RATLINE_ALLOW_PUBLIC_BIND=1 \
+			"$IMAGE" serve >/dev/null
+	else
+		# No -p. See the note at the top of this file.
+		docker run -d --name "$NAME" "$IMAGE" serve >/dev/null
+	fi
 
 	say "waiting for the control plane"
 	i=0
@@ -60,9 +86,17 @@ cmd_up() {
 		if docker exec "$NAME" curl -fsS http://127.0.0.1:8787/health >/dev/null 2>&1; then
 			say "up — $(docker exec "$NAME" curl -fsS http://127.0.0.1:8787/health)"
 			say ""
-			say "It is NOT reachable from this Mac, deliberately (C5). Use:"
-			say "  ./scripts/stack curl /bootstrap"
-			say "  ./scripts/stack claim"
+			if [ "${PUBLISH:-0}" = 1 ]; then
+				say "Open it:  http://127.0.0.1:8787"
+				say ""
+				say "The exposure warning you will see is correct and deliberate: the server"
+				say "was told to bind 0.0.0.0 inside its container so docker could forward a"
+				say "port. On this machine the port is published to 127.0.0.1 only."
+			else
+				say "It is NOT reachable from this Mac, deliberately (C5). Use:"
+				say "  ./scripts/stack curl /bootstrap    or    ./scripts/stack visit"
+			fi
+			say "  ./scripts/stack claim   completes first run"
 			return
 		fi
 		# A container that exited is a failure to report, not something to keep
@@ -143,6 +177,7 @@ cmd_restart() {
 
 case "${1:-}" in
 up) cmd_up ;;
+visit) PUBLISH=1 cmd_up ;;
 build) cmd_build ;;
 rebuild) need_docker; docker rm -f "$NAME" >/dev/null 2>&1 || true; docker image rm -f "$IMAGE" >/dev/null 2>&1 || true; cmd_build ;;
 logs) running || die "not up"; docker logs -f "$NAME" ;;
@@ -152,5 +187,5 @@ curl) shift; cmd_curl "$@" ;;
 claim) cmd_claim ;;
 restart) cmd_restart ;;
 down) need_docker; docker rm -f "$NAME" >/dev/null 2>&1 || true; say "removed $NAME" ;;
-*) die "usage: scripts/stack up | claim | curl <path> | shell | psql | logs | restart | down | build | rebuild" ;;
+*) die "usage: scripts/stack up | visit | claim | curl <path> | shell | psql | logs | restart | down | build | rebuild" ;;
 esac

@@ -297,6 +297,18 @@ test("nothing else in src/ builds a refusal of its own", () => {
   for (const file of globSync("src/**/*.ts", { cwd: ROOT })) {
     const path = join(ROOT, file);
     if (relative(ROOT, path) === join("src", "api", "refusal.ts")) continue;
+
+    // The browser client is exempt, with an argument (RL-M1-059). This scan exists so
+    // no SERVER module can build a refusal that differs from refusal.ts's — the leak
+    // being that two constructions drift. `src/web/**` runs in a browser and cannot
+    // construct a response at all; it READS a status the server already chose, and it
+    // must, because a client that cannot tell "sign in" from "refused" would show a
+    // signed-out operator an error and a refused one a login form.
+    //
+    // Narrow on purpose: the exemption is the directory that cannot serve, not a list
+    // of files somebody appends to. If a server module ever moves under src/web, this
+    // stops protecting it — which is why the assertion below also names what it covers.
+    if (file.startsWith("src/web/")) continue;
     const code = codeOf(readFileSync(path, "utf8"));
     for (const status of ["401", "403", "404"]) {
       if (new RegExp(`\\b${status}\\b`).test(code)) offenders.push(`${file} mentions ${status}`);

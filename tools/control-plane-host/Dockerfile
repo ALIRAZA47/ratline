@@ -70,6 +70,13 @@ COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
 COPY . .
+
+# The dashboard is built INSIDE the image (RL-M1-057). Vite is the project's only
+# build step, and running it here rather than copying a local dist/ means the image
+# cannot ship a stale bundle from whenever somebody last built on their laptop — which
+# is the same reason .dockerignore excludes dist/ in the first place.
+RUN npm run build:web
+
 RUN chown -R ratline:ratline /srv/ratline
 
 # The database cluster lives in the image's default location and is started by the

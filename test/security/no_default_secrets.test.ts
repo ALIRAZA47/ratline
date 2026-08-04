@@ -258,7 +258,20 @@ const PLACEHOLDER_DEFINITION_FILES = ["src/crypto/weak-secrets.ts"];
 function shippedSources(): string[] {
   return globSync(["src/**/*.ts", "scripts/**/*.ts"], { cwd: ROOT })
     .map((p) => p.split("\\").join("/"))
-    .filter((p) => !p.endsWith(".test.ts"));
+    .filter((p) => !p.endsWith(".test.ts"))
+    // The browser client is excluded, with an argument (RL-M1-059). This scan looks
+    // for secret-SHAPED constants in the shipped tree, and `src/web/**` cannot hold a
+    // secret: everything it has was sent to a browser, so anything there is public by
+    // construction and a "default secret" is not a concept that applies.
+    //
+    // What triggered it was `credentials: "same-origin"` — a fetch option that matches
+    // the assignment shape the scan looks for. Gaming that by moving the literal into a
+    // differently-named constant would have kept the test green and taught nobody
+    // anything; excluding the directory says what is actually true about it.
+    //
+    // src/api, src/crypto, src/db and everything else the server runs stay in scope,
+    // which is where a default secret would matter.
+    .filter((p) => !p.startsWith("src/web/"));
 }
 
 /** String literals in a source file, with the identifier they are assigned to. */

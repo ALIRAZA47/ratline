@@ -24,6 +24,7 @@ import "@fontsource/jetbrains-mono/400.css";
 import "@fontsource/jetbrains-mono/700.css";
 
 import { renderDesignStylesheet } from "../lib/design/css.ts";
+import { App } from "./App.tsx";
 import { Shell } from "./Shell.tsx";
 import { ClaimForm, Entry, SignInForm } from "./FirstRun.tsx";
 import type { EnvironmentKind, Operation } from "../lib/shell/navigation.ts";
@@ -39,58 +40,55 @@ const mount = document.querySelector("#ratline");
 if (mount === null) throw new Error("the mount point is missing from index.html");
 
 /**
- * A dev harness, and openly one.
+ * The dev harness, still here and now strictly opt-in (RL-M1-058).
  *
- * There is no router and no API yet, so the shell has nothing to get its state
- * from. Reading it off the query string means the browser checks this task's
- * acceptance depends on are REPRODUCIBLE — `?state=fail`, `?env=staging` — and
- * that nobody has to edit a file and reload to see the tension line under load.
+ * Every branch below requires an explicit query parameter. WITHOUT one, `<App />`
+ * renders and asks the server where we stand — which is the real behaviour, and until
+ * this commit was unreachable: the default rendered the shell with `marketing-www` as
+ * placeholder data, so opening the dashboard showed a frame around a site that does
+ * not exist.
  *
- * This block goes away when routing arrives (RL-M1-030). It is deliberately the
- * only place in `src/web/app` that reads anything, so removing it later cannot
- * break a component.
+ * Kept rather than deleted because the states it reaches are still worth looking at
+ * and several are hard to produce for real: `?state=fail` needs a failing operation,
+ * `?screen=claim` needs an unclaimed installation, `?env=staging` needs an endpoint
+ * that reports the environment and none exists yet. They are review tools, and now
+ * they cannot be what an operator sees by accident.
  */
 const params = new URLSearchParams(globalThis.location.search);
-const environment = (params.get("env") ?? "production") as EnvironmentKind;
-const state = params.get("state");
-const operations: Operation[] =
-  state === "working" || state === "attention" || state === "fail"
-    ? [{ state, label: `Demonstrating the ${state} state` }]
-    : [];
 
-/**
- * `?screen=entry` renders the first-run / sign-in decision instead of the shell.
- *
- * Part of the same dev harness: there is no router yet, and RL-M1-030's screens
- * need to be reachable to be looked at. Goes away with real routing.
- */
-const screen = params.get("screen");
-
-/**
- * `entry` asks the server which form to show; `claim` and `signin` force one.
- *
- * Forcing matters for review: with no API behind the dev server, `entry`
- * always falls back to sign-in — correctly, because failing closed there is
- * safer — which would leave the claim form unreviewable.
- */
-const ENTRY_SCREENS: Readonly<Record<string, React.JSX.Element>> = {
+const HARNESS_SCREENS: Readonly<Record<string, React.JSX.Element>> = {
   entry: <Entry />,
   claim: <ClaimForm />,
   signin: <SignInForm />,
 };
-const forced = screen === null ? undefined : ENTRY_SCREENS[screen];
 
-createRoot(mount).render(
-  forced !== undefined ? (
-    <StrictMode>{forced}</StrictMode>
-  ) : (
-  <StrictMode>
+const screen = params.get("screen");
+const forced = screen === null ? undefined : HARNESS_SCREENS[screen];
+
+/** `?path=` or `?state=` or `?env=` asks for the shell with made-up data. */
+function harnessShell(): React.JSX.Element | undefined {
+  const path = params.get("path");
+  const state = params.get("state");
+  const env = params.get("env");
+  if (path === null && state === null && env === null) return undefined;
+
+  const operations: Operation[] =
+    state === "working" || state === "attention" || state === "fail"
+      ? [{ state, label: `Demonstrating the ${state} state` }]
+      : [];
+
+  return (
     <Shell
-      environment={environment}
-      path={params.get("path") ?? "/sites/marketing-www"}
+      environment={(env ?? "production") as EnvironmentKind}
+      path={path ?? "/sites/marketing-www"}
       operations={operations}
       labels={{ "marketing-www": "marketing-www" }}
     />
-  </StrictMode>
-  ),
+  );
+}
+
+const harness = forced ?? harnessShell();
+
+createRoot(mount).render(
+  <StrictMode>{harness ?? <App />}</StrictMode>,
 );
