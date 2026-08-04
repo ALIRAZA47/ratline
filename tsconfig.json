@@ -59,7 +59,14 @@
     "src/**/*.d.ts",
     "test/**/*.ts",
     "scripts/**/*.ts",
-    "vite.config.ts"
+    "vite.config.ts",
+    // The task board (RL-M1-061). Included rather than excluded: it is real TypeScript
+    // with React, and a dev tool that is not typechecked is a dev tool that breaks
+    // quietly. docs-site/ is excluded from LINT because it is hand-written vanilla JS
+    // with no types at all; this is the opposite case.
+    "tools/board/**/*.ts",
+    "tools/board/**/*.tsx",
+    "tools/board/vite.config.ts"
   ],
   "exclude": ["node_modules"]
 }

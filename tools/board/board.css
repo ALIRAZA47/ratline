@@ -1,0 +1,247 @@
+/*
+ * The board's own stylesheet (RL-M1-061).
+ *
+ * Not the product's design tokens. src/web/lib/design owns Ratline's visual language, and
+ * a dev tool importing it would make a change to the product's palette able to break
+ * internal tooling — and would imply the board is part of the product, which it is not.
+ * The hues here are chosen to READ like the product without claiming to be it.
+ */
+
+:root {
+  --tar: #17150f;
+  --pitch: #211d16;
+  --card: #262117;
+  --chalk: #ece7dd;
+  --chalk-dim: #9c948a;
+  --rule: #322c22;
+  --accent: #d8b673;
+
+  --todo: #6d6459;
+  --ready: #8fa3b8;
+  --progress: #d8b673;
+  --blocked: #c9603f;
+  --review: #b48ec9;
+  --done: #6f9e6b;
+  --dropped: #4a443b;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --tar: #f6f3ec;
+    --pitch: #fffdf8;
+    --card: #fff;
+    --chalk: #221e17;
+    --chalk-dim: #6a6155;
+    --rule: #ddd6c8;
+    --accent: #8a6a25;
+
+    --todo: #8a8175;
+    --ready: #4a6480;
+    --progress: #8a6a25;
+    --blocked: #a8401f;
+    --review: #7a4f96;
+    --done: #3f6f3b;
+    --dropped: #9a9384;
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--tar);
+  color: var(--chalk);
+  font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+code, .mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.92em;
+}
+
+/* --- head ---------------------------------------------------------------- */
+
+.page-head { padding: 20px 20px 10px; border-bottom: 2px solid var(--rule); }
+.page-head h1 { margin: 0 0 6px; font-size: 1.05rem; font-weight: 600; }
+.stamp { margin: 0; color: var(--chalk-dim); font-size: 0.78rem; max-width: 90ch; }
+
+.dirty {
+  margin: 10px 0 0;
+  padding: 8px 11px;
+  background: var(--blocked);
+  color: #fff;
+  border-radius: 3px;
+  font-size: 0.78rem;
+  max-width: 80ch;
+}
+
+/* --- controls ------------------------------------------------------------ */
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--rule);
+  position: sticky;
+  top: 0;
+  background: var(--tar);
+  z-index: 3;
+}
+
+.group { display: flex; gap: 0; }
+
+.toggle, .count {
+  background: var(--pitch);
+  color: var(--chalk);
+  border: 1px solid var(--rule);
+  padding: 7px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+.group .toggle:first-child { border-radius: 3px 0 0 3px; }
+.group .toggle:last-child { border-radius: 0 3px 3px 0; border-left: none; }
+.toggle[aria-pressed="true"] { background: var(--accent); color: #17150f; border-color: var(--accent); }
+
+input[type="search"] {
+  background: var(--pitch);
+  color: var(--chalk);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 7px 10px;
+  font: inherit;
+  min-width: 220px;
+  flex: 1;
+}
+
+.check { display: flex; align-items: center; gap: 6px; color: var(--chalk-dim); font-size: 0.82rem; }
+.tally { color: var(--chalk-dim); font-size: 0.78rem; margin-left: auto; }
+
+/* --- lanes --------------------------------------------------------------- */
+
+.lane { border-bottom: 1px solid var(--rule); }
+.lane-head { padding: 14px 20px 8px; }
+
+.lane-toggle {
+  background: none;
+  border: none;
+  color: var(--chalk);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.lane-title { font-size: 0.95rem; }
+.lane-progress { color: var(--chalk-dim); font-size: 0.78rem; margin-left: 10px; }
+.lane-goal { margin: 6px 0 0; color: var(--chalk-dim); font-size: 0.78rem; max-width: 100ch; }
+
+/* Horizontal scroll lives HERE, inside the lane, so the page itself never scrolls
+   sideways — a board whose whole document shifts is one where the controls leave. */
+.lane-columns {
+  display: flex;
+  gap: 12px;
+  padding: 10px 20px 18px;
+  overflow-x: auto;
+  align-items: flex-start;
+}
+
+/* --- columns ------------------------------------------------------------- */
+
+.column {
+  flex: 0 0 15rem;
+  min-width: 15rem;
+  background: var(--pitch);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+}
+
+.column-head {
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--chalk-dim);
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.column-count { margin-left: auto; font-variant-numeric: tabular-nums; }
+
+.column-body { padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.column-empty { margin: 0; padding: 6px 2px; color: var(--dropped); }
+
+/* --- cards --------------------------------------------------------------- */
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--rule);
+  border-left: 3px solid var(--rule);
+  border-radius: 3px;
+  padding: 8px 9px;
+}
+/* Risk on the edge rather than as another chip: it is the field that decides whether a
+   task can close, so it belongs where the eye lands before it reads anything. */
+.card[data-risk="high"] { border-left-color: var(--blocked); }
+.card[data-risk="medium"] { border-left-color: var(--progress); }
+
+.card-head {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  display: block;
+  width: 100%;
+}
+.card-id {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.7rem;
+  color: var(--chalk-dim);
+}
+.card-title { display: block; font-size: 0.82rem; line-height: 1.35; margin-top: 2px; }
+
+.card-meta { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+
+.chip {
+  font-size: 0.68rem;
+  padding: 1px 6px;
+  border-radius: 9px;
+  border: 1px solid var(--rule);
+  color: var(--chalk-dim);
+  font-variant-numeric: tabular-nums;
+}
+.chip-part { color: var(--progress); border-color: var(--progress); }
+.chip-risk { color: var(--blocked); border-color: var(--blocked); }
+.chip-human { color: var(--review); border-color: var(--review); }
+.chip-quiet { opacity: 0.75; }
+
+.waiting { margin: 7px 0 0; font-size: 0.7rem; color: var(--blocked); }
+.note {
+  margin: 8px 0 0;
+  padding-top: 7px;
+  border-top: 1px solid var(--rule);
+  font-size: 0.72rem;
+  color: var(--chalk-dim);
+  overflow-wrap: anywhere;
+}
+
+/* --- the rest ------------------------------------------------------------ */
+
+.nothing, .refusal { padding: 40px 20px; max-width: 70ch; color: var(--chalk-dim); }
+.refusal h1 { color: var(--chalk); font-size: 1.05rem; }
+.page-foot { padding: 18px 20px 40px; color: var(--chalk-dim); font-size: 0.75rem; max-width: 100ch; }
+.page-foot p { margin: 0; }
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

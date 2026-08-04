@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ratline — task board</title>
+  </head>
+  <body>
+    <div id="board"></div>
+    <!--
+      The data, written by `./scripts/tasks board` and loaded BEFORE the app.
+
+      A separate file rather than a bundled import, so refreshing the board is one cheap
+      command instead of a rebuild — and so the build can be committed to nobody's
+      workflow while the data stays current. `fetch` would have been cleaner and does not
+      work from file://, which is where this page is opened.
+    -->
+    <script src="./data.js"></script>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>
