@@ -77,6 +77,12 @@ code, .mono {
 
 /* --- controls ------------------------------------------------------------ */
 
+/* The two sticky offsets, in one place. A column header that stuck at a hardcoded top
+   would slide under the controls the moment the control bar wrapped to two lines on a
+   narrow window — which is exactly when somebody is scrolling and needs it. */
+:root { --controls-h: 3.2rem; }
+@media (max-width: 60rem) { :root { --controls-h: 6.4rem; } }
+
 .controls {
   display: flex;
   flex-wrap: wrap;
@@ -87,7 +93,8 @@ code, .mono {
   position: sticky;
   top: 0;
   background: var(--tar);
-  z-index: 3;
+  z-index: 5;
+  min-height: var(--controls-h);
 }
 
 .group { display: flex; gap: 0; }
@@ -121,7 +128,27 @@ input[type="search"] {
 /* --- lanes --------------------------------------------------------------- */
 
 .lane { border-bottom: 1px solid var(--rule); }
+/* NOT sticky, and that was a bug I had to see to believe. Sticking it at the same offset
+   as the column heads meant it sat on top of them — both stuck to `--controls-h`, the lane
+   head won on z-index, and the column titles were pinned invisibly underneath. The
+   measurement said "column heads visible near top: 0" while the page looked fine.
+   
+   Offsetting the column heads below it needs the lane head's height, which varies with the
+   goal text, so a fixed offset would leave a gap or an overlap depending on the milestone.
+   The honest fix is to pick one: the column titles are what somebody scrolling a long lane
+   needs, so they stick and this does not. The lane name is one scroll up. */
 .lane-head { padding: 14px 20px 8px; }
+/* The goal stays visible. I first wrote a rule to hide it once the lane was stuck, keyed on
+   a `.stuck` class — and nothing sets that class, so the rule did nothing while its comment
+   claimed it did. Removed rather than wired up: hiding it needs a scroll observer, and a
+   paragraph that vanishes as you scroll past it is a worse trade than two extra lines of
+   sticky header. Clamped instead, so a long goal cannot push the columns off-screen. */
+.lane-goal {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
 
 .lane-toggle {
   background: none;
@@ -139,26 +166,46 @@ input[type="search"] {
 .lane-progress { color: var(--chalk-dim); font-size: 0.78rem; margin-left: 10px; }
 .lane-goal { margin: 6px 0 0; color: var(--chalk-dim); font-size: 0.78rem; max-width: 100ch; }
 
-/* Horizontal scroll lives HERE, inside the lane, so the page itself never scrolls
-   sideways — a board whose whole document shifts is one where the controls leave. */
+/* A GRID, not a horizontal scroller, and the reason is sticky headers.
+   `overflow-x: auto` makes an element a scroll container in BOTH axes — the spec computes
+   `overflow-y: visible` to `auto` — so a `position: sticky` column header inside one
+   sticks to that container rather than to the viewport, which means it scrolls away
+   exactly when it is wanted. Losing the horizontal scroll is the price of the headers
+   staying put, and it is worth paying: at most seven statuses exist and rarely more than
+   four are occupied at once, so they fit.
+
+   Below 64rem the columns fall to a scroller instead, because five 11rem columns on a
+   phone are unreadable — and a header that sticks over content nobody can read is not a
+   trade worth making. */
 .lane-columns {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(var(--columns, 3), minmax(0, 1fr));
   gap: 12px;
   padding: 10px 20px 18px;
-  overflow-x: auto;
-  align-items: flex-start;
+  align-items: start;
+}
+
+@media (max-width: 64rem) {
+  .lane-columns {
+    grid-template-columns: none;
+    display: flex;
+    overflow-x: auto;
+    align-items: flex-start;
+  }
+  .column { flex: 0 0 15rem; }
 }
 
 /* --- columns ------------------------------------------------------------- */
 
 .column {
-  flex: 0 0 15rem;
-  min-width: 15rem;
+  min-width: 0;
   background: var(--pitch);
   border: 1px solid var(--rule);
   border-radius: 4px;
 }
 
+/* STICKY, under the control bar. This is the thing somebody scrolling a long lane needs:
+   without it, forty cards down, every column looks the same. */
 .column-head {
   margin: 0;
   padding: 8px 10px;
@@ -171,6 +218,13 @@ input[type="search"] {
   display: flex;
   align-items: center;
   gap: 7px;
+  position: sticky;
+  top: var(--controls-h);
+  /* Its own background, or cards show through as it passes over them. */
+  background: var(--pitch);
+  z-index: 2;
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
 }
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .column-count { margin-left: auto; font-variant-numeric: tabular-nums; }

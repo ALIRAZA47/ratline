@@ -78,7 +78,7 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | 100% | must be 100% |
 
-Measured 2026-08-04T20:19:20.211Z.
+Measured 2026-08-04T20:26:59.198Z.
 
 ### Authorization matrix (role × endpoint × subject)
 

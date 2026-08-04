@@ -192,7 +192,7 @@ function Lane({
       </header>
 
       {open && (
-        <div className="lane-columns">
+        <div className="lane-columns" style={{ ["--columns" as string]: String(columns.length) }}>
           {columns.map((status) => (
             <Column
               key={status}
