@@ -198,7 +198,6 @@
       list.textContent = "";
       active = -1;
       shown = [];
-      input.setAttribute("aria-expanded", "false");
     }
 
     function score(entry, terms) {
@@ -233,7 +232,6 @@
           "Nothing matches “" + query + "”. Try a constraint (C3), a risk (R-08), an ADR number, or a term such as envelope, matrix or privd.");
         list.appendChild(none);
         list.hidden = false;
-        input.setAttribute("aria-expanded", "true");
         return;
       }
 
@@ -250,7 +248,6 @@
       }
       active = -1;
       list.hidden = false;
-      input.setAttribute("aria-expanded", "true");
     }
 
     function move(delta) {

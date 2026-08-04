@@ -47,8 +47,9 @@
         <div class="search">
           <label class="skip" for="site-search">Search the documentation</label>
           <input class="search__input" id="site-search" type="search" placeholder="Search — press / or Ctrl-K"
-                 autocomplete="off" role="combobox" aria-expanded="false" aria-controls="site-search-results">
-          <ul class="search__results" id="site-search-results" hidden></ul>
+                 autocomplete="off" aria-controls="site-search-results">
+          <ul class="search__results" id="site-search-results" aria-label="Search results"
+              aria-live="polite" hidden></ul>
         </div>
         <button class="themetoggle" id="theme-toggle" type="button">Theme: System</button>
       </div>

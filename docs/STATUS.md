@@ -31,7 +31,7 @@ Auth, org/team/project model, the can() function with 100% branch coverage, hash
 
 | Task | Age | Owner | Risk | Acceptance | Title |
 | --- | ---: | --- | --- | ---: | --- |
-| `RL-M1-055` | 0d | agent | medium | 1/4 | Run the control plane for real, on a container that is not this Mac |
+| `RL-M1-055` | 0d | agent | medium | 4/4 | Run the control plane for real, on a container that is not this Mac |
 
 ## Blocked
 

@@ -103,7 +103,13 @@ cmd_claim() {
 		;;
 	esac
 
-	token=$(docker exec "$NAME" sh -c 'cat /var/lib/ratline/secrets/bootstrap-token 2>/dev/null || true')
+	# The filename comes from tokenPath() in src/api/bootstrap_token.ts. Asked of the
+	# code rather than hardcoded here, because the first version of this script guessed
+	# "bootstrap-token" while the code writes "bootstrap.token" — and the symptom was
+	# indistinguishable from the server not minting one at all, which sent me looking
+	# in the wrong place.
+	file=$(docker exec "$NAME" sh -c 'cd /srv/ratline && node --experimental-strip-types --no-warnings=ExperimentalWarning -e "import(\"./src/api/bootstrap_token.ts\").then(m => process.stdout.write(m.tokenPath()))"')
+	token=$(docker exec "$NAME" sh -c "cat '$file' 2>/dev/null || true")
 	[ -n "$token" ] || die "no bootstrap token on disk. The server mints it on first boot; check ./scripts/stack logs"
 	say "token read from the filesystem, which is the authority for claiming (host access, not network access)"
 

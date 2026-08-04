@@ -545,6 +545,14 @@ td .mono, th .mono { font-size: var(--text-sm); }
 .nowrap { white-space: nowrap; }
 .num { text-align: right; font-family: var(--font-mono); }
 
+/* Role initials in the action table. The dotted rule is the affordance that
+   says "hover or focus me for the full name"; the title attribute carries it. */
+abbr[title] {
+  text-decoration: underline dotted var(--rule-hairline);
+  text-underline-offset: 2px;
+  cursor: help;
+}
+
 /* Filter above a table. */
 .filter {
   display: flex;

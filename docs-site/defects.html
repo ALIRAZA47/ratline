@@ -47,8 +47,9 @@
         <div class="search">
           <label class="skip" for="site-search">Search the documentation</label>
           <input class="search__input" id="site-search" type="search" placeholder="Search — press / or Ctrl-K"
-                 autocomplete="off" role="combobox" aria-expanded="false" aria-controls="site-search-results">
-          <ul class="search__results" id="site-search-results" hidden></ul>
+                 autocomplete="off" aria-controls="site-search-results">
+          <ul class="search__results" id="site-search-results" aria-label="Search results"
+              aria-live="polite" hidden></ul>
         </div>
         <button class="themetoggle" id="theme-toggle" type="button">Theme: System</button>
       </div>
@@ -266,8 +267,8 @@
           <tbody>
             <tr>
               <th scope="row">Test count</th>
-              <td><span class="pathref">.ratline/metrics.json</span>: 422 unit test cases plus 191 in <code>test/authz</code>. <span class="pathref">docs/gates/M1.md</span>: “598 tests”. <span class="pathref">README.md</span>: “602 tests passing”.</td>
-              <td>The metrics file. It is rewritten on every run; the other two are prose snapshots taken at different moments.</td>
+              <td><span class="pathref">.ratline/metrics.json</span>: 422 unit test cases plus 191 in <code>test/authz</code> at 08:05Z, and 433 plus 191 an hour later. <span class="pathref">docs/gates/M1.md</span>: “598 tests”. <span class="pathref">README.md</span>: “602 tests passing”.</td>
+              <td>The metrics file, with its timestamp. It is rewritten on every run; the other two are prose snapshots taken at different moments and neither says which.</td>
             </tr>
             <tr>
               <th scope="row">M1 task count</th>

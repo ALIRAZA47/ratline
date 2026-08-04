@@ -30,6 +30,7 @@ import { serve } from "@hono/node-server";
 
 import { preflight, BindRefusal } from "./boot.ts";
 import { createServer } from "./api/server.ts";
+import { mintBootstrapToken, tokenPath } from "./api/bootstrap_token.ts";
 import { secretsDir, SecretRefusal } from "./crypto/secrets.ts";
 
 /**
@@ -158,17 +159,38 @@ async function main(): Promise<void> {
     await migrator.end();
   }
 
-  // 3. The sign-in identity, read or created — never invented.
+  // 3. The first-run token, if this installation is unclaimed.
+  //
+  // `mintBootstrapToken`'s own docstring says "called on every boot", and until this
+  // line nothing called it at all — it had exactly one caller, a test. So the token
+  // file was never created on a real installation, and first run was IMPOSSIBLE:
+  // POST /bootstrap requires a token that nothing minted. Found by running the thing
+  // rather than by reading it, which is the third defect of that shape this task has
+  // turned up. Idempotent, so a restart does not invalidate a token an operator wrote
+  // down.
+  //
+  // The token is NOT printed. Its whole point is that host access is the authority
+  // for claiming an installation rather than network access (RL-M1-030), and a token
+  // in a log is readable by anyone who can read logs — which is a wider set than
+  // those who can read a 0600 file in the service account's directory. The PATH is
+  // printed instead, because an operator needs to know where to look.
+  const minted = mintBootstrapToken(dir);
+
+  // 4. The sign-in identity, read or created — never invented.
   const signInIdentityId = await resolveSignInIdentity(databaseUrl);
   if (signInIdentityId === null) {
     process.stderr.write(
-      "\nThis installation is unclaimed: no organization exists yet, so there is no\n" +
-        "sign-in identity to act as. Only the first-run endpoints are usable until it\n" +
-        "is claimed, and the server needs restarting afterwards. See RL-M1-055.\n\n",
+      "\nThis installation is unclaimed. To claim it, read the first-run token from\n" +
+        `  ${tokenPath(dir)}\n` +
+        "and send it as the x-ratline-bootstrap header on POST /bootstrap.\n" +
+        (minted === null ? "" : "The token is on disk; it is deliberately not printed here.\n") +
+        "\nNo organization exists yet, so there is no sign-in identity to act as: the\n" +
+        "authenticated paths are unreachable until the installation is claimed AND the\n" +
+        "server is restarted. See RL-M1-055.\n\n",
     );
   }
 
-  // 4. Serve.
+  // 5. Serve.
   const app = createServer({
     cookieSecret: ready.secrets.cookie,
     sealingKey: ready.secrets.kek,
