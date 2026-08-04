@@ -31,6 +31,9 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+// The board stamps itself with the commit, so a stale page cannot pass for a current one.
+// scripts/ may spawn processes; src/ may not (ADR 0005, C2), and this is scripts/.
+import { execFileSync } from "node:child_process";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const TASKS_PATH = join(ROOT, "docs", "tasks.yaml");
@@ -1110,6 +1113,426 @@ function daysBetween(a: string, b: string): number {
   return Number.isNaN(ms) ? 0 : Math.max(0, Math.round(ms / 86_400_000));
 }
 
+
+// ---------------------------------------------------------------------------
+// The board (RL-M1-061)
+// ---------------------------------------------------------------------------
+
+/**
+ * A board of every task, as a self-contained page.
+ *
+ * ## Why this is a `tasks` subcommand and not a separate tool
+ *
+ * A second thing that parses `docs/tasks.yaml` would be a second source of truth about
+ * what a task's status is, and the two would eventually disagree — most likely after
+ * somebody adds a status and updates only one parser. This reuses `loadTasks()`, so the
+ * board cannot report a status the tracker does not recognise, and `tasks validate`
+ * gates both.
+ *
+ * ## Why it is generated rather than live
+ *
+ * A page that read `tasks.yaml` over `fetch` would need a server, and would show nothing
+ * when opened from the filesystem. So the data is embedded and the page is regenerated on
+ * demand — and BECAUSE that can go stale, the page stamps itself with the commit and the
+ * time it was generated, and says so at the top rather than in a footer nobody reads.
+ * `docs/STATUS.md` is generated for the same reason and the README already makes the
+ * point that a generated view is the only one that cannot lie about its own freshness.
+ *
+ * Written to `.ratline/`, which is gitignored — it is a local view, not a document. A
+ * committed copy would churn on every status change and be wrong in every branch that
+ * had not regenerated it.
+ */
+function cmdBoard(args: Args): void {
+  const doc = loadTasks();
+  if (validateDoc(doc).some((p) => p.level === "error")) {
+    die("refusing to build a board from an invalid tasks.yaml — run `tasks validate`");
+  }
+
+  const milestones = loadMilestones();
+  const generatedAt = new Date().toISOString();
+  let commit = "unknown";
+  try {
+    commit = execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+      cwd: ROOT,
+      encoding: "utf8",
+    }).trim();
+  } catch {
+    // Not fatal. A board built outside a checkout is still useful, and saying "unknown"
+    // is more honest than omitting the field and letting a reader assume it is current.
+  }
+
+  let dirty = false;
+  try {
+    dirty = execFileSync("git", ["status", "--porcelain", "docs/tasks.yaml"], {
+      cwd: ROOT,
+      encoding: "utf8",
+    }).trim().length > 0;
+  } catch {
+    // Same reasoning.
+  }
+
+  const payload = {
+    generatedAt,
+    commit,
+    // Surfaced in the page, because a board built from an edited-but-uncommitted tracker
+    // is showing something nobody else can see.
+    dirty,
+    statuses: STATUSES,
+    milestones: milestones.map((m) => ({ id: m.id, name: m.name })),
+    tasks: doc.tasks.map((t) => ({
+      id: t.id,
+      title: t.title,
+      milestone: t.milestone,
+      status: t.status,
+      owner: t.owner,
+      estimate: t.estimate,
+      risk: t.risk,
+      dependsOn: t.depends_on,
+      blocks: t.blocks,
+      acceptance: t.acceptance.length,
+      acceptanceMet: t.acceptance_met.length,
+      startedAt: t.started_at,
+      doneAt: t.done_at,
+      blockedAt: t.blocked_at,
+      // The most recent note only. The full notes are the tracker's job; a board that
+      // reproduced them would be a worse copy of docs/tasks.yaml.
+      latestNote: latestNoteOf(t.notes),
+    })),
+  };
+
+  const target = join(ROOT, ".ratline", "board.html");
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, boardHtml(payload), "utf8");
+
+  const counts = new Map<string, number>();
+  for (const task of doc.tasks) counts.set(task.status, (counts.get(task.status) ?? 0) + 1);
+
+  console.log(`wrote ${rel(target)} — ${String(doc.tasks.length)} tasks`);
+  console.log(
+    [...STATUSES]
+      .filter((status) => (counts.get(status) ?? 0) > 0)
+      .map((status) => `${status} ${String(counts.get(status) ?? 0)}`)
+      .join("   "),
+  );
+  if (args.flag("open")) {
+    try {
+      execFileSync("open", [target]);
+    } catch {
+      console.log(`open it yourself: ${target}`);
+    }
+  }
+}
+
+/** The last dated line of a notes block, or "". */
+function latestNoteOf(notes: string): string {
+  const dated = notes
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => /^\d{4}-\d{2}-\d{2} —/.test(line));
+  const last = dated.at(-1) ?? "";
+  // Trimmed hard. A board cell is not the place for a paragraph, and the tracker has the
+  // whole thing.
+  return last.length > 240 ? `${last.slice(0, 237)}…` : last;
+}
+
+
+type BoardPayload = {
+  generatedAt: string;
+  commit: string;
+  dirty: boolean;
+  statuses: readonly string[];
+  milestones: readonly { id: string; name: string }[];
+  tasks: readonly Record<string, unknown>[];
+};
+
+/**
+ * The page.
+ *
+ * Hand-written HTML, CSS and vanilla JS in one file, with the data embedded as JSON in a
+ * `<script type="application/json">` block. No build step and no dependency, for the
+ * reason §6.7 gives and because a tracking view that needed `npm install` to look at
+ * would not get looked at.
+ *
+ * The JSON is escaped for `<` before it is embedded. Task titles and notes are
+ * repository-authored rather than hostile, but "the input happens to be safe" is a
+ * property of today's data and escaping is a property of the code.
+ */
+function boardHtml(payload: BoardPayload): string {
+  const data = JSON.stringify(payload).replaceAll("<", "\\u003c");
+
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ratline — task board</title>
+<style>
+  :root {
+    --tar: #17150f; --pitch: #211d16; --chalk: #ece7dd; --chalk-dim: #9c948a;
+    --rule: #322c22; --accent: #d8b673;
+    --todo: #6d6459; --ready: #8fa3b8; --progress: #d8b673; --blocked: #c9603f;
+    --review: #b48ec9; --done: #6f9e6b; --dropped: #4a443b;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --tar: #f6f3ec; --pitch: #fffdf8; --chalk: #221e17; --chalk-dim: #6a6155;
+      --rule: #ddd6c8; --accent: #8a6a25;
+      --todo: #8a8175; --ready: #4a6480; --progress: #8a6a25; --blocked: #a8401f;
+      --review: #7a4f96; --done: #3f6f3b; --dropped: #9a9384;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--tar); color: var(--chalk);
+    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header { padding: 20px 24px 12px; border-bottom: 2px solid var(--rule); }
+  h1 { margin: 0 0 6px; font-size: 1.1rem; font-weight: 600; letter-spacing: .01em; }
+  .stamp { color: var(--chalk-dim); font-size: .78rem; }
+  .stamp code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .dirty {
+    display: inline-block; margin-top: 8px; padding: 6px 10px;
+    background: var(--blocked); color: #fff; border-radius: 3px; font-size: .78rem;
+  }
+  .counts { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 24px; }
+  .count {
+    border: 1px solid var(--rule); background: var(--pitch); border-radius: 3px;
+    padding: 8px 12px; cursor: pointer; font: inherit; color: inherit; text-align: left;
+  }
+  .count[aria-pressed="true"] { border-color: var(--accent); }
+  .count b { display: block; font-size: 1.35rem; font-weight: 600; line-height: 1.1; }
+  .count span { color: var(--chalk-dim); font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; padding: 0 24px 14px; align-items: center; }
+  input[type=search], select {
+    background: var(--pitch); color: var(--chalk); border: 1px solid var(--rule);
+    border-radius: 3px; padding: 7px 10px; font: inherit;
+  }
+  input[type=search] { min-width: 240px; flex: 1; }
+  .scroller { overflow-x: auto; padding: 0 24px 40px; }
+  table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+  th {
+    text-align: left; padding: 7px 10px 7px 0; color: var(--chalk-dim); font-weight: 500;
+    border-bottom: 1px solid var(--rule); white-space: nowrap; position: sticky; top: 0;
+    background: var(--tar);
+  }
+  td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  td.id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
+  /* The task cell holds a title and a note, so it is the one column that must WRAP.
+     Without a width it forces the row wider than the viewport and pushes the status and
+     dependency columns off-screen — which are the two an operator opened this to read. */
+  td.task { width: 46%; min-width: 22rem; }
+  td.task .title { font-family: inherit; white-space: normal; margin-top: 2px; }
+  .pill {
+    display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: .72rem;
+    font-weight: 600; color: #12100c; white-space: nowrap;
+  }
+  .note {
+    color: var(--chalk-dim); font-size: .76rem; display: block; margin-top: 4px;
+    white-space: normal; overflow-wrap: anywhere;
+  }
+  .risk-high { color: var(--blocked); font-weight: 600; }
+  .empty { padding: 40px 0; color: var(--chalk-dim); max-width: 70ch; }
+  .acc { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
+  .acc.part { color: var(--progress); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Ratline — task board</h1>
+  <p class="stamp">
+    Generated <span id="when"></span> from commit <code id="commit"></code>.
+    This page is a snapshot: run <code>./scripts/tasks board</code> again to refresh it.
+    <code>docs/tasks.yaml</code> is the source of truth.
+  </p>
+  <div id="dirty-warning"></div>
+</header>
+
+<div class="counts" id="counts" role="group" aria-label="Filter by status"></div>
+
+<div class="controls">
+  <input type="search" id="q" placeholder="Filter by id, title or note…" aria-label="Filter tasks">
+  <select id="milestone" aria-label="Milestone"><option value="">All milestones</option></select>
+  <select id="risk" aria-label="Risk">
+    <option value="">Any risk</option><option value="high">high</option>
+    <option value="medium">medium</option><option value="low">low</option>
+  </select>
+  <select id="owner" aria-label="Owner">
+    <option value="">Any owner</option><option value="agent">agent</option><option value="human">human</option>
+  </select>
+</div>
+
+<div class="scroller">
+  <table>
+    <thead><tr>
+      <th>Task</th><th>Status</th><th>Milestone</th><th>Acceptance</th>
+      <th>Risk</th><th>Est</th><th>Owner</th><th>Blocked by</th>
+    </tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+  <div class="empty" id="empty" hidden></div>
+</div>
+
+<script type="application/json" id="board-data">${data}</script>
+<script>
+(function () {
+  var el = document.getElementById("board-data");
+  var data = JSON.parse(el.textContent);
+
+  document.getElementById("when").textContent = new Date(data.generatedAt).toLocaleString();
+  document.getElementById("commit").textContent = data.commit;
+
+  if (data.dirty) {
+    // Surfaced rather than footnoted: a board built from an edited-but-uncommitted
+    // tracker is showing something nobody else can see.
+    document.getElementById("dirty-warning").innerHTML =
+      '<span class="dirty">docs/tasks.yaml has uncommitted changes, so this board shows ' +
+      'state that is not in any commit.</span>';
+  }
+
+  var milestoneSelect = document.getElementById("milestone");
+  data.milestones.forEach(function (m) {
+    var option = document.createElement("option");
+    option.value = m.id;
+    option.textContent = m.id + " — " + m.name;
+    milestoneSelect.appendChild(option);
+  });
+
+  // Status is the primary filter, so it gets buttons rather than a dropdown — the counts
+  // are the thing somebody opens this page to see.
+  var active = new Set();
+  var countsBox = document.getElementById("counts");
+
+  function render() {
+    var q = document.getElementById("q").value.trim().toLowerCase();
+    var milestone = milestoneSelect.value;
+    var risk = document.getElementById("risk").value;
+    var owner = document.getElementById("owner").value;
+
+    var shown = data.tasks.filter(function (t) {
+      if (active.size > 0 && !active.has(t.status)) return false;
+      if (milestone && t.milestone !== milestone) return false;
+      if (risk && t.risk !== risk) return false;
+      if (owner && t.owner !== owner) return false;
+      if (q) {
+        var haystack = (t.id + " " + t.title + " " + (t.latestNote || "")).toLowerCase();
+        if (haystack.indexOf(q) === -1) return false;
+      }
+      return true;
+    });
+
+    var rows = document.getElementById("rows");
+    rows.textContent = "";
+    shown.forEach(function (t) {
+      var tr = document.createElement("tr");
+
+      var id = document.createElement("td");
+      id.className = "id task";
+      id.textContent = t.id;
+      var title = document.createElement("div");
+      title.className = "title";
+      title.textContent = t.title;
+      id.appendChild(title);
+      if (t.latestNote) {
+        var note = document.createElement("span");
+        note.className = "note";
+        note.textContent = t.latestNote;
+        id.appendChild(note);
+      }
+      tr.appendChild(id);
+
+      var status = document.createElement("td");
+      var pill = document.createElement("span");
+      pill.className = "pill";
+      pill.style.background = "var(--" + t.status.replace("in-progress", "progress") + ")";
+      pill.textContent = t.status;
+      status.appendChild(pill);
+      tr.appendChild(status);
+
+      [t.milestone].forEach(function (v) {
+        var td = document.createElement("td");
+        td.textContent = v;
+        tr.appendChild(td);
+      });
+
+      var acc = document.createElement("td");
+      acc.className = "acc";
+      if (t.acceptance === 0) {
+        acc.textContent = "—";
+      } else {
+        acc.textContent = t.acceptanceMet + "/" + t.acceptance;
+        // Partial is the state worth seeing: a task whose acceptance is half met is
+        // either in flight or was closed dishonestly, and both are worth a second look.
+        if (t.acceptanceMet > 0 && t.acceptanceMet < t.acceptance) acc.className += " part";
+      }
+      tr.appendChild(acc);
+
+      var riskCell = document.createElement("td");
+      riskCell.textContent = t.risk;
+      if (t.risk === "high") riskCell.className = "risk-high";
+      tr.appendChild(riskCell);
+
+      [t.estimate, t.owner].forEach(function (v) {
+        var td = document.createElement("td");
+        td.textContent = v;
+        tr.appendChild(td);
+      });
+
+      var blockedBy = document.createElement("td");
+      // Only dependencies that are NOT done. A list of every dependency is noise; the
+      // ones still outstanding are the reason this task is not moving.
+      var open = (t.dependsOn || []).filter(function (id) {
+        var dep = data.tasks.find(function (x) { return x.id === id; });
+        return dep && dep.status !== "done" && dep.status !== "dropped";
+      });
+      blockedBy.className = "id";
+      blockedBy.textContent = open.length ? open.join(" ") : "—";
+      tr.appendChild(blockedBy);
+
+      rows.appendChild(tr);
+    });
+
+    var empty = document.getElementById("empty");
+    if (shown.length === 0) {
+      empty.hidden = false;
+      empty.textContent =
+        "No task matches these filters. Clear one, or check the id — " +
+        data.tasks.length + " tasks are loaded.";
+    } else {
+      empty.hidden = true;
+    }
+  }
+
+  data.statuses.forEach(function (status) {
+    var n = data.tasks.filter(function (t) { return t.status === status; }).length;
+    if (n === 0) return;
+    var button = document.createElement("button");
+    button.className = "count";
+    button.type = "button";
+    button.setAttribute("aria-pressed", "false");
+    button.innerHTML = "<b></b><span></span>";
+    button.querySelector("b").textContent = String(n);
+    button.querySelector("b").style.color = "var(--" + status.replace("in-progress", "progress") + ")";
+    button.querySelector("span").textContent = status;
+    button.addEventListener("click", function () {
+      if (active.has(status)) { active.delete(status); } else { active.add(status); }
+      button.setAttribute("aria-pressed", active.has(status) ? "true" : "false");
+      render();
+    });
+    countsBox.appendChild(button);
+  });
+
+  ["q", "milestone", "risk", "owner"].forEach(function (id) {
+    document.getElementById(id).addEventListener("input", render);
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
+`;
+}
+
 const HELP = `Ratline task tracker — source of truth is docs/tasks.yaml (brief §2).
 
   tasks list [--milestone M2] [--status in-progress] [--owner agent] [--risk high] [--json]
@@ -1125,6 +1548,7 @@ const HELP = `Ratline task tracker — source of truth is docs/tasks.yaml (brief
   tasks sync-blocks                        derive "blocks" from "depends_on"
   tasks validate                           schema, graph, cycles, brief rules (runs in CI)
   tasks render [--check]                   regenerates docs/STATUS.md (--check: fail if stale)
+  tasks board [--open]                     builds .ratline/board.html — every task, filterable
 `;
 
 function main(): void {
@@ -1143,6 +1567,7 @@ function main(): void {
     case "sync-blocks": return cmdSyncBlocks(args);
     case "validate": return cmdValidate();
     case "render": return cmdRender(args);
+    case "board": return cmdBoard(args);
     case "help": case "--help": case "-h": console.log(HELP); return;
     default:
       console.error(`unknown command "${args.cmd}"\n`);

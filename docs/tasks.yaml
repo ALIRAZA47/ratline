@@ -4226,3 +4226,26 @@
     2026-08-04 — 2026-08-04 — Found by accident, which is the point. npm audit reported hono <4.12.34 carries a ReDoS advisory in its CORS middleware (GHSA-8j4g-w8fx-2239) and package.json pinned ^4.12.33. Not exploitable here — nothing imports that middleware — and bumped to ^4.13.0. But nothing in CI would have told anyone: the pipeline lints, typechecks, tests, migrates and builds the agent, and never once asks whether a dependency has a known hole. I only saw it because I happened to install something else. Acceptance 2 splits production from development advisories deliberately: failing the build on a devDependency advisory trains people to ignore the check, and a check people ignore is worse than none.
 
     2026-08-04 — 2026-08-04 — NOTE ON THE ID: this was created as RL-M1-057, which collides with a task of the same number on the unmerged m1/RL-M1-057-serve-the-dashboard branch — tasks.yaml on main does not yet contain 057, 058 or 059, so the CLI reissued a number that is already taken elsewhere. Renumbered to 060 by hand. The tracker cannot see other branches, so this will recur while several branches are open at once; worth a validate rule that refuses an id already present in origin/main's history rather than only in the working file.
+- id: RL-M1-061
+  title: Build a task board that reads the tracker rather than copying it
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: S
+  depends_on: []
+  blocks: []
+  risk: low
+  acceptance:
+    - Every task appears with its status, and the counts match what the CLI reports
+    - Status, milestone, risk, owner and free text all filter, and combine
+    - "The page says when it was generated and from which commit, and warns if the tracker is dirty"
+    - It parses nothing itself — the tracker's own loader is the only reader of tasks.yaml
+  artifacts: []
+  decisions: []
+  acceptance_met: [1, 2, 3, 4]
+  notes: |
+    2026-08-04 — 2026-08-05 — A SUBCOMMAND, NOT A SEPARATE TOOL, and that is the whole design. A second thing that parsed docs/tasks.yaml would be a second source of truth about what a status means, and the two would eventually disagree — most likely after somebody adds a status and updates one parser. 'tasks board' reuses loadTasks(), so the board cannot report a status the tracker does not recognise, and it refuses to build from an invalid tracker for the same reason render does. Acceptance 4 is that property stated as a requirement rather than left as a habit.
+
+    2026-08-04 — 2026-08-05 — GENERATED, NOT LIVE, because a page that fetched tasks.yaml would need a server and would show nothing opened from the filesystem. So the data is embedded — and BECAUSE that can go stale, the page stamps itself with the commit and the generation time in the HEADER rather than a footer, and shows a loud warning when docs/tasks.yaml has uncommitted changes, since a board built from an edited tracker is showing state nobody else can see. Written to .ratline/, which is already gitignored: it is a local view rather than a document, and a committed copy would churn on every status change and be wrong in every branch that had not regenerated it.
+    2026-08-04 — 2026-08-05 — Verified in a browser rather than assumed: 187 tasks load with no console errors, and every filter's count matches the CLI's own — review 5, milestone M2 29, the search 'RL-M2-' 29. Two things chosen deliberately in the display. Status gets BUTTONS rather than a dropdown because the counts are what somebody opens this to see, and zero-count statuses are omitted so the row is not padded with statuses nothing is in. 'Blocked by' lists only dependencies that are NOT done — every dependency is noise, and the outstanding ones are the reason a task is not moving.
+    2026-08-04 — 2026-08-05 — A layout defect found by opening it: the note text forced rows wider than the viewport and pushed Status and 'Blocked by' off-screen — the two columns an operator opened the page to read. The task cell now has a width and wraps. Also: the embedded JSON escapes '<' before it is written. Task titles and notes are repository-authored rather than hostile, but 'the input happens to be safe' is a property of today's data and escaping is a property of the code.
