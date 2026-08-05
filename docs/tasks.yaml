@@ -4122,12 +4122,13 @@
 - id: RL-M1-054
   title: Check the cookie secret for entropy, not just length
   milestone: M1
-  status: todo
+  status: review
   owner: agent
   estimate: S
   depends_on: []
   blocks: []
   risk: medium
+  started_at: 2026-08-05
   acceptance:
     - A cookie secret that passes the length check but carries no entropy is refused
     - createServer cannot be constructed with a secret that weakSecretReason rejects
@@ -4135,6 +4136,12 @@
   decisions: []
   notes: |
     2026-08-03 — 2026-08-04 — weakSecretReason correctly rejects an all-zero 32-byte secret, but is never called for ServerDeps.cookieSecret; csrf.ts validates length only, and csrfTokenForSessionId(new Uint8Array(32), ...) returns a token happily. csrf.ts:240-241 names the exact outcome it is trying to prevent — 'a token every installation on earth could compute' — and then guards only length. Not exploitable today because nothing calls createServer in production: there is no serve() anywhere, and @hono/node-server is declared but never imported. It becomes live the moment M2 adds an entry point, which is why it is filed now rather than when it bites.
+    2026-08-05 — 2026-08-05 — FIXED IN TWO PLACES, and neither is redundant. (1) csrf.ts's csrfKey now calls the full weak-secret judgement instead of checking length; the file's own comment two lines above already named the outcome it was preventing — 'a token every installation on earth could compute' — and then guarded only length, which is the whole finding: it knew what mattered and checked the cheaper thing. (2) createServer refuses at CONSTRUCTION. csrfKey alone leaves a server that starts, answers /health and /bootstrap, and fails on the first sign-in, which reads as an authentication bug rather than a misconfigured installation. New export assertUsableCookieSecret in csrf.ts, plus WeakCookieSecret as its own error class so a caller can tell 'this secret is unusable' from any other failure.
+    2026-08-05 — 2026-08-05 — THE BYTES ARE READ AS latin1, NOT base64, and the choice is tested rather than asserted in a comment. weakSecretReason wants text for its placeholder scan and there is no file here, so weakSecretBytesReason decodes the array. src/auth/totp.ts passes base64 for the same problem and base64 is worse on both counts: base64 of the 32 ASCII bytes 'changeme-changeme-changeme-chang' does not contain 'changeme', so it MISSES the case this is for, and it yields more alphanumeric characters per byte so it is likelier to spell a placeholder token by accident. That 32-byte ASCII default has exactly 8 distinct byte values across 32 bytes, which clears the distinct-value floor precisely — the token list is the only check that objects to it. A test drives both readings side by side so the reason survives.
+    2026-08-05 — 2026-08-05 — A FALSE POSITIVE IS POSSIBLE AND IS ACCEPTED IN WRITING. A genuinely random secret could spell 'root' or 'admin' once non-alphanumeric bytes are stripped; roughly eight alphanumeric characters survive from 32 random bytes, so the odds are on the order of one in a hundred thousand installations. Accepted because the failure is loud, names the property that objected, and is fixed by generating a new secret — whereas the miss it prevents is silent and permanent. Recorded in weak-secrets.ts rather than only here.
+    2026-08-05 — 2026-08-05 — THREE TEST FIXTURES WERE USING A SECRET THE FIX REFUSES: matrix.test.ts, bootstrap.test.ts and endpoint_rate_limit.test.ts all passed new Uint8Array(32).fill(7). Changed to randomBytes(32), which is the harness holding a secret a deployment could hold — the same principle the matrix already applies by driving the real server rather than a rearranged one. One existing assertion in csrf.test.ts also moved: the too-short message went from 'needs at least 32 bytes of cookie secret' to weak-secrets.ts's 'at least 32 are required'. Asserted on the new text rather than loosened to /32/, because the length case must keep reporting LENGTH now that one function reports entropy as well.
+    2026-08-05 — 2026-08-05 — MUTATION TESTED TWICE. (1) csrfKey reverted to length-only: four tests fail with 'Missing expected exception', including 'a 32-byte secret of all zeros cannot mint a CSRF token' — the exact call the diagnosis recorded as succeeding. (2) entropy check kept but the createServer refusal removed: the two construction tests fail, and I ran the WHOLE suite in that state to check the docstring's claim — 661 tests, exactly 2 failures, both in test/security/cookie_secret_entropy.test.ts. Nothing else in the repository notices a server built with a dead cookie secret, which is precisely why the gap survived to be filed. Restored from copies named csrf.ts.rl054-pre-mutation and server.ts.rl054-pre-mutation.
+  acceptance_met: [1, 2]
 - id: RL-M1-055
   title: Run the control plane for real, on a container that is not this Mac
   milestone: M1

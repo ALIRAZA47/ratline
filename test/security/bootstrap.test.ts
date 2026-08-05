@@ -23,6 +23,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -65,7 +66,8 @@ const CLAIM = {
 
 function serverFor(dir: string, orgId: string | null = null): ReturnType<typeof createServer> {
   const deps: ServerDeps = {
-    cookieSecret: new Uint8Array(32).fill(7),
+    // Real random bytes: createServer refuses a no-entropy secret (RL-M1-054).
+    cookieSecret: randomBytes(32),
     sealingKey: Buffer.alloc(32, 9),
     resolveTenant: () => Promise.resolve(orgId),
     // Null, not a placeholder uuid (RL-M1-053). An unclaimed installation has no

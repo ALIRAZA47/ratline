@@ -16,6 +16,8 @@
  * ---------------------------------------------------------------------------
  */
 
+import { Buffer } from "node:buffer";
+
 /**
  * Tokens that appear in real shipped defaults, tutorials and .env.example
  * files. Compared after normalisation, so `CHANGE_ME`, `change-me` and
@@ -126,4 +128,44 @@ export function weakSecretReason(
   }
 
   return null;
+}
+
+/**
+ * The same judgement for a secret that arrives as bytes rather than as a file
+ * (C4, RL-M1-054).
+ *
+ * ## Why this exists
+ *
+ * `weakSecretReason` was only ever reached through `src/crypto/secrets.ts`, which
+ * loads from disk. `ServerDeps.cookieSecret` is a `Uint8Array` handed straight to
+ * `createServer`, so nothing checked it: `src/api/csrf.ts` validated LENGTH alone,
+ * and `csrfTokenForSessionId(new Uint8Array(32), …)` returned a token happily.
+ * csrf.ts names the exact outcome two lines above that check — "a token every
+ * installation on earth could compute" — and then guarded only length.
+ *
+ * ## Why the bytes are read as latin1
+ *
+ * The placeholder scan wants TEXT, and there is no file here to read. latin1 is
+ * the decoding that maps every byte to exactly one character, so nothing is lost
+ * to replacement characters, and it catches the case that matters: a 32-byte
+ * secret which is really the ASCII of "changeme-changeme-changeme-chang". That has
+ * eight distinct byte values across 32 bytes and therefore passes every entropy
+ * heuristic above — the token list is the only thing that sees it.
+ *
+ * Base64 was the other candidate, and is what `src/auth/totp.ts` passes. It is
+ * worse on both counts: it does NOT contain "changeme" for the secret above, so it
+ * misses the case this is for, and it produces more alphanumeric characters per
+ * byte, so it is likelier to spell a token by accident.
+ *
+ * ## The false positive, stated rather than hidden
+ *
+ * A genuinely random secret could contain "root" or "admin" once the
+ * non-alphanumeric bytes are stripped. Roughly eight alphanumeric characters
+ * survive from 32 random bytes, so the chance is on the order of one in a hundred
+ * thousand installations. That is accepted, because the failure is loud, says what
+ * to do, and is fixed by generating a new secret — whereas the miss it prevents is
+ * silent and permanent.
+ */
+export function weakSecretBytesReason(bytes: Uint8Array, minBytes: number): string | null {
+  return weakSecretReason(Buffer.from(bytes).toString("latin1"), bytes, minBytes);
 }

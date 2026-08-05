@@ -38,7 +38,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Client } from "pg";
@@ -107,7 +107,11 @@ const CLAIMED_SECRETS_DIR = (() => {
  * harness that constructed a rearranged server would verify the rearrangement.
  */
 const SERVER_DEPS: ServerDeps = {
-  cookieSecret: new Uint8Array(32).fill(7),
+  // Real random bytes, not `.fill(7)` (RL-M1-054). A repeated-byte secret carries
+  // no entropy and createServer now refuses it — the harness has to hold a secret
+  // a deployment could hold, which is the same principle as driving the real
+  // server rather than a rearranged one.
+  cookieSecret: randomBytes(32),
   resolveTenant: () => Promise.resolve(null),
   // Null here and replaced per world, alongside resolveTenant, for the same
   // reason: both answers belong to an organization and this constant predates

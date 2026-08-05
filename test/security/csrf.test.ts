@@ -681,8 +681,16 @@ test("the token is keyed by the installation's cookie secret", () => {
   // C4's failure mode reached through the back door: HKDF is perfectly happy
   // with a zero-length key, and the result would be a token every installation
   // on earth could compute. A caller cannot get there by accident.
+  //
+  // RL-M1-054 widened this check from length to the full weak-secret judgement,
+  // so the wording moved from "needs at least 32 bytes of cookie secret" to
+  // weak-secrets.ts's own "at least 32 are required". Asserted on the new text
+  // rather than loosened to /32/, because the sentence an operator reads is part
+  // of the fix — and the length case must keep reporting LENGTH now that the same
+  // function also reports entropy. The entropy half is in
+  // test/security/cookie_secret_entropy.test.ts.
   assert.throws(() => csrfTokenForSessionId(Buffer.alloc(0), sessionId), /cookie secret/);
-  assert.throws(() => csrfTokenForSessionId(randomBytes(31), sessionId), /at least 32 bytes/);
+  assert.throws(() => csrfTokenForSessionId(randomBytes(31), sessionId), /at least 32 are required/);
 });
 
 test("the token comparison is constant-time, and that is a property of the source", () => {

@@ -23,7 +23,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -70,7 +70,8 @@ async function seedTenant(client: Client): Promise<Tenant> {
 
 function serverFor(tenant: Tenant): ReturnType<typeof createServer> {
   const deps: ServerDeps = {
-    cookieSecret: new Uint8Array(32).fill(7),
+    // Real random bytes: createServer refuses a no-entropy secret (RL-M1-054).
+    cookieSecret: randomBytes(32),
     sealingKey: Buffer.alloc(32, 9),
     secretsDir: CLAIMED_SECRETS_DIR,
     resolveTenant: () => Promise.resolve(tenant.orgId),

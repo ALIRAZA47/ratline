@@ -80,6 +80,7 @@ import {
 import {
   CSRF_AUDIT_ACTION,
   CSRF_HEADER,
+  assertUsableCookieSecret,
   cookieAttributes,
   cookiePolicy,
   csrfTokenForSessionId,
@@ -425,6 +426,20 @@ function handlers(deps: ServerDeps): Map<string, Bound["handle"]> {
 // ---------------------------------------------------------------------------
 
 export function createServer(deps: ServerDeps): Hono {
+  // C4, at construction rather than at first use (RL-M1-054).
+  //
+  // csrfKey() refuses a weak secret too, and that is not enough on its own: it is
+  // reached only when a token is minted or checked, so a server built with an
+  // all-zero cookie secret would start, serve /health and /bootstrap, and fail on
+  // the first sign-in — which reads as an authentication bug rather than as a
+  // misconfigured installation. Refusing here means the object cannot exist with a
+  // secret that would key nothing, so there is no window in which it looks fine.
+  //
+  // Deliberately not silent about which check objected: the reason names the
+  // property that failed, because "generate a new secret" is the fix for every one
+  // of them and an operator needs to know that is all it is.
+  assertUsableCookieSecret(deps.cookieSecret);
+
   const app = new Hono();
   const bound = handlers(deps);
   const trusted = deps.trustedOrigins ?? resolveTrustedOrigins();

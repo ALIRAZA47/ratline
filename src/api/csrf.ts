@@ -191,8 +191,24 @@ import {
   resolvePort,
 } from "../config/network.ts";
 import { secretEquals } from "../crypto/secrets.ts";
+import { weakSecretBytesReason } from "../crypto/weak-secrets.ts";
 import { recordAudit } from "../repo/audit.ts";
 import { isSafeMethod, type HttpMethod } from "./routes.ts";
+
+/**
+ * A cookie secret that cannot key anything (C4, RL-M1-054).
+ *
+ * Its own class rather than a plain Error so `createServer` can refuse at
+ * construction with the same type the derivation throws, and so a caller can tell
+ * "the secret is unusable" from any other failure — the two need different
+ * responses, and only one of them is a configuration mistake.
+ */
+export class WeakCookieSecret extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WeakCookieSecret";
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Where the token travels
@@ -238,6 +254,12 @@ const CSRF_KEY_BYTES = 32;
  * — an empty buffer, a truncated read. It is checked anyway because the failure
  * it prevents is silent: HKDF is perfectly happy with a zero-length key, and the
  * result would be a token every installation on earth could compute.
+ *
+ * RL-M1-054: length was the ONLY thing checked here, and the sentence above says
+ * why that was not enough — a 32-byte secret of all zeros is exactly "a token
+ * every installation on earth could compute", and it passed. The check is now
+ * `weakSecretBytesReason`, the same judgement `secrets.ts` applies to a secret
+ * loaded from disk, so the two paths cannot disagree about what is acceptable.
  */
 const MINIMUM_SECRET_BYTES = 32;
 
@@ -247,13 +269,26 @@ const MINIMUM_SECRET_BYTES = 32;
  * stored key — a property that costs three microseconds and removes a whole
  * class of argument about cross-protocol interaction.
  */
+/**
+ * Refuse a cookie secret that cannot key anything (C4, RL-M1-054).
+ *
+ * Exported so `createServer` can apply it at construction. Both callers matter and
+ * neither is redundant: this one is the derivation refusing to produce a
+ * guessable token, and the construction-time one closes the window in which a
+ * server built with a dead secret looks healthy until somebody signs in.
+ */
+export function assertUsableCookieSecret(cookieSecret: Uint8Array): void {
+  const weak = weakSecretBytesReason(cookieSecret, MINIMUM_SECRET_BYTES);
+  if (weak === null) return;
+  throw new WeakCookieSecret(
+    `the cookie secret is unusable: ${weak}. Load it through src/crypto/secrets.ts, which ` +
+      `generates and refuses on the same rules — a predictable secret here is a CSRF token ` +
+      `every installation on earth can compute.`,
+  );
+}
+
 function csrfKey(cookieSecret: Uint8Array): Buffer {
-  if (cookieSecret.length < MINIMUM_SECRET_BYTES) {
-    throw new Error(
-      `the CSRF key needs at least ${MINIMUM_SECRET_BYTES} bytes of cookie secret and got ` +
-        `${cookieSecret.length}. Load it through src/crypto/secrets.ts, which refuses weak ones.`,
-    );
-  }
+  assertUsableCookieSecret(cookieSecret);
   return Buffer.from(hkdfSync("sha256", cookieSecret, Buffer.alloc(0), CSRF_KEY_INFO, CSRF_KEY_BYTES));
 }
 
