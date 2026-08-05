@@ -3885,6 +3885,7 @@
     2026-08-03 — It is NOT the RL-M1-045 collision returning. That cause was identified and eliminated, and the suite then passed fifty consecutive full runs. This is a different test, a different assertion, and it first appeared after the RL-M1-030 bootstrap work — so the honest first question is whether I introduced it, which the acceptance names explicitly rather than leaving to a hunch.
     2026-08-03 — Diagnostic running: twenty-five isolated runs of the file plus six full-suite runs, capturing the assertion text. Isolated-clean and full-failing would point at cross-file interference; failing in isolation would point at the generator.
     2026-08-03 — 2026-08-04 — LIKELY THE SAME BUG, now reproducible. See RL-M1-045's note of today: one test per full run dies with 'terminating connection due to administrator command', victim varying across files, each passing in isolation. If that is the same underlying race, this task's framing as 'the no-default-secrets suite' is too narrow — the secrets suite was simply the victim the first time it was seen. Chase the shared cause, not the suite.
+    2026-08-05 — 2026-08-05 — ANOTHER SIGHTING, on CI run 30976774398: test/security/twofactor.test.ts failed with a bare 'test failed' and no assertion detail, which is the file-level failure shape rather than an assertion's. It passed 36/36 three times in isolation immediately afterwards. The branch changed a regex in repository_gating.test.ts and added two tsconfig excludes — neither can reach the two-factor path, so this is the same unexplained cross-test interference and not a regression. Victim list so far: organization_scope, audit_chain_tamper, and now twofactor. That is three different files, which rules out anything specific to one suite and points at the shared scratch-database teardown.
 - id: RL-M1-047
   title: Find the lingering handle that made the suite twenty times slower
   milestone: M1
@@ -3997,20 +3998,31 @@
 - id: RL-M1-052
   title: Catch a repository export that is not async
   milestone: M1
-  status: todo
+  status: done
   owner: agent
   estimate: S
   depends_on: []
   blocks: []
   risk: high
+  started_at: 2026-08-04
+  done_at: 2026-08-04
   acceptance:
     - The repository-gating scan matches a non-async export
     - The scan reads code with comments stripped, via the shared helper from RL-M1-041
     - A synthetic non-async ungated repository export makes the suite fail
-  artifacts: []
+  artifacts:
+    - test/security/repository_gating.test.ts
+    - test/fixtures/repo_gating/ungated_reads.ts
+    - test/fixtures/repo_gating/nested/subdirectory_read.ts
   decisions: []
   notes: |
     2026-08-03 — 2026-08-04 — DEMONSTRATED against the real regexes: test/security/repository_gating.test.ts matches /export async function (\w+)\s*\(/g, so 'export function listSites(ctx: AuthzContext, ...)' is invisible to it while scoped_repository.test.ts does see it. All 45 current repository exports happen to be async, so nothing is broken today. M2 adding 'export function listHosts(ctx, id) { return scoped(ctx, ...) }' — non-async because it just returns the promise — would need no requirePermission, need no exemption entry, and leave every guard test green. That is the RL-M1-043 class of defect (nine ungated reads) reintroduced through the door the fix left open.
+    2026-08-04 — FIXED, and the fix is proved by a fixture rather than by reading the regex. The pattern is now /export\s+(?:async\s+)?function\s+(\w+)\s*\(/g and the scan runs over codeOf() output via the RL-M1-041 helper. The scan takes a directory parameter so it can be pointed at test/fixtures/repo_gating/ and watched to FIRE — src/repo is correctly clean, and a clean scan proves nothing about what the scan can SEE, which is the whole defect.
+    2026-08-04 — TWO MORE DOORS OF THE SAME KIND, found while fixing the named one. (1) The scan globbed src/repo/*.ts while scoped_repository.test.ts globbed src/repo/**/*.ts, so a repository module in a subdirectory would have been made to take an AuthzContext by one scan and never asked for a permission by the other. Widened to ** and covered by a nested fixture, because there are no subdirectories in src/repo today and the change would otherwise be untested. (2) The gate is a string match for 'requirePermission(' in a function body, so BEFORE codeOf a body whose only mention was in a comment counted as gated — and these bodies are heavily commented precisely because their subject is what they may skip. No live instance of either; both latent.
+    2026-08-04 — THE CONST DOOR IS LEFT SHUT BY SHAPE, NOT BY REGEX. 'export const listSites = (ctx) => ...' is just as exported and just as ungatable, and chasing every callable-const form with a regex is the second parser RL-M1-041 argues against. So a new test asserts that no exported const in src/repo is callable, and the scan is complete by construction: if somebody writes one, that test fails loudly and tells them to use a function declaration. Mutation-proved — appending an ungated arrow export to src/repo/scope.ts left 'every exported repository function checks a permission or is exempted' GREEN and failed only the new completeness test, naming 'src/repo/scope.ts: listSitesAsAnArrow'. That is the door being real.
+    2026-08-04 — MUTATION-TESTED four ways, each restored from a copy afterwards. (1) Pattern back to 'export async function' -> 3 tests fail, reporting Reported: ["listSitesAsync"] with both non-async fixtures gone. (2) codeOf removed, raw source scanned -> 'a permission named only in a comment does not satisfy the gate' fails. (3) Glob back to ${dir}/*.ts -> 'the scan reaches a repository module in a subdirectory' fails. (4) Callable const appended to src/repo/scope.ts -> the completeness test fails and names it. Every mutation killed exactly the test written for it and no others.
+    2026-08-04 — closed without CI verification: CI has never executed for this repository — no remote (RISKS.md R-10). 641 tests green locally, both coverage gates at 100%.
+  acceptance_met: [1, 2, 3]
 - id: RL-M1-053
   title: Give audit actor_id referential integrity
   milestone: M1
@@ -4174,3 +4186,24 @@
     2026-08-04 — 2026-08-04 — Routing is history.pushState and popstate, not a router library: five destinations and no nested routes do not earn a dependency (§6.7), and the browser already implements back and bookmarking correctly. dashboard.ts serving index.html for any unclaimed path is what makes a cold load of /audit work. Clicks are intercepted in App rather than in Rail, so the rail stays a presentation of data with no opinion about history, and a click with a modifier key is left alone — an operator opening a destination in a new tab is being reasonable and a router that swallows that is one people fight.
     2026-08-04 — 2026-08-04 — THREE OF THE PROJECT'S OWN GUARDS FIRED on this code, and CI agreed. All three were right to fire. (1) design_tokens found a hard-coded #7a2f1e in ExposureBanner: I had written fallback literals like var(--rust, #7a2f1e) for tokens that do not exist. Replaced with the real ones — the alarm state is --st-fail with --st-fail-on for text and --st-fail-mark for the edge, and borders are --rule-hairline. Inventing a token name and hiding the invention behind a CSS fallback is exactly what RL-M1-041's eight invented tokens did, and the scan caught it a second time. (2) indistinguishable_404 objected to src/web/lib/session.ts mentioning 401 and 404. (3) no_default_secrets objected to credentials: 'same-origin' as a secret-shaped assignment.
     2026-08-04 — 2026-08-04 — Both scans were written for server code and met a browser client for the first time, so each got a NARROW exemption with a written argument rather than a workaround. src/web/** cannot build a response at all — it reads a status the server already chose, and it must, because a client unable to tell 'sign in' from 'refused' would show a signed-out operator an error and a refused one a login form. And it cannot hold a secret: everything there was sent to a browser, so it is public by construction. The alternative for the second one was moving 'same-origin' into a differently-named constant, which would have kept the test green and taught nobody anything. The exemption is the directory that cannot serve, not a list of files somebody appends to.
+- id: RL-M1-062
+  title: Keep agent worktrees out of the typechecked program
+  milestone: M1
+  status: todo
+  owner: agent
+  estimate: S
+  depends_on: []
+  blocks: []
+  risk: medium
+  acceptance:
+    - "tsc typechecks one copy of the codebase, not one per agent worktree"
+    - A work-in-progress error in another worktree cannot fail this tree's typecheck
+    - Build output is excluded too, so a build before a lint does not break the lint
+  artifacts: []
+  decisions: []
+  acceptance_met: [1, 2, 3]
+  notes: |
+    2026-08-05 — 2026-08-05 — FOUND BY TWO PARALLEL AGENTS BOTH STALLING, which is a better diagnosis than either agent's own report. tsconfig excluded only node_modules. Each delegated agent gets a COMPLETE git worktree under .claude/worktrees/, and tsconfig's include globs are relative to the project root — so with four worktrees present, tsc --noEmit typechecked FIVE copies of the codebase. npm run typecheck went from seconds to minutes, and lint+typecheck+one test file blew a 300 second timeout. Both agents were killed by a 600s no-progress watchdog while waiting on exactly that. Measured after the fix: 11 seconds.
+
+    2026-08-05 — 2026-08-05 — WORSE THAN SLOW, and this is the part that would have cost real time later: it reports errors from ANOTHER BRANCH'S work in progress as though they were in this tree. A clean checkout would look broken because somebody else was mid-edit, and the natural response — hunting for the error in files you did not touch — is a long way from the cause. eslint has ignored .claude/** since RL-M1-001 for exactly this reason; tsconfig never got the same line. dist/** is excluded for the neighbouring reason: it appears the moment anybody builds before linting, which is how I hit it twice on the dashboard branches.
+    2026-08-05 — 2026-08-05 — SECOND ID COLLISION OF THE SAME KIND. This was created as RL-M1-060, which is already taken by the dependency-audit task on the unmerged dashboard branch — and 061 by the board. tasks.yaml on main has neither, so the CLI reissues numbers that exist elsewhere. Renumbered to 062 by hand. I noted this the first time as wanting a validate rule that checks an id against origin/main's history rather than only the working file; it has now happened twice, so it is a real cost rather than a curiosity.

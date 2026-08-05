@@ -36,6 +36,8 @@ import { globSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { codeOf } from "../support/source_scan.ts";
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 
 /**
@@ -198,25 +200,68 @@ const EXEMPT: Readonly<Record<string, string>> = {
 
 type Exported = { readonly file: string; readonly name: string; readonly body: string };
 
-/** Every exported function in src/repo, with its body. */
-function exportedRepositoryFunctions(): Exported[] {
+/**
+ * `async` is OPTIONAL, and that option is the whole of RL-M1-052.
+ *
+ * This was `export async function (\w+)\s*\(`, so
+ * `export function listSites(ctx: AuthzContext, …)` — non-async because it only
+ * returns the promise `scoped()` already hands it — was invisible here while
+ * `scoped_repository.test.ts` saw it perfectly well. All 45 exports happened to
+ * be async, so nothing was broken; the next repository read written the shorter
+ * way would have needed no permission, needed no {@link EXEMPT} entry, and left
+ * every guard in this file green. That is RL-M1-043's nine ungated reads,
+ * reintroduced through the door its own fix left open.
+ */
+const EXPORTED_FUNCTION = /export\s+(?:async\s+)?function\s+(\w+)\s*\(/g;
+
+/** Any exported `const` — callable or not. See the completeness test below. */
+const EXPORTED_CONST = /export\s+const\s+(\w+)\b/g;
+
+/** A body that resolves a permission. */
+const RESOLVES_PERMISSION = /requirePermission\s*\(/;
+
+/**
+ * Every exported function in a repository directory, with its body.
+ *
+ * `dir` is a parameter so the scan can be pointed at a fixture and watched to
+ * FIRE (acceptance 3). A scanner nobody has seen fire is a scanner nobody has
+ * tested, and this one spent a session matching a shape the codebase did not
+ * use — which looked exactly like a clean bill of health.
+ *
+ * Comments are stripped first, through the shared helper (RL-M1-041). The gate
+ * is `requirePermission(` appearing somewhere in a body, so a body that merely
+ * DISCUSSES requiring a permission would otherwise satisfy it — and the bodies
+ * here are heavily commented precisely because the subject is what they may and
+ * may not skip.
+ */
+function exportedRepositoryFunctions(dir = "src/repo"): Exported[] {
   const found: Exported[] = [];
-  for (const file of globSync("src/repo/*.ts", { cwd: ROOT })) {
+  // `**` rather than `*`: this globbed only the top level while
+  // scoped_repository.test.ts globbed the whole tree, so a repository placed in
+  // a subdirectory would have been required to take a context by one scan and
+  // never asked for a permission by this one.
+  for (const file of globSync(`${dir}/**/*.ts`, { cwd: ROOT })) {
     const path = relative(ROOT, join(ROOT, file)).replaceAll("\\", "/");
     if (path.endsWith("index.ts")) continue;
-    const source = readFileSync(join(ROOT, file), "utf8");
+    const code = codeOf(readFileSync(join(ROOT, file), "utf8"));
 
-    const pattern = /export async function (\w+)\s*\(/g;
-    for (const match of source.matchAll(pattern)) {
+    for (const match of code.matchAll(EXPORTED_FUNCTION)) {
       const name = match[1] ?? "";
       const start = match.index ?? 0;
       // To the next export, or the end. Crude and sufficient: the question is
       // only whether a permission is resolved somewhere inside.
-      const next = source.indexOf("\nexport ", start + 1);
-      found.push({ file: path, name, body: source.slice(start, next === -1 ? source.length : next) });
+      const next = code.indexOf("\nexport ", start + 1);
+      found.push({ file: path, name, body: code.slice(start, next === -1 ? code.length : next) });
     }
   }
   return found;
+}
+
+/** The exported functions in `dir` that neither resolve a permission nor are exempt. */
+function ungatedIn(dir: string): string[] {
+  return exportedRepositoryFunctions(dir)
+    .filter((fn) => !Object.hasOwn(EXEMPT, fn.name) && !RESOLVES_PERMISSION.test(fn.body))
+    .map((fn) => `${fn.file}: ${fn.name}`);
 }
 
 test("the scan finds the repository layer at all", () => {
@@ -228,15 +273,8 @@ test("the scan finds the repository layer at all", () => {
 });
 
 test("every exported repository function checks a permission or is exempted", () => {
-  const ungated: string[] = [];
-  for (const fn of exportedRepositoryFunctions()) {
-    if (Object.hasOwn(EXEMPT, fn.name)) continue;
-    if (/requirePermission\s*\(/.test(fn.body)) continue;
-    ungated.push(`${fn.file}: ${fn.name}`);
-  }
-
   assert.deepEqual(
-    ungated,
+    ungatedIn("src/repo"),
     [],
     "these read or write tenant data without resolving a permission. Add the check, or add " +
       "the function to EXEMPT with an argument that would survive review — 'it is only called " +
@@ -266,4 +304,100 @@ test("the audit log is not one of the exemptions", () => {
   assert.ok(!Object.hasOwn(EXEMPT, "verifyAuditChain"));
   assert.ok(!Object.hasOwn(EXEMPT, "listAuditVerifications"));
   assert.ok(!Object.hasOwn(EXEMPT, "runAuditVerification"));
+});
+
+// ---------------------------------------------------------------------------
+// The scan can see the shapes it claims to (RL-M1-052)
+// ---------------------------------------------------------------------------
+
+/**
+ * Deliberately ungated exports, outside `src/` so the real scan never reads them
+ * and {@link EXEMPT} never has to mention them.
+ */
+const FIXTURE = "test/fixtures/repo_gating";
+
+/** Just the function names the scan reported for a directory. */
+function ungatedNamesIn(dir: string): string[] {
+  return ungatedIn(dir).map((label) => label.slice(label.indexOf(": ") + 2));
+}
+
+test("the scan reports a repository export that is not async", () => {
+  // THE acceptance. Pointed at the fixture rather than at src/repo, because
+  // src/repo is (correctly) clean and a clean scan proves nothing about what the
+  // scan can see. With the old `export async function` pattern the fixture's
+  // non-async export was invisible and this file scanned CLEAN — which is
+  // indistinguishable from a green gate.
+  const reported = ungatedNamesIn(FIXTURE);
+  assert.ok(
+    reported.includes("listSitesNotAsync"),
+    `a non-async ungated export was not reported. Reported: ${JSON.stringify(reported)}`,
+  );
+  assert.ok(reported.includes("listSitesAsync"), "the async shape must still be reported");
+});
+
+test("the scan reaches a repository module in a subdirectory", () => {
+  // The other half of the same blind spot: this scan globbed one level while
+  // scoped_repository.test.ts globbed the tree, so a nested repository would have
+  // been required to take a context and never asked for a permission.
+  assert.ok(
+    ungatedNamesIn(FIXTURE).includes("listSitesInASubdirectory"),
+    "an ungated export one directory down was not reported",
+  );
+});
+
+test("a permission named only in a comment does not satisfy the gate", () => {
+  // Acceptance 2, behaviourally rather than structurally. The gate is a string
+  // match for `requirePermission(` somewhere in a body, so without codeOf a
+  // function that merely explains which permission it OUGHT to resolve counts as
+  // having resolved one — and these bodies are heavily commented exactly because
+  // the subject is what they may skip.
+  assert.ok(
+    ungatedNamesIn(FIXTURE).includes("listSitesGatedOnlyInAComment"),
+    "a body whose only requirePermission( is inside a comment was treated as gated",
+  );
+});
+
+test("a genuinely gated export in the fixture is not reported", () => {
+  // The other direction, so the two tests above cannot be passing because the
+  // scan reports everything it sees.
+  assert.ok(
+    !ungatedNamesIn(FIXTURE).includes("listSitesGated"),
+    "a function that does resolve a permission must not be reported",
+  );
+});
+
+test("every exported callable in the repository layer is a function declaration", () => {
+  // What makes the scan COMPLETE rather than merely wider. It reads `function`
+  // declarations, and `export const listSites = (ctx) => …` is just as exported
+  // and just as ungatable. Chasing every callable-const form with a regex is a
+  // second parser to get wrong, so the SHAPE is constrained instead: keep
+  // repository exports as function declarations and the scan sees all of them by
+  // construction. Failing here is loud; being missed by the scan is silent.
+  const offenders: string[] = [];
+  for (const file of globSync("src/repo/**/*.ts", { cwd: ROOT })) {
+    const path = relative(ROOT, join(ROOT, file)).replaceAll("\\", "/");
+    if (path.endsWith("index.ts")) continue;
+    const code = codeOf(readFileSync(join(ROOT, file), "utf8"));
+
+    for (const match of code.matchAll(EXPORTED_CONST)) {
+      const start = match.index ?? 0;
+      // To the end of the statement. A data constant's declaration has no `;`
+      // inside it, and an arrow reaches its `=>` before the first one — so this
+      // stops well short of any later non-exported helper, which slicing to the
+      // next `export` would have swallowed and reported as a false positive.
+      const ends = [code.indexOf(";", start), code.indexOf("\nexport ", start + 1)]
+        .filter((at) => at !== -1)
+        .sort((a, b) => a - b);
+      const declaration = code.slice(start, ends[0] ?? code.length);
+      if (/=>|\bfunction\b/.test(declaration)) offenders.push(`${path}: ${match[1] ?? ""}`);
+    }
+  }
+
+  assert.deepEqual(
+    offenders,
+    [],
+    "these export a callable as a const, which the permission scan does not read. Write it as " +
+      "`export function name(ctx: AuthzContext, …)` so the gate applies, or teach the scan the " +
+      "new form — but do not leave it exported and unread.",
+  );
 });
