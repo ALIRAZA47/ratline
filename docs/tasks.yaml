@@ -1534,7 +1534,7 @@
   owner: agent
   estimate: L
   depends_on: [RL-M2-001]
-  blocks: [RL-M2-003, RL-M2-008]
+  blocks: [RL-M2-003, RL-M2-008, RL-M2-030]
   risk: high
   started_at: 2026-08-04
   done_at: 2026-08-04
@@ -1746,7 +1746,7 @@
   owner: agent
   estimate: XL
   depends_on: [RL-M2-002]
-  blocks: [RL-M2-009, RL-M2-015, RL-M2-020]
+  blocks: []
   risk: high
   acceptance:
     - The agent runs unprivileged and the helper is the only component running as root
@@ -1762,13 +1762,15 @@
     dispatch table, and per-operation argument validators. Left whole here
     deliberately so the split is a visible act rather than a silent one.
 
+    2026-08-05 — SPLIT, AND SUPERSEDED. This is the visible act the 2026-08-01 note asked for. It cannot be started as written — scripts/tasks refuses an XL task at the Definition of Ready, brief §2.2 — and the split it named is now three tasks: RL-M2-030 the socket and the peer-credential check, RL-M2-031 the enumerated dispatch table, RL-M2-032 the per-operation argument validators. Each is startable and each fails differently, which is why the split is along these lines: the socket decides WHO may speak, the dispatcher decides WHAT may be said, and the validators decide whether what was said is true about this host. RL-M2-009, RL-M2-015 and RL-M2-020 now depend on RL-M2-032, which preserves their original meaning exactly — they depended on a WORKING privileged helper, and that is what the third task completes.
+    2026-08-05 — WHAT I COULD NOT DO HERE: set this task to 'dropped'. The validator knows the status and requires a note for it, but scripts/tasks has no drop subcommand, and hand-editing a status is the one thing the tracker rules reserve for the CLI. So this stays 'todo' and inert: it blocks nothing now, and the CLI will refuse to start it because it is XL. Closing it out properly needs either a 'tasks drop' command or the owner's hand, and inventing a status by editing YAML would be exactly the kind of quiet act §2 exists to prevent.
 - id: RL-M2-009
   title: Give the privileged helper its own append-only local audit log
   milestone: M2
   status: todo
   owner: agent
   estimate: M
-  depends_on: [RL-M2-008]
+  depends_on: [RL-M2-032]
   blocks: []
   risk: high
   acceptance:
@@ -1883,7 +1885,7 @@
   status: todo
   owner: agent
   estimate: M
-  depends_on: [RL-M2-008]
+  depends_on: [RL-M2-032]
   blocks: [RL-M2-016, RL-M2-019, RL-M2-021]
   risk: high
   blocked_at: 2026-08-02
@@ -1979,7 +1981,7 @@
   status: todo
   owner: agent
   estimate: L
-  depends_on: [RL-M2-008]
+  depends_on: [RL-M2-032]
   blocks: [RL-M2-025, RL-M2-027, RL-M3-003]
   risk: high
   blocked_at: 2026-08-02
@@ -4256,3 +4258,89 @@
     2026-08-04 — 2026-08-04 — Found by accident, which is the point. npm audit reported hono <4.12.34 carries a ReDoS advisory in its CORS middleware (GHSA-8j4g-w8fx-2239) and package.json pinned ^4.12.33. Not exploitable here — nothing imports that middleware — and bumped to ^4.13.0. But nothing in CI would have told anyone: the pipeline lints, typechecks, tests, migrates and builds the agent, and never once asks whether a dependency has a known hole. I only saw it because I happened to install something else. Acceptance 2 splits production from development advisories deliberately: failing the build on a devDependency advisory trains people to ignore the check, and a check people ignore is worse than none.
 
     2026-08-04 — 2026-08-04 — NOTE ON THE ID: this was created as RL-M1-057, which collides with a task of the same number on the unmerged m1/RL-M1-057-serve-the-dashboard branch — tasks.yaml on main does not yet contain 057, 058 or 059, so the CLI reissued a number that is already taken elsewhere. Renumbered to 060 by hand. The tracker cannot see other branches, so this will recur while several branches are open at once; worth a validate rule that refuses an id already present in origin/main's history rather than only in the working file.
+- id: RL-M2-030
+  title: Give privd its socket and a peer-credential check
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M2-002]
+  blocks: [RL-M2-031]
+  risk: high
+  acceptance:
+    - The agent runs unprivileged and the helper is the only component running as root
+    - The helper authenticates its caller by peer credentials rather than trusting the socket
+    - A caller whose credentials cannot be read is refused rather than allowed
+    - The socket's own permissions and ownership are asserted on a real host
+  artifacts: []
+  decisions: [4]
+  notes: |
+    2026-08-05 — The first of three tasks RL-M2-008 was split into, and the one that
+    matters most on its own: this is the trust boundary. ADR 0004 says privd
+    "identifies its caller by SO_PEERCRED rather than trusting the socket's mode
+    alone", and the reason it says "rather than" is that a mode is a property of a
+    filesystem entry and a peer credential is a property of the connection — only the
+    second survives somebody who can create a path.
+
+    2026-08-05 — Acceptance 3 is new and is not in RL-M2-008. Reading peer credentials
+    is a Linux facility (SO_PEERCRED, syscall.GetsockoptUcred), so the code has a
+    platform boundary, and a platform boundary in an authentication check has exactly
+    one safe default: refuse. A build for a platform that cannot identify its caller
+    must accept nobody, and that has to be asserted rather than assumed — the same
+    lesson listencheck.Listening records about answering "nothing found" where the
+    check could not run.
+- id: RL-M2-031
+  title: Give privd an enumerated operation dispatch table
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M2-030]
+  blocks: [RL-M2-032]
+  risk: high
+  acceptance:
+    - The helper accepts only enumerated operations and refuses anything else with no default branch
+    - An unknown operation is refused before any argument is examined
+    - Every accepted operation is recorded before it is performed
+  artifacts: []
+  decisions: [4]
+  notes: |
+    2026-08-05 — The second of three tasks RL-M2-008 was split into. Same rule as the
+    instruction catalogue (ADR 0002) and the agent's own command line: there is no
+    default branch. What makes this a task of its own rather than part of the socket is
+    that the socket decides WHO may speak and this decides WHAT may be said, and those
+    fail differently — the first wrongly grants a session, the second wrongly grants an
+    action.
+
+    2026-08-05 — "Recorded before it is performed" is here rather than in RL-M2-009
+    because the ordering is a property of the dispatcher. RL-M2-009 owns the log's
+    durability, ownership and shipping; this owns the fact that nothing runs before the
+    record exists.
+- id: RL-M2-032
+  title: Re-validate every privileged argument inside privd
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M2-031]
+  blocks: [RL-M2-009, RL-M2-015, RL-M2-020]
+  risk: high
+  acceptance:
+    - Every argument is validated inside privd independently of the agent
+    - Site slugs, paths and service identifiers are re-checked against the strict patterns
+    - A path that resolves outside the site root is refused after resolution, not before
+    - A test confirms a compromised agent cannot obtain arbitrary root through the helper
+  artifacts: []
+  decisions: [4]
+  notes: |
+    2026-08-05 — The third of three tasks RL-M2-008 was split into, and it carries
+    RL-M2-008's final acceptance line unchanged, because "a compromised agent cannot
+    obtain arbitrary root through the helper" is only true once all three exist. Putting
+    it on the socket task would have let it be checked while privd still trusted every
+    argument it was handed.
+
+    2026-08-05 — ADR 0004: "Duplicating validation on both sides is deliberate. If it
+    lived only in the agent, privd would be a confused deputy and the boundary would be
+    decorative." Acceptance 3 spells out the half that is easiest to get wrong — a check
+    that runs before symlinks are resolved is a check on a string rather than on the
+    file it will reach.

@@ -9,7 +9,7 @@ Generated 2026-08-05.
 | --- | --- | ---: | ---: | ---: |
 | **M0** Plan | `########################` 100% | 26 | 26 | 0 |
 | **M1** Control plane skeleton | `##################------` 77% | 46 | 60 | 6 |
-| **M2** Agent and first host | `#######-----------------` 28% | 8 | 29 | 13 |
+| **M2** Agent and first host | `######------------------` 25% | 8 | 32 | 16 |
 | **M3** Static sites end to end | `------------------------` 0% | 0 | 27 | 18 |
 | **M4** Node and Bun apps | `------------------------` 0% | 0 | 15 | 10 |
 | **M5** RBAC completion | `------------------------` 0% | 0 | 7 | 6 |
@@ -67,6 +67,9 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 - `RL-M1-049` (M1, todo) — Put the CSRF guard in front of every request, not every guarded route
 - `RL-M1-050` (M1, todo) — Make the audit half of a refusal impossible to drop
 - `RL-M1-052` (M1, todo) — Catch a repository export that is not async
+- `RL-M2-030` (M2, todo) — Give privd its socket and a peer-credential check
+- `RL-M2-031` (M2, todo) — Give privd an enumerated operation dispatch table
+- `RL-M2-032` (M2, todo) — Re-validate every privileged argument inside privd
 
 ## Test health
 
@@ -113,7 +116,7 @@ CI: _no status recorded yet._
 
 | Status | Count |
 | --- | ---: |
-| todo | 102 |
+| todo | 105 |
 | review | 5 |
 | done | 80 |
-| **all** | **187** |
+| **all** | **190** |
