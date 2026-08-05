@@ -68,5 +68,20 @@
     "tools/board/**/*.tsx",
     "tools/board/vite.config.ts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules",
+    // Scratch git worktrees for delegated agents. Each is a COMPLETE checkout, so without
+    // this line `tsc --noEmit` typechecks one copy of the codebase per worktree — five
+    // copies with four agents present, which is how `npm run typecheck` went from seconds
+    // to minutes and starved two parallel agents past their 600s watchdog.
+    //
+    // Worse than slow: it reports errors from another branch's work in progress as though
+    // they were in this tree, so a clean checkout looks broken because somebody else is
+    // mid-edit. eslint has ignored `.claude/**` for this exact reason since RL-M1-001;
+    // tsconfig never got the same line.
+    ".claude/**",
+    // Vite's bundled output. Not source, not in the program, and it appears the moment
+    // anybody runs a build before a typecheck.
+    "dist/**"
+  ]
 }
