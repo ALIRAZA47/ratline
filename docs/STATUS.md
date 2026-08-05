@@ -9,7 +9,7 @@ Generated 2026-08-05.
 | --- | --- | ---: | ---: | ---: |
 | **M0** Plan | `########################` 100% | 26 | 26 | 0 |
 | **M1** Control plane skeleton | `##################------` 77% | 46 | 60 | 6 |
-| **M2** Agent and first host | `######------------------` 24% | 7 | 29 | 14 |
+| **M2** Agent and first host | `#######-----------------` 28% | 8 | 29 | 13 |
 | **M3** Static sites end to end | `------------------------` 0% | 0 | 27 | 18 |
 | **M4** Node and Bun apps | `------------------------` 0% | 0 | 15 | 10 |
 | **M5** RBAC completion | `------------------------` 0% | 0 | 7 | 6 |
@@ -29,9 +29,7 @@ Auth, org/team/project model, the can() function with 100% branch coverage, hash
 
 ## In progress
 
-| Task | Age | Owner | Risk | Acceptance | Title |
-| --- | ---: | --- | --- | ---: | --- |
-| `RL-M2-006` | 0d | agent | **high** | 2/4 | Implement the agent-initiated connection with reconnect and backoff |
+_None._
 
 ## Blocked
 
@@ -80,7 +78,7 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | 100% | must be 100% |
 
-Measured 2026-08-05T05:33:12.680Z.
+Measured 2026-08-05T05:57:10.619Z.
 
 ### Authorization matrix (role × endpoint × subject)
 
@@ -116,7 +114,6 @@ CI: _no status recorded yet._
 | Status | Count |
 | --- | ---: |
 | todo | 102 |
-| in-progress | 1 |
 | review | 5 |
-| done | 79 |
+| done | 80 |
 | **all** | **187** |
