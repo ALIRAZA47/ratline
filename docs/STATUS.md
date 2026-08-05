@@ -31,7 +31,7 @@ Auth, org/team/project model, the can() function with 100% branch coverage, hash
 
 | Task | Age | Owner | Risk | Acceptance | Title |
 | --- | ---: | --- | --- | ---: | --- |
-| `RL-M2-006` | 0d | agent | **high** | 1/4 | Implement the agent-initiated connection with reconnect and backoff |
+| `RL-M2-006` | 0d | agent | **high** | 2/4 | Implement the agent-initiated connection with reconnect and backoff |
 
 ## Blocked
 

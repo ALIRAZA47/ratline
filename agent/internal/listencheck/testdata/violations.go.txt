@@ -1,0 +1,69 @@
+// A fixture of listeners the check must refuse (RL-M2-006).
+//
+// Not a .go file, because it would not compile and because every one of these is a
+// deliberate violation. Each is marked with the rule it must produce, so the fixture states
+// its expectation and the test compares rather than counting — a count passes with the right
+// total and the wrong lines.
+package fixture
+
+import (
+	"crypto/tls"
+	"net"
+	"net/http"
+	"syscall"
+)
+
+func plainTCP() {
+	net.Listen("tcp", ":9000") // want: network-listener
+}
+
+func everyFamilyByName() {
+	net.ListenTCP("tcp", nil)            // want: network-listener
+	net.ListenUDP("udp", nil)            // want: network-listener
+	net.ListenIP("ip4:icmp", nil)        // want: network-listener
+	net.ListenMulticastUDP("udp4", nil, nil) // want: network-listener
+}
+
+func theFamilyIsNamedInTheSecondArgument() {
+	// The literal classifies the call wherever it sits, the same way shellcheck scans every
+	// argument position rather than only the program — the bypass it found was
+	// exec.Command("/usr/bin/env", "sh", ...), and this is the same shape.
+	net.ListenPacket("udp6", "[::]:5353") // want: network-listener
+}
+
+func anHTTPServer() {
+	http.ListenAndServe(":8080", nil)                    // want: network-listener
+	http.ListenAndServeTLS(":8443", "c.pem", "k.pem", nil) // want: network-listener
+}
+
+func anHTTPServerStruct() {
+	server := &http.Server{Addr: ":8080"}
+	server.ListenAndServe() // want: network-listener
+}
+
+func tlsOverAnExistingListener() {
+	var inner net.Listener
+	tls.NewListener(inner, nil) // want: unclassified-listener
+}
+
+func aVariableNetwork() {
+	// The gap shellcheck documents and cannot close, closed here: a listener whose family
+	// is not visible in the source has to say what it is.
+	network := "tcp"
+	net.Listen(network, ":9000") // want: unclassified-listener
+}
+
+func socketActivationWithoutAReason() {
+	var file *os.File
+	net.FileListener(file) // want: unclassified-listener
+}
+
+func aBareAnnotationPermitsNothing() {
+	network := "tcp"
+	//ratline:allow-listener
+	net.Listen(network, ":9000") // want: unclassified-listener
+}
+
+func aRawBind() {
+	syscall.Bind(3, nil) // want: unclassified-listener
+}
