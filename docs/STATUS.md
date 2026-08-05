@@ -71,13 +71,13 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 
 | Suite | Passing | Rate |
 | --- | ---: | ---: |
-| Unit | 461 / 461 | 100% |
+| Unit | 465 / 466 | 100% |
 | Integration | not measured | — |
 | Authorization matrix | 191 / 191 | 100% |
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | 100% | must be 100% |
 
-Measured 2026-08-04T20:26:59.198Z.
+Measured 2026-08-05T05:30:17.879Z.
 
 ### Authorization matrix (role × endpoint × subject)
 
@@ -99,10 +99,10 @@ Measured 2026-08-04T20:26:59.198Z.
 | Severity | Open |
 | --- | ---: |
 | Critical | 0 |
-| High | 0 |
+| High | 1 |
 | Medium | 0 |
 
-Gate check (critical + high must be zero): PASS
+Gate check (critical + high must be zero): **FAIL — gate blocked**
 
 ## Build
 
