@@ -45,7 +45,11 @@ _None._
 | `RL-M1-020` | 3d | agent | **high** | 2/3 | Rate limit every authentication path |
 | `RL-M1-041` | — | agent | low | 2/3 | Make the source scanners agree about comments |
 | `RL-M1-045` | 3d | agent | **high** | 2/3 | Chase the intermittent failure in the API token ceiling suite |
+| `RL-M1-051` | 0d | agent | medium | 2/2 | Fail the coverage gate for an authz file no test ever loads |
+| `RL-M1-053` | 0d | agent | medium | 3/3 | Give audit actor_id referential integrity |
+| `RL-M1-054` | 0d | agent | medium | 2/2 | Check the cookie secret for entropy, not just length |
 | `RL-M1-058` | — | agent | medium | 3/4 | Wire the dashboard shell to the API it decorates |
+| `RL-M1-060` | 0d | agent | medium | 3/3 | Audit dependencies in CI, so an advisory is not found by accident |
 
 ## Open high-risk tasks without security-test coverage
 
@@ -76,13 +80,13 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 
 | Suite | Passing | Rate |
 | --- | ---: | ---: |
-| Unit | 465 / 466 | 100% |
+| Unit | 467 / 467 | 100% |
 | Integration | not measured | — |
 | Authorization matrix | 191 / 191 | 100% |
 | `src/authz/**` line coverage | 100% | must be 100% |
 | `can()` branch coverage | 100% | must be 100% |
 
-Measured 2026-08-05T05:30:17.879Z.
+Measured 2026-08-05T06:20:24.436Z.
 
 ### Authorization matrix (role × endpoint × subject)
 
@@ -104,10 +108,10 @@ Measured 2026-08-05T05:30:17.879Z.
 | Severity | Open |
 | --- | ---: |
 | Critical | 0 |
-| High | 1 |
+| High | 0 |
 | Medium | 0 |
 
-Gate check (critical + high must be zero): **FAIL — gate blocked**
+Gate check (critical + high must be zero): PASS
 
 ## Build
 
@@ -117,8 +121,8 @@ CI: **green** at `18cca248` (2026-08-03T19:25:43Z)
 
 | Status | Count |
 | --- | ---: |
-| todo | 105 |
+| todo | 101 |
 | in-progress | 1 |
-| review | 5 |
+| review | 9 |
 | done | 81 |
 | **all** | **192** |

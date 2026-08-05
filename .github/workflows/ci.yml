@@ -58,6 +58,35 @@ jobs:
       - name: STATUS.md is current
         run: ./scripts/tasks render --check
 
+  # Does any dependency have a published hole? (RL-M1-060)
+  #
+  # Its own job rather than a step in `code`, for two reasons. It is the one check
+  # here whose answer changes without the repository changing — an advisory
+  # published tomorrow turns today's commit red on its next run — so it should not
+  # be able to mask, or be masked by, a test result. And it needs the registry
+  # while nothing else in `code` does, so a network failure names itself instead of
+  # arriving as "lint, typecheck, test" having failed.
+  #
+  # It fails on a PRODUCTION advisory only. Development advisories print in full
+  # and pass; see scripts/dependency_audit.ts for the argument, which is short: a
+  # red pipeline nobody can act on trains people to ignore the check, and an
+  # ignored check occupies the space a working one would go in.
+  audit:
+    name: Dependency advisories
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      # No `npm ci`. `npm audit` reads package-lock.json and asks the registry, so
+      # installing 137 packages first would buy nothing — and this job's whole
+      # subject is the lockfile rather than the tree it produces.
+      - name: Dependency audit
+        run: ./scripts/audit-deps
+
   code:
     name: Lint, typecheck, test
     runs-on: ubuntu-latest
@@ -257,15 +286,20 @@ jobs:
   status:
     name: Record CI status
     runs-on: ubuntu-latest
-    needs: [tracker, code, database, agent]
+    needs: [tracker, audit, code, database, agent]
     if: success()
     steps:
       - uses: actions/checkout@v4
 
       # `tasks done` refuses to close a task unless this file reports green.
-      # It is written only when ALL FOUR jobs above succeeded, so "green" means
-      # the whole pipeline, not one step of it. Nothing outside CI writes this
-      # file — a local run that minted its own green light would defeat the gate.
+      # It is written only when EVERY job above succeeded, so "green" means the
+      # whole pipeline, not one step of it. Nothing outside CI writes this file —
+      # a local run that minted its own green light would defeat the gate.
+      #
+      # "Every job" is five now: RL-M1-060 added `audit`. The count is deliberately
+      # not written into the sentence any more, because the previous version said
+      # "ALL FOUR" and the next person to add a job has to notice a number in a
+      # comment as well as the list below.
       #
       # Adding a job means adding it to `needs` as well. Forgetting to would not
       # break anything visibly: the pipeline would still go green, while quietly
