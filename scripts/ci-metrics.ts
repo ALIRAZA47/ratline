@@ -26,6 +26,13 @@ import { existsSync, globSync, mkdirSync, readFileSync, rmSync, writeFileSync } 
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  coverageFor,
+  evaluateGate,
+  GATES,
+  type CoverageFile,
+} from "./coverage_gate.ts";
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = join(ROOT, ".ratline");
 /** Written by test/authz/matrix.test.ts. See readMatrixReport below. */
@@ -34,28 +41,7 @@ const MATRIX_REPORT = join(OUT_DIR, "authz-matrix.json");
 type Counts = { tests: number; passed: number; failed: number };
 type Suite = { passed: number; total: number };
 
-type CoverageFile = {
-  path: string;
-  totalBranchCount: number;
-  coveredBranchCount: number;
-  totalLineCount: number;
-  coveredLineCount: number;
-};
 type CoverageTotals = { coveredLinePercent: number; coveredBranchPercent: number };
-
-const pct = (covered: number, total: number): number =>
-  total === 0 ? 100 : Math.round((covered / total) * 10_000) / 100;
-
-/** Aggregate coverage over the files whose repo-relative path matches. */
-function coverageFor(files: CoverageFile[], match: RegExp): { lines: number; branches: number } | null {
-  const hit = files.filter((f) => match.test(relative(ROOT, f.path)));
-  if (hit.length === 0) return null;
-  const sum = (pick: (f: CoverageFile) => number) => hit.reduce((n, f) => n + pick(f), 0);
-  return {
-    lines: pct(sum((f) => f.coveredLineCount), sum((f) => f.totalLineCount)),
-    branches: pct(sum((f) => f.coveredBranchCount), sum((f) => f.totalBranchCount)),
-  };
-}
 
 /**
  * A string from an untyped event payload, or undefined.
@@ -315,8 +301,8 @@ async function main(): Promise<void> {
   const main = await runSuite([...unitFiles, ...authzFiles], true);
   const authzCounts = countsUnder(main.perFile, "authz");
 
-  const authzCoverage = coverageFor(main.files, /^src[/\\]authz[/\\]/);
-  const canCoverage = coverageFor(main.files, /^src[/\\]authz[/\\]can\.ts$/);
+  const authzCoverage = coverageFor(ROOT, main.files, /^src\/authz\//);
+  const canCoverage = coverageFor(ROOT, main.files, /^src\/authz\/can\.ts$/);
 
   const unitCounts: Counts = {
     tests: main.counts.tests - authzCounts.tests,
@@ -386,39 +372,20 @@ async function main(): Promise<void> {
   // unenforced target drifts down one uncovered branch at a time, and each one
   // looks reasonable on its own.
   //
-  // These two are gated and nothing else is. A blanket coverage target buys
-  // tests written to raise a number; these buy the specific guarantee that every
-  // path through the decision function has been exercised, including the ones
-  // that deny.
+  // The gates and their judgement live in ./coverage_gate.ts. They moved there
+  // when RL-M1-051 found two ways to satisfy them with nothing — a file no test
+  // loads is absent from the report rather than reported at 0%, and a percentage
+  // over an empty denominator answers 100 — and neither could be tested while the
+  // logic sat inside a script that runs the whole suite on import.
+  //
+  // `sourcePaths` is what makes the first check possible: the report says what
+  // ran, this says what exists, and the gate fails on the difference.
   // ---------------------------------------------------------------------------
-  const gates: { label: string; actual: number | null; required: number; why: string }[] = [
-    {
-      label: "can() branch coverage",
-      actual: canCoverage?.branches ?? null,
-      required: 100,
-      why: "every path through the decision function must be exercised, especially the ones that deny (brief §6.3)",
-    },
-    {
-      label: "src/authz/** line coverage",
-      actual: authzCoverage?.lines ?? null,
-      required: 100,
-      why: "the authorization module is the differentiator; an unexercised line here is an unknown permission outcome (brief §6.3)",
-    },
-  ];
-
-  const gateFailures: string[] = [];
-  for (const gate of gates) {
-    if (gate.actual === null) {
-      // Absent is a failure, not a pass. Renaming or moving can.ts would
-      // otherwise switch its own gate off silently, which is the failure mode
-      // most likely to go unnoticed for months.
-      gateFailures.push(`${gate.label}: not measured — expected ${gate.required}%. ${gate.why}`);
-      continue;
-    }
-    if (gate.actual < gate.required) {
-      gateFailures.push(`${gate.label}: ${gate.actual}% < ${gate.required}%. ${gate.why}`);
-    }
-  }
+  const sourcePaths = globSync(["src/**/*.ts", "src/**/*.tsx"], { cwd: ROOT }).map((p) =>
+    join(ROOT, p),
+  );
+  const results = GATES.map((gate) => evaluateGate(ROOT, gate, main.files, sourcePaths));
+  const gateFailures = results.flatMap((r) => r.failures);
 
   const failed = main.counts.failed;
   console.log(
@@ -434,9 +401,9 @@ async function main(): Promise<void> {
       : `authorization matrix: ${String(matrix["note"])}`,
   );
 
-  for (const gate of gates) {
-    const actual = gate.actual === null ? "not measured" : `${gate.actual}%`;
-    console.log(`${gate.label}: ${actual} (require ${gate.required}%)`);
+  for (const result of results) {
+    const actual = result.actual === null ? "not measured" : `${String(result.actual)}%`;
+    console.log(`${result.label}: ${actual} (require ${String(result.required)}%)`);
   }
 
   if (gateFailures.length > 0) {

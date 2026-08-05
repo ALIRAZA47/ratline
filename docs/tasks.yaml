@@ -4047,12 +4047,13 @@
 - id: RL-M1-051
   title: Fail the coverage gate for an authz file no test ever loads
   milestone: M1
-  status: todo
+  status: review
   owner: agent
   estimate: S
   depends_on: []
   blocks: []
   risk: medium
+  started_at: 2026-08-05
   acceptance:
     - A file under src/authz/** that no test imports fails the coverage gate rather than being invisible
     - A module with no branches cannot satisfy the can() branch gate by having nothing to cover
@@ -4060,6 +4061,12 @@
   decisions: []
   notes: |
     2026-08-03 — 2026-08-04 — DEMONSTRATED with a fixture: src/authz/never_imported.ts with three uncovered branches is ABSENT from node's coverage report entirely, and the run still printed 'src/authz/** line coverage: 100%'. coverageFor (scripts/ci-metrics.ts) sums only over files the report contains and returns null only when NOTHING matches, so one unloaded file in a directory of loaded ones is invisible rather than 'not measured'. The M1 gate report claims renaming can.ts cannot switch off its own gate; that is true, and hollowing it out is not — pct() returns 100 when total is 0, so a can.ts with no branches satisfies the branch gate. Relevant from M5 onward: an authorization file reachable only from an unbound route would ship unexercised under a green gate.
+    2026-08-05 — 2026-08-05 — REPRODUCED then FIXED. Reproduced first: src/authz/never_imported.ts with three uncovered branches present on disk, and the run printed 'src/authz/** line coverage: 100%' and passed. The gate now compares two independent things — what node's coverage report says RAN against what globSync says EXISTS — and fails on the difference, naming each unloaded file. Gate judgement moved out of scripts/ci-metrics.ts into scripts/coverage_gate.ts, because ci-metrics runs the whole suite at import time and a gate no test can call is a gate nobody checks.
+    2026-08-05 — 2026-08-05 — THE DIAGNOSIS FOR ACCEPTANCE 2 WAS WRONG ABOUT THE MECHANISM, and the correction is the useful part. The note said pct() returning 100 for total 0 lets a hollowed can.ts satisfy the branch gate. Measured: not reachable. A real src/authz/hollow.ts holding one 'export const' and no conditional at all was loaded by a test and reported by node as 1 of 1 BRANCHES covered — V8 counts the module body as a branch — so a loaded file's branch total is never 0 and a 'total === 0' check would have been dead code that looked like a fix. The gate therefore checks the denominator against a FLOOR: can() requires at least 20 branches (34 today), src/authz/** at least 1000 lines (2458 today). Stated plainly in the module: that is a tripwire, not a proof — it cannot tell a gutted decision function from a legitimately simplified one, and the failure message says how to lower the floor deliberately so the next person does not disable the gate instead. total === 0 is still checked, for a synthesized or future report.
+    2026-08-05 — 2026-08-05 — MUTATION TESTED, both properties, on real coverage rather than only on synthetic reports. (1) src/authz/never_imported.ts present: before the fix, 636/636 passed and the gate printed 100%; after, ci-metrics exits 1 with 'src/authz/** line coverage: 1 file(s) matching the gate were never loaded by any test ... src/authz/never_imported.ts'. (2) src/authz/hollow.ts imported from test/authz/can.test.ts under a temporary branch gate with floor 20: ci-metrics exits 1 with 'the branches total across the files matching this gate is 1, below the floor of 20'. Both mutations reverted from copies named *.rl051-pre-hollow-mutation. The same run also failed test/toolchain/coverage_gate.test.ts's 'the real gates still name the paths the brief gates', which is that test doing its job — it noticed the temporary gate in GATES.
+    2026-08-05 — 2026-08-05 — NO PERMANENT UNIMPORTED FILE UNDER src/authz/. A previous attempt left the reproduction fixture there, which is the defect itself: an authorization file kept deliberately unexercised, in the one directory whose whole claim is that nothing there is unexercised, and it would need a gate exemption to keep CI green. The fixtures are test/fixtures/coverage/{decides,unimported}.ts and the test points a fixture-shaped gate at them; two further tests assert the REAL GATES still name src/authz/can.ts and src/authz/, since a mechanism tested only through a fixture pattern would keep passing after somebody moved can.ts. .d.ts is excluded from what a gate expects to have run — a declaration file has no runtime existence and could never appear in a report.
+    2026-08-05 — 2026-08-05 — LEFT AT review, NOT done, and the reason is procedural rather than a doubt about the work. Both acceptance lines are verified and every local check is green: npm run lint, npm run typecheck, and ./scripts/ci-metrics at 649/649 with both coverage gates at 100%. What is missing is CI itself — this session was instructed to keep branches local and not push, so .ratline/ci-status.json does not exist and the done gate correctly refuses. --no-ci was not used: the repository has only ever used it for M0 tasks that predate the pipeline, and borrowing it here would record 'CI does not exist' when the truth is 'CI has not been given the branch'.
+  acceptance_met: [1, 2]
 - id: RL-M1-052
   title: Catch a repository export that is not async
   milestone: M1
