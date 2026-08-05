@@ -142,9 +142,19 @@ test("no audit write path exists outside the repository", () => {
 });
 
 test("every actor kind names something that exists in the tenant", { skip }, async () => {
-  // C6 says automation acts as a NAMED service identity. A context can carry an
-  // id for something that was deleted; the entry still records which id, so the
-  // trail survives even when the identity does not.
+  // C6 says automation acts as a NAMED service identity. RL-M1-053: this test
+  // carried its title without checking it. Its old comment conceded that "a
+  // context can carry an id for something that was deleted" and stopped there,
+  // which quietly covered a second case the title does not allow — an id for
+  // something that NEVER existed. Deletion is defensible and is still allowed
+  // (see the ghost tests below and migration 14's argument for why this is a
+  // write-time check and not a foreign key). Never-existed is not, and the title
+  // asserts the property either way.
+  //
+  // So the entry is now JOINED back to the identity it names. An audit row that
+  // cannot be resolved to a row is the exact experience an incident reviewer got
+  // before this, and asserting it here rather than only in the schema means the
+  // claim is checked from the side that reads the log.
   await withMigratedDatabase(async (client, database) => {
     const { orgId, userId } = await seedOrganization(client);
     const identity = await client.query<{ id: string }>(
@@ -168,6 +178,151 @@ test("every actor kind names something that exists in the tenant", { skip }, asy
       assert.equal(bot.actorType, "service_identity");
       assert.equal(bot.actorLabel, "deploy-bot", "an unnamed automation actor is not attribution");
     });
+
+    // The reviewer's query, run as the reviewer would run it: resolve each
+    // entry's actor to a row in the table its kind names.
+    const resolved = await client.query<{ actor_type: string; actor_id: string; resolved: string | null }>(
+      `select a.actor_type, a.actor_id,
+              case a.actor_type
+                when 'user' then (select u.name from users u
+                                  join memberships m on m.user_id = u.id
+                                  where u.id = a.actor_id and m.org_id = a.org_id)
+                when 'service_identity' then (select s.name from service_identities s
+                                              where s.id = a.actor_id and s.org_id = a.org_id)
+                when 'api_token' then (select t.name from api_tokens t
+                                       where t.id = a.actor_id and t.org_id = a.org_id)
+              end as resolved
+       from audit_entries a where a.org_id = $1 order by a.seq`,
+      [orgId],
+    );
+
+    assert.ok(resolved.rows.length >= 2, "the two entries above must be in the log");
+    for (const row of resolved.rows) {
+      assert.notEqual(
+        row.resolved,
+        null,
+        `audit actor ${row.actor_type}:${row.actor_id} resolves to nothing — ` +
+          `"attributable" then rests on the caller-supplied label alone (C6)`,
+      );
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A ghost actor is refused by the database (RL-M1-053)
+// ---------------------------------------------------------------------------
+
+test("an audit entry naming an actor that does not exist is refused", { skip }, async () => {
+  // The defect: actor_id was `uuid not null` with no reference, so any 128 bits
+  // were accepted. An incident reviewer joining audit_entries to
+  // service_identities got nothing back, and C6's "attributable" rested on a
+  // label the caller chose.
+  //
+  // Refused by the database, not by the repository: recordAudit is the only
+  // writer today, and "the only writer is careful" is a convention. This runs as
+  // the migrator, past every layer of application code, which is the only way to
+  // show the schema itself objects.
+  await withMigratedDatabase(async (client) => {
+    const { orgId } = await seedOrganization(client);
+    const insert = `insert into audit_entries
+        (org_id, actor_type, actor_id, action, resource_type, decision, request_id)
+      values ($1, $2, $3, 'site.read', 'site', 'allow', 'r')`;
+
+    for (const kind of ["user", "service_identity", "api_token"]) {
+      await assert.rejects(
+        () => client.query(insert, [orgId, kind, randomUUID()]),
+        /does not exist in organization/,
+        `a ghost ${kind} must not be recordable as an actor`,
+      );
+    }
+
+    // The specific value src/main.ts used to pass while an installation was
+    // unclaimed. Named here so a future reintroduction of a placeholder uuid
+    // fails on the value itself rather than on a general rule.
+    await assert.rejects(
+      () => client.query(insert, [orgId, "service_identity", "00000000-0000-4000-8000-000000000000"]),
+      /does not exist in organization/,
+      "a placeholder identity is a ghost like any other",
+    );
+  });
+});
+
+test("another tenant's real identity is not an actor here", { skip }, async () => {
+  // Existence alone is not attribution. An id that resolves in a different
+  // organization names a row nobody in THIS tenant could have acted as, and the
+  // entry would look attributable to anyone who did not check the org.
+  await withMigratedDatabase(async (client) => {
+    const { orgId } = await seedOrganization(client);
+    const other = await seedOrganization(client, "other");
+    const theirs = await client.query<{ id: string }>(
+      "insert into service_identities (org_id, name) values ($1, 'deploy-bot') returning id",
+      [other.orgId],
+    );
+
+    await assert.rejects(
+      () =>
+        client.query(
+          `insert into audit_entries
+             (org_id, actor_type, actor_id, action, resource_type, decision, request_id)
+           values ($1, 'service_identity', $2, 'site.read', 'site', 'allow', 'r')`,
+          [orgId, theirs.rows[0]?.id ?? ""],
+        ),
+      /does not exist in organization/,
+    );
+  });
+});
+
+test("a user who exists but is not a member of the tenant is not an actor here", { skip }, async () => {
+  // `users` is global — one person, many organizations — so "exists" is not the
+  // question. The suite's title says "in the tenant", and for a person that means
+  // membership.
+  await withMigratedDatabase(async (client) => {
+    const { orgId } = await seedOrganization(client);
+    const stranger = await client.query<{ id: string }>(
+      "insert into users (email, name) values ('stranger@elsewhere.example', 'Stranger') returning id",
+    );
+
+    await assert.rejects(
+      () =>
+        client.query(
+          `insert into audit_entries
+             (org_id, actor_type, actor_id, action, resource_type, decision, request_id)
+           values ($1, 'user', $2, 'site.read', 'site', 'allow', 'r')`,
+          [orgId, stranger.rows[0]?.id ?? ""],
+        ),
+      /does not exist in organization/,
+    );
+  });
+});
+
+test("an entry whose actor is deleted afterwards survives", { skip }, async () => {
+  // The property migration 14 protects by NOT being a foreign key, asserted so a
+  // future change to a real key fails here rather than silently taking audit
+  // history with it. The record of what somebody did must outlive their account —
+  // that is most of what an audit log is for.
+  await withMigratedDatabase(async (client) => {
+    const { orgId } = await seedOrganization(client);
+    const identity = await client.query<{ id: string }>(
+      "insert into service_identities (org_id, name) values ($1, 'retired-bot') returning id",
+      [orgId],
+    );
+    const identityId = identity.rows[0]?.id ?? "";
+
+    await client.query(
+      `insert into audit_entries
+         (org_id, actor_type, actor_id, actor_label, action, resource_type, decision, request_id)
+       values ($1, 'service_identity', $2, 'retired-bot', 'site.read', 'site', 'allow', 'r')`,
+      [orgId, identityId],
+    );
+
+    await client.query("delete from service_identities where id = $1", [identityId]);
+
+    const kept = await client.query<{ actor_id: string; actor_label: string }>(
+      "select actor_id, actor_label from audit_entries where org_id = $1 and actor_id = $2",
+      [orgId, identityId],
+    );
+    assert.equal(kept.rows.length, 1, "deleting an identity must not delete what it did");
+    assert.equal(kept.rows[0]?.actor_label, "retired-bot");
   });
 });
 

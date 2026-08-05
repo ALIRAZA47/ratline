@@ -242,10 +242,13 @@ async function main(): Promise<void> {
     cookieSecret: ready.secrets.cookie,
     sealingKey: ready.secrets.kek,
     secretsDir: dir,
-    // A placeholder ONLY while unclaimed, and it cannot be used: every path that
-    // reads it needs a session, and a session needs an organization that does not
-    // exist yet. Named so it is obvious in a log if it ever appears in one.
-    signInIdentityId: signInIdentityId ?? "00000000-0000-4000-8000-000000000000",
+    // Null while unclaimed, not a placeholder uuid (RL-M1-053). This used to pass
+    // a literal all-zeros uuid on the argument that no path could reach it — true,
+    // and it left the audit log willing to accept an actor with no row behind it
+    // if one ever did. Passing the absence instead means ServerDeps says there is
+    // no identity yet and every path that needs one refuses on the type rather
+    // than on that argument.
+    signInIdentityId,
     // One organization per installation, which is what the single sign-in identity
     // above already assumes. A subdomain or a slug on the form is the alternative,
     // and ServerDeps injects this precisely because the choice is a deployment

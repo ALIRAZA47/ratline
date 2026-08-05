@@ -145,8 +145,22 @@ export type ServerDeps = {
   /**
    * The service identity the sign-in path acts as, for rate limiting and for
    * audit entries written before an actor exists (ADR 0014's seam).
+   *
+   * Nullable, and the null is load-bearing (RL-M1-053). `service_identities` is
+   * per-organization, so before an installation is claimed there is no
+   * organization and therefore no sign-in identity to act as — while the server
+   * still has to serve `/bootstrap`. This used to be a plain string and `main.ts`
+   * filled the gap with a literal all-zeros uuid, which the audit log accepted:
+   * `actor_id` was not-null but referenced nothing, so an entry written on that
+   * path named an actor an incident reviewer could not join to.
+   *
+   * Null now says "there is no identity yet" in the type, and every path that
+   * needs one refuses without it — the same refusal it already gives when there is
+   * no tenant, because it is the same condition seen from the other side. The
+   * database refuses a ghost as well (migration 14); this is so nothing has to get
+   * that far.
    */
-  readonly signInIdentityId: string;
+  readonly signInIdentityId: string | null;
   /** Where the first-run secrets live. Injected so a test uses its own (C4). */
   readonly secretsDir: string;
   /** Unseals a stored TOTP secret (ADR 0006). Required, never a lazy load. */
@@ -445,14 +459,15 @@ export function createServer(deps: ServerDeps): Hono {
 
     const orgId = await deps.resolveTenant(c.req.raw);
     const token = readCookie(c.req.header("cookie"), cookieName);
-    // No tenant or no cookie means no session, so nothing to forge. The route's
-    // own authentication still refuses it if it needs one — this guard is not
-    // standing in for that, and must not be read as doing so.
-    if (orgId === null || token === null) return next();
+    const signInIdentityId = deps.signInIdentityId;
+    // No tenant, no cookie or no sign-in identity means no session, so nothing to
+    // forge. The route's own authentication still refuses it if it needs one —
+    // this guard is not standing in for that, and must not be read as doing so.
+    if (orgId === null || token === null || signInIdentityId === null) return next();
 
     const preAuth = contextForServiceIdentity({
       orgId,
-      serviceIdentityId: deps.signInIdentityId,
+      serviceIdentityId: signInIdentityId,
       name: "sign-in",
       requestId: crypto.randomUUID(),
     });
@@ -553,11 +568,16 @@ export function createServer(deps: ServerDeps): Hono {
 
   app.post("/auth/sign-in", async (c) => {
     const orgId = await deps.resolveTenant(c.req.raw);
-    if (orgId === null) return send(unauthenticated());
+    const signInIdentityId = deps.signInIdentityId;
+    // An unclaimed installation has no organization and so no sign-in identity.
+    // Refused as unauthenticated rather than as a fault: there is nothing here to
+    // sign in to yet, and saying which of the two is missing would tell an
+    // unauthenticated caller whether the installation is worth attacking.
+    if (orgId === null || signInIdentityId === null) return send(unauthenticated());
 
     const ctx = contextForServiceIdentity({
       orgId,
-      serviceIdentityId: deps.signInIdentityId,
+      serviceIdentityId: signInIdentityId,
       name: "sign-in",
       requestId: crypto.randomUUID(),
     });
@@ -627,11 +647,12 @@ export function createServer(deps: ServerDeps): Hono {
    */
   app.post("/auth/two-factor", async (c) => {
     const orgId = await deps.resolveTenant(c.req.raw);
-    if (orgId === null) return send(unauthenticated());
+    const signInIdentityId = deps.signInIdentityId;
+    if (orgId === null || signInIdentityId === null) return send(unauthenticated());
 
     const ctx = contextForServiceIdentity({
       orgId,
-      serviceIdentityId: deps.signInIdentityId,
+      serviceIdentityId: signInIdentityId,
       name: "sign-in",
       requestId: crypto.randomUUID(),
     });
@@ -809,11 +830,12 @@ export function createServer(deps: ServerDeps): Hono {
   app.post("/auth/sign-out", async (c) => {
     const orgId = await deps.resolveTenant(c.req.raw);
     const token = readCookie(c.req.header("cookie"), cookieName);
-    if (orgId === null || token === null) return json({ ok: true });
+    const signInIdentityId = deps.signInIdentityId;
+    if (orgId === null || token === null || signInIdentityId === null) return json({ ok: true });
 
     const ctx = contextForServiceIdentity({
       orgId,
-      serviceIdentityId: deps.signInIdentityId,
+      serviceIdentityId: signInIdentityId,
       name: "sign-in",
       requestId: crypto.randomUUID(),
     });
@@ -840,14 +862,17 @@ export function createServer(deps: ServerDeps): Hono {
     bind(route.path, async (c: Context) => {
       const orgId = await deps.resolveTenant(c.req.raw);
       const token = readCookie(c.req.header("cookie"), cookieName);
-      if (orgId === null || token === null) return send(unauthenticated());
+      const signInIdentityId = deps.signInIdentityId;
+      if (orgId === null || token === null || signInIdentityId === null) {
+        return send(unauthenticated());
+      }
 
       // The session lookup runs as the sign-in identity, because there is no
       // actor until it succeeds. This is the ADR 0014 seam, used rather than
       // worked around.
       const preAuth = contextForServiceIdentity({
         orgId,
-        serviceIdentityId: deps.signInIdentityId,
+        serviceIdentityId: signInIdentityId,
         name: "sign-in",
         requestId: crypto.randomUUID(),
       });

@@ -109,7 +109,10 @@ const CLAIMED_SECRETS_DIR = (() => {
 const SERVER_DEPS: ServerDeps = {
   cookieSecret: new Uint8Array(32).fill(7),
   resolveTenant: () => Promise.resolve(null),
-  signInIdentityId: "00000000-0000-4000-8000-000000000000",
+  // Null here and replaced per world, alongside resolveTenant, for the same
+  // reason: both answers belong to an organization and this constant predates
+  // every one of them. See World.signInIdentityId.
+  signInIdentityId: null,
   sealingKey: Buffer.alloc(32, 9),
   secretsDir: CLAIMED_SECRETS_DIR,
   trustedOrigins: ["http://127.0.0.1:7712"],
@@ -144,6 +147,17 @@ type World = {
    * absorbed needs the world rebuilt per cell rather than a shared one.
    */
   readonly bystanderId: string;
+  /**
+   * The sign-in identity this world's server acts as (RL-M1-053).
+   *
+   * A REAL row, not a literal uuid. This constant used to be
+   * `00000000-0000-4000-8000-000000000000`, and every audit entry the sign-in
+   * seam writes — a CSRF rejection, a session lookup on a guarded route — named
+   * an actor nothing could be joined to. Migration 14 refuses that outright, so
+   * the harness now has to hold an identity that exists, which is the harness
+   * being driven the way a deployment drives it rather than around it.
+   */
+  readonly signInIdentityId: string;
 };
 
 /** organization → team → project → environment, returning the interesting nodes. */
@@ -236,6 +250,14 @@ async function seedWorld(client: Client): Promise<World> {
   const bystanderId = bystander.rows[0]?.id ?? "";
   await client.query("insert into memberships (org_id, user_id) values ($1, $2)", [orgId, bystanderId]);
 
+  // The identity the sign-in seam acts as, per organization because
+  // service_identities.org_id is not null.
+  const signIn = await client.query<{ id: string }>(
+    `insert into service_identities (org_id, name, description) values
+     ($1, 'sign-in', 'Acts on the sign-in path, before any user is authenticated') returning id`,
+    [orgId],
+  );
+
   return {
     orgId,
     own: await seedTree(client, orgId),
@@ -243,6 +265,7 @@ async function seedWorld(client: Client): Promise<World> {
     userForRole,
     otherUserId: strangerId,
     bystanderId,
+    signInIdentityId: signIn.rows[0]?.id ?? "",
   };
 }
 
@@ -406,6 +429,7 @@ function transportExecutor(
   const app = createServer({
     ...SERVER_DEPS,
     resolveTenant: () => Promise.resolve(world.orgId),
+    signInIdentityId: world.signInIdentityId,
   });
 
   const decide = decisionExecutor(world);

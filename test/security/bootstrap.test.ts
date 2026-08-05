@@ -68,7 +68,11 @@ function serverFor(dir: string, orgId: string | null = null): ReturnType<typeof 
     cookieSecret: new Uint8Array(32).fill(7),
     sealingKey: Buffer.alloc(32, 9),
     resolveTenant: () => Promise.resolve(orgId),
-    signInIdentityId: "00000000-0000-4000-8000-000000000000",
+    // Null, not a placeholder uuid (RL-M1-053). An unclaimed installation has no
+    // organization, so it has no sign-in identity — and `service_identities` is
+    // per-organization, so there is nowhere for one to exist yet. Claiming is the
+    // only thing these tests drive, and it acts as the owner it creates.
+    signInIdentityId: null,
     secretsDir: dir,
     trustedOrigins: ["http://127.0.0.1:7712"],
   };
