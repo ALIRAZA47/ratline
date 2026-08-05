@@ -1,0 +1,67 @@
+// A fixture of code the check must be SILENT on (RL-M2-006).
+//
+// The half that keeps the check usable. A rule that fires on everything is as useless as one
+// that fires on nothing, and it is the version that gets disabled rather than fixed — so
+// every legitimate shape the agent and privd actually need is here.
+package fixture
+
+import (
+	"context"
+	"net"
+	"net/http"
+	"os"
+)
+
+// The agent's own work: dialling out. Nothing in here listens.
+func dialOut(ctx context.Context) {
+	client := &http.Client{}
+	request, _ := http.NewRequestWithContext(ctx, http.MethodPost, "https://control/agent/challenge", nil)
+	client.Do(request)
+
+	var dialer net.Dialer
+	dialer.DialContext(ctx, "tcp", "control.example:443")
+	net.Dial("tcp", "control.example:443")
+}
+
+// privd's socket (ADR 0004). A unix-domain socket is not a port: it lives in the filesystem,
+// it is protected by peer credentials and file mode, and nothing off the host can reach it.
+// A check that refused this could not tell "the fleet exposes nothing new" from "the two
+// components on a host cannot talk".
+func privdSocket() {
+	net.Listen("unix", "/run/ratline/privd.sock")
+	net.ListenUnix("unix", nil)
+	net.ListenPacket("unixgram", "/run/ratline/privd.dgram")
+}
+
+// Socket activation, with the reason written down. systemd may hand privd its listening
+// socket on fd 3 rather than having privd bind it, which is the shape ADR 0004 describes and
+// which no literal in the source can classify.
+//
+// The reason WRAPS on purpose. shellcheck's version of this annotation permits its own line
+// and the next one, which silently stops applying when the text runs to two lines — a build
+// failure about an unclassified listener sitting directly beneath a comment classifying it.
+// Here the permitted line is the one after the whole comment group.
+func socketActivation() {
+	var file *os.File
+	//ratline:allow-listener systemd passes privd a unix socket on fd 3; the unit declares
+	// ListenStream= with a filesystem path, so no port is involved (ADR 0004)
+	net.FileListener(file)
+}
+
+// The trailing spelling, which reads better on a short call.
+func socketActivationBeside() {
+	var file *os.File
+	net.FileListener(file) //ratline:allow-listener the same fd 3 unix socket, stated beside it
+}
+
+// Words that are not calls. A grep over this file would fire several times: Listen,
+// ListenAndServe, net.Listen("tcp", …) inside a sentence explaining why the agent does not
+// do that. go/ast never visits a comment as an expression, which is the whole reason this
+// check is a walk and not a grep — the TypeScript side learned it four separate times
+// (RL-M1-041).
+func prose() {
+	// The strings below are data, not calls. A configuration file naming a port, or an error
+	// message about one, must not trip the check.
+	_ = "tcp"
+	_ = []string{"tcp", "udp", "ListenAndServe"}
+}

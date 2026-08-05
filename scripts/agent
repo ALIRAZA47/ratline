@@ -96,6 +96,21 @@ cmd_verify() {
 	say "== go vet =="
 	if ( cd "$MODULE" && go vet ./... ); then say "clean"; else failed=1; fi
 
+	# And again for Linux, because the agent has platform-specific files and this
+	# machine is not the platform (RL-M2-030). agent/internal/privsock reads the
+	# caller's credentials with SO_PEERCRED, which exists only on Linux, so the
+	# real implementation sits behind a build tag and the vet above never compiles
+	# it. Nothing else would either: the reproducibility check builds
+	# ./cmd/ratline-agent for Linux, and privsock is not reachable from it yet.
+	#
+	# Without this step a syntax error in the file that decides who may talk to the
+	# root helper would reach a host before anybody noticed. The whole-module form
+	# is deliberate — ./... rather than the one package — so the same protection
+	# extends to whatever grows a build tag next.
+	say ""
+	say "== go vet, cross-compiled for linux =="
+	if ( cd "$MODULE" && GOOS=linux GOARCH=arm64 go vet ./... ); then say "clean"; else failed=1; fi
+
 	# -race, because the nonce store's whole correctness claim is that checking and
 	# recording a nonce are ONE atomic operation. A test asserting "exactly one of 64
 	# concurrent callers was told the nonce was fresh" can pass by luck on a machine

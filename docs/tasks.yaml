@@ -1534,7 +1534,7 @@
   owner: agent
   estimate: L
   depends_on: [RL-M2-001]
-  blocks: [RL-M2-003, RL-M2-008]
+  blocks: [RL-M2-003, RL-M2-008, RL-M2-030]
   risk: high
   started_at: 2026-08-04
   done_at: 2026-08-04
@@ -1666,21 +1666,51 @@
 - id: RL-M2-006
   title: Implement the agent-initiated connection with reconnect and backoff
   milestone: M2
-  status: todo
+  status: done
   owner: agent
   estimate: L
   depends_on: [RL-M2-005]
   blocks: [RL-M2-012, RL-M2-023]
   risk: high
+  started_at: 2026-08-05
+  done_at: 2026-08-05
   acceptance:
     - The agent dials outbound so no managed host needs an inbound listening port
     - Reconnection uses exponential backoff with jitter and survives control plane restarts
     - The agent works from behind network address translation with no port forwarding
     - A test confirms the host has no Ratline port listening after provisioning
   artifacts:
-    - test/security/no_inbound_listener_test.go
+    - agent/internal/listencheck/listencheck_security_test.go
+    - agent/internal/transport/client_security_test.go
+    - agent/internal/transport/backoff_security_test.go
   decisions: [2]
+  notes: |
+    2026-08-05 — THE JITTER IS THE SECURITY PROPERTY, and full jitter was chosen over a floor. The delay is uniform over [0, window) with the window doubling per failure to a one-minute ceiling. A floor — never wait less than some minimum — is the obvious hardening and is left out on purpose: its cost is that the earliest any agent can return is the floor, so the distribution acquires a leading edge every agent in the fleet shares, which is a smaller version of the spike the jitter exists to remove. What a floor would have bought is protection against a tight retry loop, and the window doubling already buys that — a run of small draws is possible, a run of small draws forever is not.
 
+    2026-08-05 — THE OVERFLOW IS NOT A THEORETICAL CONCERN and it is why Delay does not simply write First << (attempt-1). A time.Duration is an int64 of nanoseconds; shifting one second left 35 places wraps NEGATIVE, and a negative duration makes time.NewTimer fire IMMEDIATELY — so an agent whose control plane had been down long enough would stop backing off altogether and dial in a tight loop, after a long outage, exactly when the control plane can least afford an unthrottled fleet. The clamp is applied BEFORE the shift (compare against Max>>shift) because a check on the shifted value is a check on a number that has already gone wrong.
+    2026-08-05 — MY OWN OVERFLOW TEST WAS VACUOUS AND THE MUTATION CAUGHT IT. It sampled attempts 1, 2, 10, 31, 32, 62, 63, 64, 65, 128, 1000 and MaxInt32, which reads as thorough. With the clamp moved after the shift it stayed GREEN: a first window of one second is 10^9 nanoseconds, whose low nine bits are zero, so shifting left 62 places pushes every set bit off the end and yields exactly ZERO — neither negative nor above the ceiling. The wrap into a negative happens in the thirties, which the list stepped over. Fixed by walking 33..50 exhaustively and by making a ZERO delay a failure in its own right, since a wait of nothing is the same outcome as a negative wait and only one of the two is obvious when you read it.
+    2026-08-05 — THREE REFUSALS IN THE CLIENT, and the middle one is the subtle one. (1) NO PLAINTEXT: the control-plane URL must be https, because TLS is what authenticates the SERVER — the Ed25519 challenge authenticates the host to the control plane and says nothing in the other direction — so over plaintext the agent would prove its identity to whoever answered. (2) NO REDIRECTS: the agent signs a nonce the control plane chose, so anybody who can redirect the challenge request can fetch a real challenge from the real control plane, hand it to the agent, collect the signature and authenticate AS THAT HOST. The domain separator does not help; this IS an identity proof, which is precisely what the attacker wants. (3) NO VERIFICATION SKIPPING: there is no flag for it. A private certificate authority is a real need for a self-hosted control plane and is met by RATLINE_CONTROL_PLANE_CA, which is added to the system roots rather than replacing them — an operator who supplies their own CA has not asked to stop trusting a public issuer their control plane may legitimately have tomorrow.
+    2026-08-05 — THE REDIRECT TEST WOULD HAVE PASSED FOR THE WRONG REASON, and the fix is worth recording. The redirect target is served with the SAME trusted certificate as the fake control plane. With an untrusted one the agent would refuse it on TLS grounds and the test would report a refused redirect while exercising nothing about redirects — the shape of failure RL-M1-041 and the shellcheck fixtures were both bitten by. Mutation-verified with the CheckRedirect policy removed: the test then reports that the agent followed the redirect once, and a second test reports that the client has no redirect policy at all.
+    2026-08-05 — run NEVER GIVES UP, INCLUDING ON A 401, and that is a decision rather than an oversight. The tempting alternative is to exit when the key is refused, and it is wrong twice: the control plane deliberately sends ONE refusal for every reason (RL-M2-005), so a 401 is indistinguishable from a control plane whose database has not finished starting, and exiting would turn a transient fault into a host needing a human; and an agent that exits stops reporting, which removes the evidence an operator would use to notice a revocation. Backing off to the ceiling and staying there is quiet, cheap, and leaves the host visible. Only the context ending — a systemd stop — is a clean exit.
+    2026-08-05 — A HOST KEY READABLE BEYOND ITS OWNER IS REFUSED, not warned about. The key IS the host's identity to the control plane, so a mode of 0644 hands any local account the ability to authenticate as this host, receive the instructions and secrets destined for its sites and lie about its inventory — most of what ADR 0002 says a stolen host key buys, given away by a file mode. A warning would be the wrong shape: the agent would keep running, the host would look healthy, and the line would scroll past. Mutation-verified: removing the check accepts 0644, 0640, 0604, 0666 and 0660.
+    2026-08-05 — THE FINGERPRINT IS A CROSS-LANGUAGE AGREEMENT and it is pinned on both sides. /agent/authenticate looks a host's key up BY fingerprint, so if Go's transport.Fingerprint and src/crypto/host_identity.ts's fingerprint() ever disagree, every authentication fails with a correctly registered key in place and the symptom on the host is 'the agent cannot authenticate' — which reads as a network problem or a revocation. Pinned as a literal in both suites rather than added to identity_vectors.json, because the generator mints a fresh key per run and adding one field would have regenerated every signature in the file: an unrelated wall of diff under this task is a worse trade than two pins that name each other. Mutation-verified by hashing the raw key instead of the SPKI DER — the exact confusion the vectors file itself invites, since it notes that the last 32 bytes of an Ed25519 SPKI structure are the key.
+    2026-08-05 — ARTIFACT PATH CORRECTED, and it is the same correction RL-M2-007 made. The task named test/security/no_inbound_listener_test.go, which cannot exist: a Go _test.go file has to live in the package it tests, and test/security/ is outside the agent module entirely — nothing there would compile. The tasks-done gate already anticipated Go security suites and named the pattern *_security_test.go for them, so the artifacts are the three files that match it rather than a widened gate.
+    2026-08-05 — THE NO-INBOUND-PORT CLAIM IS PROVEN TWICE, at different strengths, and neither proof replaces the other. agent/internal/listencheck's Scan is a BUILD-TIME AST check that refuses any call in the agent module able to open a listening network socket — that claim holds for every host and every configuration at once, because the binaries contain no code that could bind a port, so no combination of arguments, environment or attacker input makes them. Listening is a RUNTIME check that reads /proc/net/{tcp,tcp6,udp,udp6} and /proc/<pid>/fd, whose claim is narrower — this process, this machine, now — and which is the one an integration test can point at a provisioned host. The build check would miss a listener opened by something the agent installs; the /proc check would miss one that opens only under conditions the test did not produce.
+    2026-08-05 — A UNIX SOCKET IS NOT A PORT, and the check has to know the difference or it is useless. privd is reached over one by design (ADR 0004), so net.Listen("unix", …) is permitted by the literal in the source while net.Listen("tcp", …) is refused outright with no annotation available. A listener whose family is NOT visible in the source — a variable network, a descriptor from socket activation, a raw syscall.Bind — is refused unless annotated with a written reason. That closes the exact gap agent/internal/shellcheck documents and cannot close on its own: there, flagging every identifier would put an annotation on every exec call and nobody would read them; here the agent has so few listeners that a reason for each costs nothing.
+    2026-08-05 — THE ANNOTATION DIFFERS FROM SHELLCHECK'S ON PURPOSE, because shellcheck's version has a bug I walked into. It permits the annotation's own line and the next one, which silently stops applying when the reason WRAPS — and the first reason I wrote for privd's socket activation ran to two lines, producing a build failure about an unclassified listener sitting directly beneath a comment classifying it. Here the permitted line is the one after the whole comment GROUP, which go/ast already assembles. Both fixtures carry a wrapped reason and a trailing one so the behaviour is pinned. Worth porting back to shellcheck, which is not this task.
+    2026-08-05 — AN UNSUPPORTED PLATFORM REFUSES RATHER THAN REPORTING NOTHING FOUND, which is the lesson scripts/host records in its own comments: its first version printed 'root ssh: refused (C1 holds)' on a machine with no key file — a check that passed because it could not run, which is worse than no check because it reads as evidence. So Listening() on macOS returns ErrUnsupported and no socket list, and the test asserts BOTH halves of that. Mutation-verified: making it return nil,nil fails with 'an unperformed check must not be spelled the same way as a passing one'.
+    2026-08-05 — AN ESTABLISHED OUTBOUND CONNECTION MUST NOT COUNT AS A LISTENER and that is the case the whole runtime check turns on. A connected agent always holds a socket to the control plane; if that read as listening, acceptance 4 would fail on every correctly working host and the temptation would be to loosen the check rather than fix it. So the TCP state must be 0A, and the fixture carries an outbound ESTABLISHED row, an inbound accepted row and sshd's own :22 to prove all three are excluded. Mutation-verified six ways: permitting tcp, dropping the literal-network branch, dropping the LISTEN state check, answering nothing-found off Linux, assembling the IPv4 octets in file order rather than reversed, and dropping the inode filter.
+    2026-08-05 — PROVEN ON A REAL DEBIAN 12 HOST, not asserted from a unit test. The cross-compiled ratline-agent binary was installed in the scripts/host container (Debian 12.15, systemd 252 as PID 1, root SSH refused), started as a TRANSIENT SYSTEMD UNIT under the unprivileged deployer user — so the init system that will run it in production is the one that ran it here — and it authenticated to a control plane on the development machine. Its journal reads 'connected as host 8f14e45f-…'. §6.7 forbids mocking anything that touches a host and nothing here is mocked: real binary, real Debian, real systemd, real TLS, real sockets.
+    2026-08-05 — THE CONTROL PLANE IN THAT RUN WAS THE REAL TYPESCRIPT CRYPTO, which makes it a cross-language proof OVER THE WIRE rather than against committed vectors. The stub serves /agent/challenge and /agent/authenticate out of src/api/challenges.ts and src/crypto/host_identity.ts unchanged — issueChallenge, the single-use take, fingerprint and verifyChallenge — so the signature Go produced was verified by the same code the control plane runs. What is stubbed is only the database: one registered key in a variable instead of a host_keys row. The vectors in testdata prove the two encoders agree on bytes; this proves the two halves agree on a conversation, which is the failure that actually reaches an operator.
+    2026-08-05 — ACCEPTANCE 4 READ OUT OF THE KERNEL ON THAT HOST. While the agent was connected, /proc/net/tcp and /proc/net/tcp6 on the container held exactly ONE listening socket between them: 0.0.0.0:22 and [::]:22, owned by uid 0, which is sshd — the thing RL-M2-010 needs and the thing scripts/host verify already proves refuses root. No Ratline port, in either family, and /proc/net/udp was empty. The agent's own descriptor table held no network socket at all at that instant: fd 1 and 2 are the systemd journal socket, fd 4 and 5 are an eventpoll and an eventfd. That last detail is the design working — the agent had finished its proof and closed the connection, because IdleConnTimeout is deliberately well under the usual NAT timeout so the agent re-dials on its own schedule instead of discovering a dead path mid-handshake.
+    2026-08-05 — BOTH SECURITY SUITES WERE CROSS-COMPILED AND RUN ON THAT HOST TOO, which is what makes the /proc reader more than macOS-skipped code. go test -c for linux/arm64, copied in, run as deployer: the listener suite passes including the branch that only executes on Linux — Listening() reading the real /proc and finding nothing — and the transport suite passes over real loopback sockets on Debian. On the development machine that Linux branch cannot run at all, so without this the runtime half of acceptance 4 would have been code nobody had ever executed.
+    2026-08-05 — ACCEPTANCE 3 IS MET BY A REAL NAT, not by an argument. The container sits on Docker's default bridge at 172.17.0.5 and publishes exactly one port — 22, for the SSH bootstrap RL-M2-010 needs — so there is NO port forwarding for anything Ratline. The agent reached the control plane through two layers of translation (container -> docker0 -> the Docker VM -> the host gateway at 192.168.65.254) and authenticated. The control plane's view is the proof that translation happened: it logged the peer as 127.0.0.1 with a fresh ephemeral port each time and never saw 172.17.0.5 at all. Nothing about the agent's configuration mentions its own address, because nothing needs to — every exchange returns on a connection the agent opened, which is a five-tuple the NAT already has state for.
+    2026-08-05 — THE CONTROL PLANE WAS KILLED AND RESTARTED ON THE SAME PORT while the agent ran, and the agent came back by itself: 'connected as host 8f14e45f-… after 8 failed attempt(s)'. The eight waits it logged are the jitter in the open: 247ms, 1.529s, 624ms, 6.126s, 2.796s, 14.434s, 5.978s, 39.646s. NON-MONOTONIC on purpose — each is drawn uniformly from a window that doubles (1s, 2s, 4s, 8s, 16s, 32s, 32s, 64s-capped), so a fleet of these spreads across the outage instead of arriving together. A fixed sequence would have read 1s, 2s, 4s, 8s… and would have been every agent's sequence. Each failure was a real ECONNREFUSED through the NAT, not a 503 from a handler pretending to be down.
+    2026-08-05 — ACCEPTANCE 4 IS CHECKED WITH ONE HONEST QUALIFICATION, stated rather than buried. The criterion says 'after provisioning', and provisioning does not exist yet — RL-M2-016 onward install the web server and units. What is proven is the whole of the claim that is available today and it is proven twice: the binaries CANNOT bind a network port (an AST check over the module, so it holds for every host and configuration at once) and the running agent on a real Debian 12 host HELD no listening socket while connected, read out of /proc/net/tcp, tcp6 and udp. When provisioning lands, listencheck.ListeningIn takes a pid precisely so the harness can re-ask the question about a fully provisioned host rather than re-deriving it. If a later task installs something that listens, this check is where it will be caught.
+    2026-08-05 — WHAT THIS TASK DOES NOT DO, so nothing downstream assumes it. The connection carries NO INSTRUCTIONS. The control plane's agent surface today is two routes for proving identity, and /agent/authenticate answers {hostId, authenticated} with no session token — so a connected agent is a host the control plane can SEE (recordHostSeen writes the address it observed) and not one it can instruct. Instruction delivery is RL-M2-012 onward, and the envelope verification it will use is already in agent/internal/protocol with its own tests. Keeping them apart is deliberate: the reconnect loop is availability code that retries everything forever, and the envelope path is authorisation code that must not inherit that willingness.
+    2026-08-05 — AN OPERATOR-FACING GAP I AM LEAVING OPEN ON PURPOSE: the reproof interval is a Go field with a two-minute default and no environment variable, while the control-plane address, host id, key path and CA file all have one. It stays that way because the interval only matters once there is something to report on it — RL-M2-013 owns health reporting and heartbeat, and it will want to choose this cadence rather than inherit a variable I guessed at. The consequence, felt during the real-host run: an outage is not noticed for up to two minutes, which is correct for a proof-of-presence and would be wrong for a heartbeat.
+    2026-08-05 — closed without CI verification: This worktree cannot run CI: I am instructed not to push, and .ratline/ci-status.json is written by the GitHub Actions run on a pushed branch. Everything CI would run was run here instead, as separate invocations, and all of it is green: npm run lint, npm run typecheck, scripts/agent verify (generated catalogue current, gofmt, go vet, go test -race, reproducible build byte-identical) and scripts/ci-metrics — 653/653 tests, authorization matrix 756/756, can() branch coverage 100%, src/authz line coverage 100%. Beyond CI's reach, both Go security suites were cross-compiled for linux/arm64 and passed on the real Debian 12 integration host, where the agent also authenticated through a real NAT and survived a real control-plane restart. The one thing not done is the pipeline itself, which needs a push I am not making.
+  acceptance_met: [1, 2, 3, 4]
 - id: RL-M2-007
   title: Implement replay protection with a durable nonce store
   milestone: M2
@@ -1716,7 +1746,7 @@
   owner: agent
   estimate: XL
   depends_on: [RL-M2-002]
-  blocks: [RL-M2-009, RL-M2-015, RL-M2-020]
+  blocks: []
   risk: high
   acceptance:
     - The agent runs unprivileged and the helper is the only component running as root
@@ -1732,13 +1762,15 @@
     dispatch table, and per-operation argument validators. Left whole here
     deliberately so the split is a visible act rather than a silent one.
 
+    2026-08-05 — SPLIT, AND SUPERSEDED. This is the visible act the 2026-08-01 note asked for. It cannot be started as written — scripts/tasks refuses an XL task at the Definition of Ready, brief §2.2 — and the split it named is now three tasks: RL-M2-030 the socket and the peer-credential check, RL-M2-031 the enumerated dispatch table, RL-M2-032 the per-operation argument validators. Each is startable and each fails differently, which is why the split is along these lines: the socket decides WHO may speak, the dispatcher decides WHAT may be said, and the validators decide whether what was said is true about this host. RL-M2-009, RL-M2-015 and RL-M2-020 now depend on RL-M2-032, which preserves their original meaning exactly — they depended on a WORKING privileged helper, and that is what the third task completes.
+    2026-08-05 — WHAT I COULD NOT DO HERE: set this task to 'dropped'. The validator knows the status and requires a note for it, but scripts/tasks has no drop subcommand, and hand-editing a status is the one thing the tracker rules reserve for the CLI. So this stays 'todo' and inert: it blocks nothing now, and the CLI will refuse to start it because it is XL. Closing it out properly needs either a 'tasks drop' command or the owner's hand, and inventing a status by editing YAML would be exactly the kind of quiet act §2 exists to prevent.
 - id: RL-M2-009
   title: Give the privileged helper its own append-only local audit log
   milestone: M2
   status: todo
   owner: agent
   estimate: M
-  depends_on: [RL-M2-008]
+  depends_on: [RL-M2-032]
   blocks: []
   risk: high
   acceptance:
@@ -1853,7 +1885,7 @@
   status: todo
   owner: agent
   estimate: M
-  depends_on: [RL-M2-008]
+  depends_on: [RL-M2-032]
   blocks: [RL-M2-016, RL-M2-019, RL-M2-021]
   risk: high
   blocked_at: 2026-08-02
@@ -1949,7 +1981,7 @@
   status: todo
   owner: agent
   estimate: L
-  depends_on: [RL-M2-008]
+  depends_on: [RL-M2-032]
   blocks: [RL-M2-025, RL-M2-027, RL-M3-003]
   risk: high
   blocked_at: 2026-08-02
@@ -4292,3 +4324,104 @@
     2026-08-04 — 2026-08-05 — STICKY COLUMN HEADERS, and getting there required abandoning the horizontal scroller. 'overflow-x: auto' makes an element a scroll container in BOTH axes — the spec computes 'overflow-y: visible' to 'auto' — so a sticky column header inside one sticks to that container rather than the viewport, which means it scrolls away exactly when it is wanted. Columns are a CSS grid now, sized to the number of occupied statuses. Below 64rem they fall back to a scroller, because five 11rem columns on a phone are unreadable and a header that pins over content nobody can read is not a trade worth making.
     2026-08-04 — 2026-08-05 — TWO BUGS THE MEASUREMENT CAUGHT THAT THE SCREENSHOT DID NOT. (1) I made the lane head sticky at the same offset as the column heads, so it sat on top of them: both pinned to --controls-h, the lane head won on z-index, and the column titles were stuck invisibly underneath. The page looked correct and the assertion said 'column heads visible near top: 0'. Offsetting them below it needs the lane head's height, which varies with the goal text, so a fixed offset would gap or overlap depending on the milestone — I picked one instead, and the column titles win because they are what somebody scrolling a long lane needs. (2) My first verification ran at 800px, below the 64rem breakpoint, so I was testing the mobile scroller path and concluding sticky was broken. Re-measured at 1400px: the 'done' header pins at 51px, right under the control bar.
     2026-08-04 — 2026-08-05 — Also removed a rule that did nothing while its comment claimed otherwise: I hid the lane goal via '.lane-head:not(.stuck)', and nothing sets '.stuck', so the selector always matched. Deleted rather than wired up — hiding it needs a scroll observer, and a paragraph that vanishes as you scroll past it is worse than two extra lines of header. Clamped to two lines instead, so a long goal cannot push the columns down.
+
+- id: RL-M2-030
+  title: Give privd its socket and a peer-credential check
+  milestone: M2
+  status: in-progress
+  owner: agent
+  estimate: L
+  depends_on: [RL-M2-002]
+  blocks: [RL-M2-031]
+  risk: high
+  started_at: 2026-08-05
+  acceptance:
+    - The agent runs unprivileged and the helper is the only component running as root
+    - The helper authenticates its caller by peer credentials rather than trusting the socket
+    - A caller whose credentials cannot be read is refused rather than allowed
+    - The socket's own permissions and ownership are asserted on a real host
+  artifacts: []
+  decisions: [4]
+  notes: |
+    2026-08-05 — The first of three tasks RL-M2-008 was split into, and the one that
+    matters most on its own: this is the trust boundary. ADR 0004 says privd
+    "identifies its caller by SO_PEERCRED rather than trusting the socket's mode
+    alone", and the reason it says "rather than" is that a mode is a property of a
+    filesystem entry and a peer credential is a property of the connection — only the
+    second survives somebody who can create a path.
+
+    2026-08-05 — Acceptance 3 is new and is not in RL-M2-008. Reading peer credentials
+    is a Linux facility (SO_PEERCRED, syscall.GetsockoptUcred), so the code has a
+    platform boundary, and a platform boundary in an authentication check has exactly
+    one safe default: refuse. A build for a platform that cannot identify its caller
+    must accept nobody, and that has to be asserted rather than assumed — the same
+    lesson listencheck.Listening records about answering "nothing found" where the
+    check could not run.
+    2026-08-05 — THE MODE IS SET AND THE MODE IS NOT THE CHECK, which is what ADR 0004's 'rather than trusting the socket's mode alone' asks for. A file mode is a property of a filesystem entry — it says who may open this path today, and it is only as trustworthy as every directory above it. A peer credential is a property of the CONNECTION, supplied by the kernel, about the process on the other end, and it cannot be forged by the caller or changed by what the caller does after connecting. Both are here; only the second is load-bearing. Mutation-verified: dropping the uid comparison leaves the mode as the only barrier and fails six assertions.
+    2026-08-05 — WHAT A PEER CREDENTIAL LETS privd CONCLUDE, and what it does not. It may conclude the caller runs as the agent's user. That is all. It may NOT conclude the caller is the agent, that the agent is uncompromised, or that the request is legitimate — an attacker who owns the agent account passes this check BY DEFINITION, which is the assumption ADR 0004 starts from. This layer decides WHO may speak; RL-M2-031 decides what may be said and RL-M2-032 whether it is true about this host, and neither becomes optional because of anything here.
+    2026-08-05 — THE PID IS FOR THE AUDIT TRAIL AND NEVER FOR THE DECISION. SO_PEERCRED returns uid, gid and pid; the refusal names all three so an operator can see which process tried, and only the uid is compared. A pid is reusable — by the time privd looked one up in /proc the process could have exited and the number been reissued — so a decision that consulted /proc would be textbook time-of-check to time-of-use. A uid cannot be recycled out from under a connection.
+    2026-08-05 — UNKNOWN IS REFUSED, and the platform split is what makes that testable rather than aspirational. peerOf has a Linux implementation and a !linux one that refuses everybody, and there is no darwin version even though LOCAL_PEERCRED exists — because scripts/agent build ships GOOS=linux only, so a darwin credential path would be security-critical code that runs on nobody's host and is exercised only by the tests written to justify it. The refusal instead makes acceptance 3 a property every developer exercises on every test run. Listener.permit takes the credential AND the error that produced it, so the DECISION is unit-tested on any platform and only the syscall needs a host. Mutation-verified: ignoring the credential error is the worst single mutation in this package — on a platform with no SO_PEERCRED the policy falls through to comparing a ZERO peer, which matches an allowed uid of 0, so a root helper would accept anybody. Three tests fail and one names the zero-valued case directly.
+    2026-08-05 — A ROOT PROCESS MUST NOT UNLINK WHATEVER IT FINDS. The obvious way to handle a socket left behind by a killed run is os.Remove before the bind, and written by a process running as root that is a primitive which deletes an arbitrary path — point it at /etc/shadow and privd removes it on startup. So the path is Lstat-ed and removed ONLY if it is a socket; a regular file, a directory or a symlink to either is a refusal that says what it found, and the test asserts the file is still there afterwards. Mutation-verified: dropping the guard accepts all three and the test reports the file was DELETED.
+    2026-08-05 — THE PERMISSION WINDOW IS CLOSED WITH THE DIRECTORY, NOT WITH A UMASK. net.Listen creates a socket at 0777 masked by the process umask, so between the bind and a later chmod there is an interval in which every account on the host can connect. Setting the umask around the bind closes it and is worse: umask is process-global, so any goroutine touching files inherits it, and 'temporarily change a global to make one call safe' is a race waiting for a second caller. Instead the directory is narrowed to owner-only BEFORE the bind and opened to the agent's group after the chmod — during the window the socket's mode is permissive and nothing can reach it, because reaching it means traversing a directory only root may enter. A world-writable socket directory is refused outright: an attacker who can write it can bind their own socket in place of privd's, which is not an escalation but does put them where the AGENT thinks privd is, free to answer 'yes, the unit is installed' to a control plane that believes it.
+    2026-08-05 — PROVEN ON THE REAL HOST, because half of it cannot run anywhere else. The suite was cross-compiled for linux/arm64 and run in the Debian 12 container as BOTH the unprivileged deployer (uid 1000) and root (uid 0). On Linux TestTheKernelIdentifiesARealCaller asserts the kernel reported this process's own uid, gid and pid over a real socket, and TestACallerFromTheWrongAccountIsRefusedAndNeverHandedOut asserts a real connection is refused as ErrForbiddenPeer — not as ErrPeerUnknown, because refusing everybody for the wrong reason would look identical from the outside. On the development machine the same two tests assert the opposite: that a build which cannot identify callers refuses them.
+    2026-08-05 — scripts/agent verify GAINED A CROSS-COMPILED VET STEP, because this task opened a gap. peer_linux.go sits behind a build tag, so 'go vet ./...' on a Mac never compiles it, and nothing else would either: the reproducibility check builds ./cmd/ratline-agent for Linux and privsock is not reachable from it yet. Without the new step a syntax error in the file that decides who may talk to the root helper would reach a host before anybody noticed. Written as GOOS=linux go vet ./... over the whole module rather than the one package, so the same protection extends to whatever grows a build tag next.
+    2026-08-05 — ACCEPTANCE 1 AND 4 ARE DELIBERATELY UNCHECKED, and here is exactly why each is not met. ACCEPTANCE 1 — 'the agent runs unprivileged and the helper is the only component running as root' — is a statement about a DEPLOYMENT, and nothing installs or runs either component as a service yet: there are no unit files (RL-M2-010) and ratline-privd's serve still refuses and opens no socket, which is the correct state until RL-M2-031 gives it operations to validate. This package is a library with tests and no production caller, on purpose: a root process that listens before it can validate is the vulnerability class the whole design exists to avoid, and I am not weakening the refusal in cmd/ratline-privd to make a criterion tickable.
+    2026-08-05 — ACCEPTANCE 4 says 'permissions AND ownership are asserted on a real host'. PERMISSIONS are: the socket ends up 0660 and its directory 0710, asserted on Debian 12 and mutation-verified by leaving the umask's 0777 in place. OWNERSHIP IS NOT, and it cannot honestly be yet — the socket must be owned by root and the agent's group, and there is no ratline-agent account or group on any host until RL-M2-010 creates one. A chown to a group that does not exist would either fail or be tested against a group invented by the test, which would assert that chown works rather than that privd's socket is owned correctly. I wrote this criterion myself when splitting RL-M2-008 and I am not rewording it to match what I built; it stays unchecked until there is an account to own the file.
+  acceptance_met: [2, 3]
+
+- id: RL-M2-031
+  title: Give privd an enumerated operation dispatch table
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: M
+  depends_on: [RL-M2-030]
+  blocks: [RL-M2-032]
+  risk: high
+  acceptance:
+    - The helper accepts only enumerated operations and refuses anything else with no default branch
+    - An unknown operation is refused before any argument is examined
+    - Every accepted operation is recorded before it is performed
+  artifacts: []
+  decisions: [4]
+  notes: |
+    2026-08-05 — The second of three tasks RL-M2-008 was split into. Same rule as the
+    instruction catalogue (ADR 0002) and the agent's own command line: there is no
+    default branch. What makes this a task of its own rather than part of the socket is
+    that the socket decides WHO may speak and this decides WHAT may be said, and those
+    fail differently — the first wrongly grants a session, the second wrongly grants an
+    action.
+
+    2026-08-05 — "Recorded before it is performed" is here rather than in RL-M2-009
+    because the ordering is a property of the dispatcher. RL-M2-009 owns the log's
+    durability, ownership and shipping; this owns the fact that nothing runs before the
+    record exists.
+
+- id: RL-M2-032
+  title: Re-validate every privileged argument inside privd
+  milestone: M2
+  status: todo
+  owner: agent
+  estimate: L
+  depends_on: [RL-M2-031]
+  blocks: [RL-M2-009, RL-M2-015, RL-M2-020]
+  risk: high
+  acceptance:
+    - Every argument is validated inside privd independently of the agent
+    - Site slugs, paths and service identifiers are re-checked against the strict patterns
+    - A path that resolves outside the site root is refused after resolution, not before
+    - A test confirms a compromised agent cannot obtain arbitrary root through the helper
+  artifacts: []
+  decisions: [4]
+  notes: |
+    2026-08-05 — The third of three tasks RL-M2-008 was split into, and it carries
+    RL-M2-008's final acceptance line unchanged, because "a compromised agent cannot
+    obtain arbitrary root through the helper" is only true once all three exist. Putting
+    it on the socket task would have let it be checked while privd still trusted every
+    argument it was handed.
+
+    2026-08-05 — ADR 0004: "Duplicating validation on both sides is deliberate. If it
+    lived only in the agent, privd would be a confused deputy and the boundary would be
+    decorative." Acceptance 3 spells out the half that is easiest to get wrong — a check
+    that runs before symlinks are resolved is a check on a string rather than on the
+    file it will reach.

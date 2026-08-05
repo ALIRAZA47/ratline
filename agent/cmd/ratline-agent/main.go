@@ -7,18 +7,26 @@
 // compromise of this binary, so it is worth stating in the first commit that
 // creates it: nothing here should ever grow a privileged path.
 //
-// RL-M2-001 is the scaffold. The transport, enrolment and operation catalogue
-// arrive in RL-M2-002 onward, which is why `run` exists and refuses.
+// RL-M2-001 was the scaffold, whose `run` refused because there was no transport.
+// RL-M2-006 gives it one: `run` now dials the control plane, proves this host's
+// identity and keeps the connection re-made across restarts and outages. What it
+// still does not do is CARRY anything — receiving instructions is RL-M2-012
+// onward — so a connected agent is a host the control plane can see and not yet
+// one it can instruct.
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/ALIRAZA47/ratline/agent/internal/build"
 	"github.com/ALIRAZA47/ratline/agent/internal/cli"
+	"github.com/ALIRAZA47/ratline/agent/internal/transport"
 )
 
 const program = "ratline-agent"
@@ -45,15 +53,46 @@ func commands() []cli.Command {
 	}
 }
 
-// runAgent refuses, loudly, until RL-M2-002 gives it a transport.
+// runAgent dials the control plane and stays connected (RL-M2-006).
 //
-// The alternative — a `run` that blocks forever doing nothing — is worse than
-// its absence. It would install cleanly, satisfy a systemd readiness check, and
-// present as a healthy host that never receives an instruction. An unimplemented
-// command that says so cannot be mistaken for a working one.
-func runAgent(_ []string, _ io.Writer) error {
-	return errors.New(
-		"this build cannot connect yet: the agent transport lands in RL-M2-002. " +
-			"Until then only `version` does anything, and this host should not be enrolled",
-	)
+// Configuration errors are reported and exit non-zero; everything else is retried
+// forever with jittered backoff, because a host that gives up is a host somebody
+// has to visit. The distinction is deliberate and it is drawn in transport.New:
+// what can be checked at startup is checked there, so systemd records "this agent
+// is misconfigured" once rather than logging a failed dial every minute for it.
+//
+// SIGTERM and SIGINT end the loop cleanly. Without that, a systemd stop would wait
+// out its timeout and escalate to SIGKILL, and the agent would acquire the habit of
+// being killed — which is a bad habit for a process that later flushes a nonce
+// store on the way out.
+func runAgent(_ []string, out io.Writer) error {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer stop()
+
+	// The log goes to the command's own output stream rather than to stderr directly, so
+	// that a test can read it and an operator gets it in the journal either way.
+	config, err := transport.ConfigFromEnvironment(os.Getenv, out)
+	if err != nil {
+		return err
+	}
+
+	client, err := transport.New(config)
+	if err != nil {
+		return err
+	}
+
+	fmt.Fprintf(out, "%s: connecting to %s as host %s\n",
+		program, config.ControlPlane, config.HostID)
+
+	if err := client.Run(ctx); err != nil {
+		if errors.Is(err, transport.ErrStopped) {
+			// A requested stop is a success. Returning the error would exit non-zero and
+			// make systemd record a failed unit for a clean shutdown, which is the sort of
+			// noise that trains operators to ignore unit states.
+			fmt.Fprintf(out, "%s: stopped\n", program)
+			return nil
+		}
+		return err
+	}
+	return nil
 }
