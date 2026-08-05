@@ -47,6 +47,28 @@ func annotatedInline(port int64) {
 	exec.Command("some-runtime", fmt.Sprintf("--port=%d", port)) //ratline:allow-formatted-arg bounded int64
 }
 
+// THE CASE RL-M2-033 EXISTS FOR: a reason that wraps onto a second comment line.
+//
+// The check permitted the annotation's own line and the one after it, so this call — one
+// line further down than the old rule reached — was reported as an unclassified formatted
+// argument, with the explanation of why it is safe printed directly above the error. A
+// reason is prose, so wrapping is normal rather than exotic, and an annotation that
+// silently stops applying when somebody writes a careful sentence is worse than one that
+// never worked: it works right up until the reason is worth reading.
+func annotatedWithAWrappedReason(port int64) {
+	//ratline:allow-formatted-arg the port is an int64 the catalogue has already bounded to
+	// 1..65535, so it cannot carry text, and argv carries no shell for it to reach anyway
+	exec.Command("some-runtime", fmt.Sprintf("--port=%d", port))
+}
+
+// Three lines, so passing is not an accident of the two-line case.
+func annotatedWithAReasonOverThreeLines(slug string) {
+	//ratline:allow-formatted-arg the slug matched site_slug before reaching here, which is
+	// lower case, digits and single hyphens only — no separator, no leading hyphen that
+	// could read as a flag, and no dot that could start a traversal
+	exec.Command("useradd", "--home=/srv/"+slug)
+}
+
 // Not a process launch at all.
 func notAnExec(slug string) string {
 	return fmt.Sprintf("sh -c 'useradd %s'", slug)

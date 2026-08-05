@@ -220,12 +220,30 @@ func ScanSource(name string, source []byte) ([]Finding, error) {
 
 // annotatedLines maps the line an annotation applies to.
 //
-// An annotation applies to the line after it, or to its own line when written as a
-// trailing comment. Both spellings, because a long exec call reads better with the
-// reason above it and a short one reads better with the reason beside it.
+// An annotation applies to the line after the whole comment GROUP, or to its own line
+// when written as a trailing comment. Both spellings, because a long exec call reads
+// better with the reason above it and a short one reads better with the reason beside it.
+//
+// # The group, not `line + 1` (RL-M2-033)
+//
+// This permitted the annotation's own line and `line + 1`, which works for a one-line
+// reason and breaks the moment one wraps — and reasons here are prose, so wrapping is
+// normal rather than exotic. The failure is the worst shape available: a build error about
+// a formatted process argument, printed directly beneath the comment explaining why that
+// argument is safe. Everything looks correct and the check disagrees, so the natural
+// response is to distrust the check.
+//
+// It is not hypothetical. `listencheck` hit exactly this when the reason for privd's
+// socket activation ran to two lines, fixed it there, and RL-M2-033 ports the fix back
+// rather than leaving two annotation implementations that disagree about the same syntax.
+//
+// go/ast already assembles adjacent comment lines into one group, so `group.End()` is the
+// end of the whole reason however many lines it took. Nothing here counts lines.
 func annotatedLines(fileSet *token.FileSet, file *ast.File) map[int]bool {
 	permitted := map[int]bool{}
 	for _, group := range file.Comments {
+		annotated := false
+
 		for _, comment := range group.List {
 			text := strings.TrimSpace(comment.Text)
 			if !strings.HasPrefix(text, Annotation) {
@@ -234,12 +252,20 @@ func annotatedLines(fileSet *token.FileSet, file *ast.File) map[int]bool {
 			// A bare annotation permits nothing. The reason IS the review: an
 			// unexplained escape hatch is the thing this rule exists to prevent
 			// somebody adding quietly.
+			//
+			// Checked per COMMENT rather than per group, so a group whose annotation
+			// line is bare stays refused even if a later line in the same group happens
+			// to contain text — the reason has to be on the annotation.
 			if strings.TrimSpace(strings.TrimPrefix(text, Annotation)) == "" {
 				continue
 			}
-			line := fileSet.Position(comment.Slash).Line
-			permitted[line] = true
-			permitted[line+1] = true
+			annotated = true
+			// The annotation's own line, for the trailing spelling.
+			permitted[fileSet.Position(comment.Slash).Line] = true
+		}
+
+		if annotated {
+			permitted[fileSet.Position(group.End()).Line+1] = true
 		}
 	}
 	return permitted

@@ -4455,3 +4455,31 @@
     decorative." Acceptance 3 spells out the half that is easiest to get wrong — a check
     that runs before symlinks are resolved is a check on a string rather than on the
     file it will reach.
+- id: RL-M2-033
+  title: Let a C2 annotation's reason wrap without silently switching off
+  milestone: M2
+  status: done
+  owner: agent
+  estimate: S
+  depends_on: []
+  blocks: []
+  risk: medium
+  started_at: 2026-08-05
+  done_at: 2026-08-05
+  acceptance:
+    - An annotation whose reason wraps still applies to the call beneath it
+    - Both spellings are pinned by fixtures — wrapped above the call, and short beside it
+    - A bare annotation still permits nothing
+    - "Reverting to the line+1 form makes the wrapped fixture fail"
+  artifacts:
+    - agent/internal/shellcheck/shellcheck_security_test.go
+    - agent/internal/shellcheck/testdata/clean.go.txt
+  decisions: []
+  acceptance_met: [1, 2, 3, 4]
+  notes: |
+    2026-08-05 — 2026-08-05 — PORTED FROM listencheck, which hit this first and fixed it locally. shellcheck's annotatedLines permitted the annotation's own line and line+1, which works for a one-line reason and breaks the moment one wraps — and a reason is prose, so wrapping is normal rather than exotic. go/ast already assembles adjacent comment lines into one group, so the permitted line is now the one after group.End(), however many lines the reason took. Nothing counts lines any more.
+
+    2026-08-05 — 2026-08-05 — THE SYMPTOM IS WHY THIS MATTERS more than the size of the fix suggests: a build error about an unclassified formatted process argument, printed directly beneath the comment explaining why that argument is safe. Everything looks correct and the check disagrees, so the natural response is to distrust the check — and a C2 guard people distrust is one that gets an exemption added or the rule widened. The mutation output shows it exactly: both wrapped fixtures were reported with 'If the value is genuinely safe, say why:' immediately below a comment saying why.
+    2026-08-05 — 2026-08-05 — MUTATION-VERIFIED as the task asked. Reverting to the line+1 form fails TestTheCheckIsSilentOnCorrectCode and names clean.go.txt lines 61 and 69 — the two-line and three-line reasons respectively. Three lines as well as two, so passing is not an accident of the wrapped case being exactly one line longer. The bare-annotation refusal is unchanged and still tested: the emptiness check stayed per COMMENT rather than moving to the group, so a group whose annotation line is bare stays refused even if a later line in it happens to contain text — the reason has to be on the annotation, not merely near it.
+    2026-08-05 — 2026-08-05 — Verified with ./scripts/agent verify: gofmt, go vet, go vet cross-compiled for linux, go test -race, the catalogue drift check and the reproducible build all clean. Environment for anyone repeating it: node 22 on PATH (the default node is v20 and cannot run this codebase) and RATLINE_PG_PORT=55434 to avoid the shared cluster that causes the cross-test interference on RL-M1-045/046.
+    2026-08-05 — closed without CI verification: verified locally with ./scripts/agent verify and a mutation; I do not push, so .ratline/ci-status.json comes from the Actions run on integration
