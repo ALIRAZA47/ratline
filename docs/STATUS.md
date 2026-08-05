@@ -29,7 +29,9 @@ Auth, org/team/project model, the can() function with 100% branch coverage, hash
 
 ## In progress
 
-_None._
+| Task | Age | Owner | Risk | Acceptance | Title |
+| --- | ---: | --- | --- | ---: | --- |
+| `RL-M2-030` | 0d | agent | **high** | 2/4 | Give privd its socket and a peer-credential check |
 
 ## Blocked
 
@@ -67,7 +69,7 @@ These cannot be marked `done` until they name a security-suite artifact (brief �
 - `RL-M1-049` (M1, todo) — Put the CSRF guard in front of every request, not every guarded route
 - `RL-M1-050` (M1, todo) — Make the audit half of a refusal impossible to drop
 - `RL-M1-052` (M1, todo) — Catch a repository export that is not async
-- `RL-M2-030` (M2, todo) — Give privd its socket and a peer-credential check
+- `RL-M2-030` (M2, in-progress) — Give privd its socket and a peer-credential check
 - `RL-M2-031` (M2, todo) — Give privd an enumerated operation dispatch table
 - `RL-M2-032` (M2, todo) — Re-validate every privileged argument inside privd
 
@@ -116,7 +118,8 @@ CI: _no status recorded yet._
 
 | Status | Count |
 | --- | ---: |
-| todo | 105 |
+| todo | 104 |
+| in-progress | 1 |
 | review | 5 |
 | done | 80 |
 | **all** | **190** |
