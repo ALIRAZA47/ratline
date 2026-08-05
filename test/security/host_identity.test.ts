@@ -18,7 +18,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { generateKeyPairSync } from "node:crypto";
+import { createPublicKey, generateKeyPairSync } from "node:crypto";
+import { readFileSync } from "node:fs";
 
 import {
   CHALLENGE_BYTES,
@@ -251,6 +252,43 @@ test("a fingerprint identifies a key without disclosing anything", () => {
   assert.equal(fingerprint(key.publicKeyPem), fingerprint(key.publicKeyPem), "must be stable");
   assert.notEqual(fingerprint(key.publicKeyPem), fingerprint(other.key.publicKeyPem));
   assert.match(fingerprint(key.publicKeyPem), /^[0-9a-f]{16}$/);
+});
+
+/**
+ * The agent computes this same value and sends it (RL-M2-006).
+ *
+ * `/agent/authenticate` looks a host's key up BY fingerprint, so this is not a cosmetic
+ * agreement: if Go's `transport.Fingerprint` and this function ever disagree, every
+ * authentication fails with a correctly registered key in place, and the symptom on the
+ * host is "the agent cannot authenticate" — which reads as a network problem or a
+ * revocation. That is the same class of silent cross-language drift the committed envelope
+ * and identity vectors exist to catch, and it deserves the same treatment.
+ *
+ * A pinned literal rather than a generated vector, because adding a field to
+ * identity_vectors.json regenerates every signature in it — the generator mints a fresh key
+ * per run — and an unrelated wall of diff is a worse trade than two pins that name each
+ * other. The other one is TestTheFingerprintAgreesWithTheControlPlane in
+ * agent/internal/transport/client_security_test.go.
+ */
+test("the fingerprint of the committed test key is the one the agent computes", () => {
+  const vectors = JSON.parse(
+    readFileSync(
+      new URL("../../agent/internal/protocol/testdata/identity_vectors.json", import.meta.url),
+      "utf8",
+    ),
+  ) as { test_only_private_key_pem: string };
+
+  const publicKeyPem = createPublicKey(vectors.test_only_private_key_pem)
+    .export({ type: "spki", format: "pem" })
+    .toString();
+
+  assert.equal(
+    fingerprint(publicKeyPem),
+    "2b3081d8482c9302",
+    "If the vectors were regenerated, this pin and the Go one are both stale — recompute " +
+      "and change them together, or the agent and the control plane will name the same key " +
+      "differently.",
+  );
 });
 
 test("a well-formed answer from a live key is accepted", () => {

@@ -212,18 +212,35 @@ func TestTheAgentRefusesAnUnknownCommandRatherThanIgnoringIt(t *testing.T) {
 	}
 }
 
-func TestRunRefusesUntilThereIsATransport(t *testing.T) {
-	// The scaffold's most important behaviour. A `run` that blocked forever
-	// doing nothing would install cleanly, satisfy a readiness check, and
-	// present as a healthy host that never receives an instruction.
+func TestRunRefusesWhenItHasNothingToConnectWith(t *testing.T) {
+	// The scaffold's most important behaviour, kept when `run` became real in
+	// RL-M2-006. It used to refuse because there was no transport at all; it now
+	// refuses because an agent with no key and no address has nothing to identify
+	// itself to, and the reason the assertion survives the rewrite is that the
+	// failure it prevents is the same one: a `run` that blocked doing nothing would
+	// install cleanly, satisfy a readiness check, and present as a healthy host
+	// that never receives an instruction.
 	path := buildFor(t, "ratline-agent", runtime.GOOS, runtime.GOARCH)
 
-	output, err := exec.Command(path, "run").CombinedOutput()
+	command := exec.Command(path, "run")
+	// An EMPTY environment, not the test process's. Otherwise this test's result
+	// depends on whether whoever ran it happens to have RATLINE_HOST_KEY set, and a
+	// test that passes for environmental reasons is the kind that is discovered to
+	// have been vacuous months later.
+	command.Env = []string{}
+
+	output, err := command.CombinedOutput()
 	if err == nil {
-		t.Fatalf("`ratline-agent run` exited 0 without a transport:\n%s", output)
+		t.Fatalf("`ratline-agent run` exited 0 with nothing configured:\n%s", output)
 	}
-	if !strings.Contains(string(output), "RL-M2-002") {
-		t.Errorf("the refusal should name the task that will fix it:\n%s", output)
+
+	text := string(output)
+	if !strings.Contains(text, "RATLINE_HOST_KEY") {
+		t.Errorf("the refusal should name the variable an operator has to set:\n%s", text)
+	}
+	if !strings.Contains(text, "not configured") {
+		t.Errorf("the refusal should say that the problem is configuration rather than "+
+			"reachability — those have different fixes:\n%s", text)
 	}
 }
 
