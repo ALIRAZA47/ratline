@@ -713,7 +713,17 @@ export function createServer(deps: ServerDeps): Hono {
 
   app.post("/agent/enrol", async (c) => {
     const orgId = await deps.resolveTenant(c.req.raw);
-    if (orgId === null) return send(unauthenticated());
+    const signInIdentityId = deps.signInIdentityId;
+    // BOTH, and the second one is not a formality. RL-M1-053 made signInIdentityId
+    // nullable because an unclaimed installation has no organization and therefore no
+    // sign-in identity — the ghost actor it exists to refuse. Without this guard a host
+    // could enrol against an unclaimed installation and every audit entry on the path
+    // would name an identity with no row behind it, which is exactly what C6 forbids.
+    //
+    // Refused as unauthenticated rather than as a fault, for the reason /auth/sign-in
+    // gives: saying which of the two is missing tells an unauthenticated caller whether
+    // the installation is worth attacking.
+    if (orgId === null || signInIdentityId === null) return send(unauthenticated());
 
     const body = (await c.req.json().catch(() => ({}))) as {
       token?: unknown;
@@ -727,7 +737,7 @@ export function createServer(deps: ServerDeps): Hono {
     // there is no actor until the host has a key and has proved it holds the private half.
     const ctx = contextForServiceIdentity({
       orgId,
-      serviceIdentityId: deps.signInIdentityId,
+      serviceIdentityId: signInIdentityId,
       name: "sign-in",
       requestId: crypto.randomUUID(),
     });
@@ -767,7 +777,11 @@ export function createServer(deps: ServerDeps): Hono {
 
   app.post("/agent/authenticate", async (c) => {
     const orgId = await deps.resolveTenant(c.req.raw);
-    if (orgId === null) return send(unauthenticated());
+    const signInIdentityId = deps.signInIdentityId;
+    // Same pair as /agent/enrol. A host cannot authenticate against an installation that
+    // has no identity to record the attempt under — and the refusal on this path matters
+    // more, because it is the one that writes an audit entry when it fails.
+    if (orgId === null || signInIdentityId === null) return send(unauthenticated());
 
     const body = (await c.req.json().catch(() => ({}))) as {
       handle?: unknown;
@@ -801,7 +815,7 @@ export function createServer(deps: ServerDeps): Hono {
 
     const ctx = contextForServiceIdentity({
       orgId,
-      serviceIdentityId: deps.signInIdentityId,
+      serviceIdentityId: signInIdentityId,
       name: "sign-in",
       requestId: crypto.randomUUID(),
     });

@@ -18,7 +18,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createPublicKey, generateKeyPairSync } from "node:crypto";
+import { createPublicKey, generateKeyPairSync, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 import {
@@ -351,7 +351,12 @@ test("the challenge store is bounded, because an unauthenticated caller can fill
 // ---------------------------------------------------------------------------
 
 const WIRE_DEPS = {
-  cookieSecret: new Uint8Array(32).fill(7),
+  // Real CSPRNG bytes, not a fill. RL-M1-054 added an entropy check and it refused this
+  // fixture the moment it landed — "every byte is identical, so it carries no entropy" —
+  // which is the check working rather than a test being inconvenienced. Weakening it to
+  // accept a constant would have removed the only thing standing between a deployment and
+  // a CSRF token every installation on earth can compute.
+  cookieSecret: new Uint8Array(randomBytes(32)),
   resolveTenant: () => Promise.resolve("00000000-0000-4000-8000-000000000001"),
   signInIdentityId: "00000000-0000-4000-8000-000000000000",
   sealingKey: Buffer.alloc(32, 9),
